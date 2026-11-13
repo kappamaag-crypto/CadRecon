@@ -53,8 +53,15 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   if(contours.length)issues.push({severity:'info',message:'Незамкнутых полилиний: '+contours.length});
   const untrusted=sheet.entities.filter(e=>!e.verified&&(e.kind==='dimension'||e.kind==='eskd')&&e.origin!=='manual');
   if(untrusted.length)issues.push({severity:'warning',message:'Неподтверждённых размерных и ЕСКД-объектов: '+untrusted.length});
-  const discrepancies=sheet.entities.filter(e=>e.kind==='dimension'&&e.reason?.includes('НЕ СОВПАДАЕТ'));
-  if(discrepancies.length)issues.push({severity:'warning',message:'Размерные значения противоречат геометрии: '+discrepancies.length});
+  // Re-evaluate whenever the geometry or calibration changes; do not trust a stale OCR report.
+  const discrepancies=sheet.entities.filter(e=>{
+    if(e.kind!=='dimension'||!e.sourceId||!sheet.calibrated)return false;
+    const found=/^\s*(\d+(?:[.,]\d+)?)\s*(?:мм)?\s*$/i.exec(e.text||'');
+    if(!found)return false;
+    const stated=Number(found[1].replace(',','.'));
+    return stated>0&&Math.abs(dimensionLength(e)-stated)/stated>.025;
+  });
+  if(discrepancies.length)issues.push({severity:'warning',message:'Размерные значения противоречат текущей геометрии: '+discrepancies.length});
   const nonManual=sheet.entities.filter(e=>e.origin==='ocr'||e.origin==='trace'||e.origin==='pdf');
   if(nonManual.length)issues.push({severity:'info',message:'Автоматически восстановлено объектов: '+nonManual.length+'; потребуется сверка.'});
   if(!issues.length)issues.push({severity:'info',message:'Базовые проверки пройдены. Для выпуска КМ/КМД необходима инженерная экспертиза.'});
