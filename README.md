@@ -27,6 +27,8 @@ npm install
 npm run dev
 npm test
 npm run build
+npx playwright install chromium
+npx playwright test
 \`\`\`
 
 Для публикации откройте в GitHub **Settings → Pages → Source → GitHub Actions**. Workflow Pages выполняет тесты, сборку и развёртывание на https://kappamaag-crypto.github.io/CadRecon/ . Путь Vite \`/CadRecon/\` уже настроен.

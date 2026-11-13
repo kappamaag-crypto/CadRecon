@@ -40,3 +40,14 @@ jobs:
           print('ZIP archive validated')
           PY
       - run: npm run build
+      - name: Install browser for UI smoke tests
+        run: npx playwright install --with-deps chromium
+      - name: End-to-end smoke tests
+        run: npx playwright test
+      - name: Upload screenshots on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: browser-debug
+          path: test-results/
+          if-no-files-found: ignore
