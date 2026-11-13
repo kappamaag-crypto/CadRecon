@@ -28,6 +28,12 @@ jobs:
           audit=d.audit()
           assert not audit.has_errors, str(audit.errors)
           print('DXF R2000 successfully parsed: '+str(len(ms))+' objects')
+          semantic=ezdxf.readfile('/tmp/cadrecon-eskd-test.dxf')
+          marks=semantic.modelspace().query('INSERT')
+          assert len(marks)==12, f'Expected 12 ESKD INSERT blocks, got {len(marks)}'
+          audit2=semantic.audit()
+          assert not audit2.has_errors, str(audit2.errors)
+          print('All 12 ESKD INSERT blocks validated')
           PY
       - name: ZIP archive smoke check
         run: |
