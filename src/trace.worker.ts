@@ -14,15 +14,15 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   }
   const stride=Math.max(1,Math.ceil(sampled.length/15000));const pts=sampled.filter((_,i)=>i%stride===0);
   const acc=new Map<number,number>();const angles:Array<{c:number;s:number}>=[];for(let t=0;t<180;t+=3)angles.push({c:Math.cos(t*Math.PI/180),s:Math.sin(t*Math.PI/180)});
-  const rhoMax=Math.ceil(Math.hypot(width,height)/2)+1;
+  const rhoMax=Math.ceil(Math.hypot(width,height)/2)+1; const rhoStride=rhoMax*4+20;
   for(const p of pts)for(let t=0;t<angles.length;t++){
-    const a=angles[t],r=Math.round((p.x*a.c+p.y*a.s)/2)+1;
-    const key=t*(rhoMax*2+20)+r;acc.set(key,(acc.get(key)||0)+1);
+    const a=angles[t],r=Math.round((p.x*a.c+p.y*a.s)/2)+rhoMax;
+    const key=t*rhoStride+r;acc.set(key,(acc.get(key)||0)+1);
   }
   const peak=[...acc].filter(([,votes])=>votes>=Math.max(9,Math.floor(minLength/5))).sort((a,b)=>b[1]-a[1]).slice(0,180);
   const found:Segment[]=[];
   for(const [key,votes] of peak){
-    const strideR=rhoMax*2+20,t=Math.floor(key/strideR),r=(key-t*strideR-1)*2;
+    const strideR=rhoStride,t=Math.floor(key/strideR),r=(key-t*strideR-rhoMax)*2;
     const {c,s}=angles[t],along={x:-s,y:c},matches:number[]=[];
     for(const p of sampled)if(Math.abs(p.x*c+p.y*s-r)<1.7)matches.push(p.x*along.x+p.y*along.y);
     matches.sort((a,b)=>a-b);let first=matches[0],last=matches[0];

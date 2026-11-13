@@ -16,4 +16,17 @@ jobs:
           node-version: '22'
       - run: npm install --no-audit --no-fund
       - run: npm test
+      - run: python3 -m pip install --user --quiet ezdxf
+      - name: Independent DXF parse check
+        run: |
+          python3 - <<'PY'
+          import ezdxf
+          d=ezdxf.readfile('/tmp/cadrecon-test.dxf')
+          ms=d.modelspace()
+          for name in ('LINE','DIMENSION','TEXT','CIRCLE','HATCH'):
+              assert len(ms.query(name))>=1, 'Missing '+name
+          audit=d.audit()
+          assert not audit.has_errors, str(audit.errors)
+          print('DXF R2000 successfully parsed: '+str(len(ms))+' objects')
+          PY
       - run: npm run build

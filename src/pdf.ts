@@ -16,11 +16,18 @@ async function imagePage(file:File):Promise<Sheet>{
 }
 function vectorPaths(list:any,vp:any):Entity[]{
   const entities:Entity[]=[];const ops=pdfjs.OPS;
+  type Matrix=[number,number,number,number,number,number];
+  let ctm:Matrix=[1,0,0,1,0,0];const stack:Matrix[]=[];
+  const compose=(a:Matrix,b:Matrix):Matrix=>[a[0]*b[0]+a[2]*b[1],a[1]*b[0]+a[3]*b[1],a[0]*b[2]+a[2]*b[3],a[1]*b[2]+a[3]*b[3],a[0]*b[4]+a[2]*b[5]+a[4],a[1]*b[4]+a[3]*b[5]+a[5]];
   for(let n=0;n<list.fnArray.length;n++){
-    if(list.fnArray[n]!==ops.constructPath)continue;
+    const fn=list.fnArray[n];
+    if(fn===ops.save){stack.push([...ctm] as Matrix);continue;}
+    if(fn===ops.restore){ctm=stack.pop()||[1,0,0,1,0,0];continue;}
+    if(fn===ops.transform){const tx=list.argsArray[n] as Matrix;if(tx?.length===6)ctm=compose(ctm,tx);continue;}
+    if(fn!==ops.constructPath)continue;
     const arg=list.argsArray[n] as [number[],number[]];if(!arg||!Array.isArray(arg[0]))continue;
     const [commands,coords]=arg;let j=0;let last:{x:number;y:number}|null=null;let start:{x:number;y:number}|null=null;
-    const point=(x:number,y:number)=>{const p=vp.convertToViewportPoint(x,y);return {x:p[0],y:p[1]};};
+    const point=(x:number,y:number)=>{const p=vp.convertToViewportPoint(ctm[0]*x+ctm[2]*y+ctm[4],ctm[1]*x+ctm[3]*y+ctm[5]);return {x:p[0],y:p[1]};};
     const push=(a:{x:number;y:number}|null,b:{x:number;y:number})=>{if(!a||Math.hypot(a.x-b.x,a.y-b.y)<1)return;if(entities.length<30000)entities.push(entity('line',[a,b],'PDF векторы','pdf'));};
     for(const c of commands) {
       if(c===ops.moveTo){last=point(coords[j++],coords[j++]);start=last;}

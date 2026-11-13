@@ -8,12 +8,18 @@ const unicode=(s:string)=>[...s].map(ch=>{const c=ch.codePointAt(0)!;return c>12
 const escapeText=(s:string)=>unicode(s.replace(/\r?\n/g,' '));
 const clamp=(n:number)=>Number.isFinite(n)?Number(n.toFixed(6)):0;
 const col=(hex:string)=>{const colors:Record<string,number>={'#4ade80':3,'#38bdf8':4,'#f9bd5a':2,'#e4ebf4':7,'#94a3b8':8,'#a78bfa':6,'#22d3ee':4,'#fb7185':1};return colors[hex.toLowerCase()]||7;};
-function dxfLine(a:Point,b:Point,layer:string) {return emit(0,'LINE',8,layer)+v(a)+p2(11,b);}
+function dxfLine(a:Point,b:Point,layer:string,lineType='') {return emit(0,'LINE',8,layer)+(lineType?emit(6,lineType):'')+v(a)+p2(11,b);}
 function dxfCircle(c:Point,r:number,layer:string) {return emit(0,'CIRCLE',8,layer)+v(c)+emit(40,clamp(r));}
 function dxfText(p:Point,text:string,height:number,layer:string){return emit(0,'TEXT',8,layer)+v(p)+emit(40,clamp(height),1,escapeText(text||' '),7,'Standard',50,0);}
 function polygon(points:Point[],layer:string,closed=true){
   if(points.length<2)return '';
   return emit(0,'LWPOLYLINE',8,layer,90,points.length,70,closed?1:0)+points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y))).join('');
+}
+function solidHatch(points:Point[],layer:string){
+  if(points.length<3)return polygon(points,layer,true);
+  return emit(0,'HATCH',100,'AcDbEntity',8,layer,100,'AcDbHatch',10,0,20,0,30,0,210,0,220,0,230,1,2,'SOLID',70,1,71,0,91,1,92,2,72,0,73,1,93,points.length)
+  +points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y))).join('')
+  +emit(97,0,75,0,76,1,98,0);
 }
 function table(e:Entity,layer:string){
   const a=e.points[0]||{x:0,y:0};const rows=Math.max(1,e.rows||3),cols=Math.max(1,e.cols||3),w=e.width||120,h=e.height||60;let out='';
@@ -24,8 +30,9 @@ function table(e:Entity,layer:string){
 function entityDxf(e:Entity){
   const layer=e.layer,pts=e.points;
   switch(e.kind){
-    case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer):'';
-    case 'polyline':case 'hatch':return polygon(pts,layer,!!e.closed || e.kind==='hatch');
+    case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'?'CENTER':''):'';
+    case 'polyline':return polygon(pts,layer,!!e.closed);
+    case 'hatch':return solidHatch(pts,layer);
     case 'circle':return e.center && e.radius?dxfCircle(e.center,e.radius,layer):'';
     case 'arc':{
       if(!e.center||!e.radius)return '';
@@ -56,7 +63,7 @@ function dimensionBlock(e:Entity,i:number):DimBlock {
 export function createDxf(sheet:Sheet,project:CadProject) {
   const dims=sheet.entities.filter(e=>e.kind==='dimension'&&e.points.length>=2).map(dimensionBlock);
   let out=emit(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$INSUNITS',70,4,9,'$MEASUREMENT',70,1,9,'$LUNITS',70,2,9,'$LUPREC',70,4,9,'$DWGCODEPAGE',3,'ANSI_1251',0,'ENDSEC');
-  out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,1,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'ENDTAB');
+  out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,2,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'LTYPE',2,'CENTER',70,0,3,'Center line',72,65,73,4,40,30,49,15,74,0,49,-5,74,0,49,5,74,0,49,-5,74,0,0,'ENDTAB');
   out+=emit(0,'TABLE',2,'LAYER',70,project.layers.length+1);
   for(const l of [...project.layers,{name:'0',color:'#e4ebf4',visible:true,locked:false}])out+=emit(0,'LAYER',2,l.name,70,l.locked?4:0,62,l.visible?col(l.color):-col(l.color),6,'CONTINUOUS');
   out+=emit(0,'ENDTAB',0,'TABLE',2,'STYLE',70,1,0,'STYLE',2,'Standard',70,0,40,0,41,1,50,0,71,0,42,2.5,3,'txt',4,'',0,'ENDTAB');

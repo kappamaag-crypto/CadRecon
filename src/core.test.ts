@@ -1,3 +1,4 @@
+import {writeFileSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import {newProject,entity,validateProject} from './model';
 import {dist,snapPoint,scaleSheet,auditSheet} from './geometry';
@@ -20,8 +21,11 @@ describe('CadRecon model and export',()=>{
   const dim=entity('dimension',[{x:0,y:0},{x:6000,y:0}],'Размеры');
   const t=entity('text',[{x:0,y:40}],'Текст');t.text='Сталь';t.size=8;
   const c=entity('circle',[{x:4,y:4}]);c.center={x:4,y:4};c.radius=2;
-  s.entities.push(line,dim,t,c);const dx=createDxf(s,p);
-  for(const type of ['LINE','DIMENSION','TEXT','CIRCLE','BLOCK'])expect(dx).toContain('\n0\n'+type+'\n');
+  const h=entity('hatch',[{x:0,y:0},{x:20,y:0},{x:10,y:20}],'Штриховка');
+  const axis=entity('axis',[{x:0,y:0},{x:0,y:100}],'Оси');
+  s.entities.push(line,dim,t,c,h,axis);const dx=createDxf(s,p);
+  for(const type of ['LINE','DIMENSION','TEXT','CIRCLE','BLOCK','HATCH'])expect(dx).toContain('\n0\n'+type+'\n');
+  writeFileSync('/tmp/cadrecon-test.dxf',dx,'utf8');
   expect(dx).toContain('\\U+0421');expect(dx.endsWith('0\nEOF\n')).toBe(true);
   expect(auditSheet(s,p).some(i=>i.severity==='warning')).toBe(true);
  });
