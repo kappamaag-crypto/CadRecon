@@ -1,5 +1,6 @@
 import type {CadProject,Entity,Point,Sheet} from './model';
 import {dimensionLength,mid,add,mul,sub} from './geometry';
+import {eskdParts} from './eskd';
 type Pair=string|number;
 const emit=(...pairs:Pair[])=>pairs.map(String).join('\n')+'\n';
 const v=(p:Point)=>emit(10,p.x,20,-p.y,30,0);
@@ -60,8 +61,17 @@ function dimensionBlock(e:Entity,i:number):DimBlock {
   const obj=emit(0,'DIMENSION',100,'AcDbEntity',8,layer,100,'AcDbDimension',2,name,3,'Standard',70,32,1,escapeText(e.text||''),42,clamp(dimensionLength(e)),10,clamp(m.x),20,clamp(-m.y),30,0,11,clamp(m.x),21,clamp(-m.y),31,0)+emit(100,'AcDbAlignedDimension')+p2(13,a)+p2(14,b);
   return {name,data:block,entity:obj};
 }
+function eskdBlock(e:Entity,i:number):DimBlock{
+  const name='ESKD_'+(i+1),layer=e.layer,anchor=e.points[0];
+  const parts=eskdParts(e,true).map(entityDxf).join('');
+  const block=emit(0,'BLOCK',100,'AcDbEntity',8,layer,100,'AcDbBlockBegin',2,name,70,0,10,0,20,0,30,0,3,name,1,'')
+    +parts+emit(0,'ENDBLK',100,'AcDbEntity',8,layer,100,'AcDbBlockEnd');
+  const obj=emit(0,'INSERT',100,'AcDbEntity',8,layer,100,'AcDbBlockReference',2,name)+v(anchor);
+  return {name,data:block,entity:obj};
+}
 export function createDxf(sheet:Sheet,project:CadProject) {
   const dims=sheet.entities.filter(e=>e.kind==='dimension'&&e.points.length>=2).map(dimensionBlock);
+  const symbols=sheet.entities.filter(e=>e.kind==='eskd'&&e.points.length>=1).map(eskdBlock);
   let out=emit(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$INSUNITS',70,4,9,'$MEASUREMENT',70,1,9,'$LUNITS',70,2,9,'$LUPREC',70,4,9,'$DWGCODEPAGE',3,'ANSI_1251',0,'ENDSEC');
   out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,2,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'LTYPE',2,'CENTER',70,0,3,'Center line',72,65,73,4,40,30,49,15,74,0,49,-5,74,0,49,5,74,0,49,-5,74,0,0,'ENDTAB');
   out+=emit(0,'TABLE',2,'LAYER',70,project.layers.length+1);
@@ -69,11 +79,12 @@ export function createDxf(sheet:Sheet,project:CadProject) {
   out+=emit(0,'ENDTAB',0,'TABLE',2,'STYLE',70,1,0,'STYLE',2,'Standard',70,0,40,0,41,1,50,0,71,0,42,2.5,3,'txt',4,'',0,'ENDTAB');
   out+=emit(0,'TABLE',2,'DIMSTYLE',70,1,0,'DIMSTYLE',2,'Standard',70,0,3,'',4,'',5,'',6,'',7,'',40,1,41,2.5,42,.625,43,3.75,44,1.25,140,2.5,141,2.5,147,.625,71,0,72,0,73,0,74,0,75,0,76,0,77,1,78,8,170,0,171,3,172,1,173,0,174,0,175,0,176,0,177,0,178,0,0,'ENDTAB',0,'ENDSEC');
   out+=emit(0,'SECTION',2,'BLOCKS');
-  for(const b of dims)out+=b.data;
+  for(const b of [...dims,...symbols])out+=b.data;
   out+=emit(0,'ENDSEC',0,'SECTION',2,'ENTITIES');
-  let j=0;
+  let j=0,k=0;
   for(const e of sheet.entities) {
     if(e.kind==='dimension'){if(e.points.length>=2)out+=dims[j++].entity;}
+    else if(e.kind==='eskd'){if(e.points.length)out+=symbols[k++].entity;}
     else out+=entityDxf(e);
   }
   out+=emit(0,'ENDSEC',0,'EOF');

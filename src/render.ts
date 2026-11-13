@@ -1,5 +1,6 @@
 import type {Entity,Point,Sheet,Layer} from './model';
 import {add,mid,dist,mul,sub,dimensionLength} from './geometry';
+import {eskdParts} from './eskd';
 export interface Camera {x:number;y:number;w:number;h:number;}
 const pi=Math.PI;
 function poly(ctx:CanvasRenderingContext2D,points:Point[],close=false){if(!points.length)return;ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);if(close)ctx.closePath();}
@@ -14,6 +15,11 @@ function table(ctx:CanvasRenderingContext2D,e:Entity){
 }
 export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:number,selected=false){
   const pts=e.points;if(!pts.length)return;ctx.save();ctx.lineWidth=lineWidth*(selected?2.2:1);ctx.strokeStyle=selected?'#facc15':ctx.strokeStyle;ctx.fillStyle=ctx.strokeStyle;ctx.lineJoin='round';ctx.lineCap='round';
+  if(e.kind==='eskd'){
+    for(const child of eskdParts(e))drawEntity(ctx,child,lineWidth,false);
+    if(selected){ctx.fillStyle='#facc15';const p=e.points[0];ctx.fillRect(p.x-lineWidth*4,p.y-lineWidth*4,lineWidth*8,lineWidth*8);}
+    ctx.restore();return;
+  }
   if(e.kind==='axis'){ctx.setLineDash([12*lineWidth,5*lineWidth,2*lineWidth,5*lineWidth]);}
   if(e.kind==='line'||e.kind==='axis'||e.kind==='polyline'||e.kind==='hatch'){
     if(e.kind==='hatch'){poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;}

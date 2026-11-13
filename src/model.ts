@@ -14,7 +14,7 @@ export interface Entity {
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
 export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; sourceType:'pdf'|'image'|'blank'; }
 export interface CadProject { version:1; id:string; name:string; sheets:Sheet[]; layers:Layer[]; created:string; updated:string; }
-export type Tool = 'select'|'pan'|'line'|'polyline'|'circle'|'arc'|'dimension'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'calibrate';
+export type Tool = 'select'|'pan'|'line'|'polyline'|'circle'|'arc'|'dimension'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'calibrate'|'eskd';
 export const COLORS = ['#e4ebf4','#38bdf8','#4ade80','#f9bd5a','#e879f9','#fb7185','#94a3b8','#22d3ee'];
 export const DEFAULT_LAYERS:Layer[] = [
   {name:'Контуры',color:'#4ade80',visible:true,locked:false},

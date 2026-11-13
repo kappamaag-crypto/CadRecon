@@ -13,7 +13,7 @@ export function pointSegmentDistance(p:Point,a:Point,b:Point) {
 }
 export function shapeDistance(p:Point,e:Entity) {
   if(e.kind==='circle'||e.kind==='arc')return Math.abs(dist(p,e.center||e.points[0])- (e.radius||0));
-  if(e.kind==='text'||e.kind==='table'||e.kind==='stamp')return dist(p,e.points[0]);
+  if(e.kind==='text'||e.kind==='table'||e.kind==='stamp'||e.kind==='eskd')return dist(p,e.points[0]);
   const pts=e.points;
   if(!pts.length)return Infinity;
   if(pts.length===1)return dist(p,pts[0]);
@@ -51,6 +51,10 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   if(zero.length)issues.push({severity:'warning',message:'Нулевых отрезков: '+zero.length});
   const contours=sheet.entities.filter(e=>e.kind==='polyline' && !e.closed);
   if(contours.length)issues.push({severity:'info',message:'Незамкнутых полилиний: '+contours.length});
+  const untrusted=sheet.entities.filter(e=>!e.verified&&(e.kind==='dimension'||e.kind==='eskd')&&e.origin!=='manual');
+  if(untrusted.length)issues.push({severity:'warning',message:'Неподтверждённых размерных и ЕСКД-объектов: '+untrusted.length});
+  const discrepancies=sheet.entities.filter(e=>e.kind==='dimension'&&e.reason?.includes('НЕ СОВПАДАЕТ'));
+  if(discrepancies.length)issues.push({severity:'warning',message:'Размерные значения противоречат геометрии: '+discrepancies.length});
   const nonManual=sheet.entities.filter(e=>e.origin==='ocr'||e.origin==='trace'||e.origin==='pdf');
   if(nonManual.length)issues.push({severity:'info',message:'Автоматически восстановлено объектов: '+nonManual.length+'; потребуется сверка.'});
   if(!issues.length)issues.push({severity:'info',message:'Базовые проверки пройдены. Для выпуска КМ/КМД необходима инженерная экспертиза.'});

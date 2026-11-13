@@ -3,12 +3,14 @@ import type {PointerEvent,WheelEvent} from 'react';
 import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from './model';
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
+import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
   onCreate:(e:Entity)=>void;onMove:(e:Entity,delta:Point)=>void;onCalibrate:(factor:number)=>void;
   onMessage:(message:string)=>void;source:boolean;compare:boolean;grid:boolean;snap:boolean;
+  symbolType:EskdType;symbolText:string;
 }
-export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onCalibrate,onMessage,source,compare,grid,snap}:Props){
+export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText}:Props){
   const canvas=useRef<HTMLCanvasElement>(null),frame=useRef<HTMLDivElement>(null);
   const [size,setSize]=useState({w:1000,h:700}),[camera,setCamera]=useState<Camera>({x:0,y:0,w:1200,h:850});
   const [image,setImage]=useState<HTMLImageElement|undefined>(),[draft,setDraft]=useState<Point[]>([]),[cursor,setCursor]=useState<Point|null>(null),[drag,setDrag]=useState<Point|null>(null);
@@ -30,6 +32,12 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
       const found=findHit(p,workingEntities,tol);onSelect(found?.id||null);if(found)pointer.current={type:'move',x:ev.clientX,y:ev.clientY,world:toWorld(ev)};return;
+    }
+    if(tool==='eskd'){
+      const e=entity('eskd',[p],'ЕСКД');
+      e.symbol=symbolType;e.text=symbolText;e.size=sheet.calibrated?4:Math.max(8,sheet.width/145);
+      e.verified=false;e.reason='Добавлено вручную: проверьте обозначение и позицию по оригиналу';
+      onCreate(e);return;
     }
     if(tool==='text'){
       const text=window.prompt('Текст надписи','Текст');if(!text)return;const e=entity('text',[p],'Текст');e.text=text;e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);onCreate(e);return;

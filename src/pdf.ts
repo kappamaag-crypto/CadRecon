@@ -63,6 +63,7 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
         const e=entity('text',[{x:pos[0],y:pos[1]}],'Текст','pdf');
         e.text=item.str.trim();
         e.size=Math.max(2,Math.hypot(item.transform[2],item.transform[3])*scale);
+        e.bbox={x0:pos[0],y0:pos[1]-e.size,x1:pos[0]+Math.abs(item.width||0)*scale,y1:pos[1]};
         entities.push(e);
       }
       sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.92),entities,calibrated:false,sourceType:'pdf'});

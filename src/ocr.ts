@@ -11,8 +11,9 @@ export async function recognizeText(sheet:Sheet,progress?:(s:string)=>void):Prom
     const entities:Entity[]=[];
     for(const block of raw.blocks||[])for(const para of block.paragraphs||[])for(const line of para.lines||[]){
       const text=(line.text||'').trim();if(!text||!line.bbox)continue;
-      const {x0,y1,y0}=line.bbox;const e=entity('text',[{x:x0*sx,y:y1*sy}],'OCR','ocr');
-      e.text=text;e.size=Math.max(2,(y1-y0)*sy*.75);e.confidence=line.confidence;entities.push(e);
+      const {x0,y1,y0,x1}=line.bbox;const e=entity('text',[{x:x0*sx,y:y1*sy}],'OCR','ocr');
+      e.text=text;e.size=Math.max(2,(y1-y0)*sy*.75);e.confidence=line.confidence;
+      e.bbox={x0:x0*sx,y0:y0*sy,x1:x1*sx,y1:y1*sy};entities.push(e);
     }
     return {entities,text:raw.text||''};
   } finally {await worker.terminate();}
