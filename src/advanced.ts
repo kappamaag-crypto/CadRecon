@@ -59,8 +59,16 @@ export async function recognizeAdvanced(sheet:Sheet,endpoint:string,token=''):Pr
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),240000);
   try {
-    const res=await fetch(base+'/recognize',{method:'POST',body:form,
-      headers:token?{'Authorization':'Bearer '+token}:{},signal:controller.signal});
+    const request:RequestInit & {targetAddressSpace?:'loopback'}={
+      method:'POST',body:form,
+      headers:token?{'Authorization':'Bearer '+token}:{},signal:controller.signal
+    };
+    // Chrome 145+ asks for permission to reach a loopback service from a public HTTPS site.
+    if(['127.0.0.1','localhost','[::1]'].includes(new URL(base).hostname)
+       &&typeof location!=='undefined'&&location.protocol==='https:'){
+      request.targetAddressSpace='loopback';
+    }
+    const res=await fetch(base+'/recognize',request);
     if(!res.ok)throw new Error('Сервис распознавания: HTTP '+res.status+' '+(await res.text()).slice(0,300));
     return decodeAdvancedResponse(sheet,await res.json() as AdvancedResponse);
   }finally{clearTimeout(timeout);}
