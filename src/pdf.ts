@@ -14,7 +14,7 @@ async function imagePage(file:File):Promise<Sheet>{
   const img=new Image();img.src=url;await img.decode();
   return {id:newId(),name:file.name,width:img.naturalWidth,height:img.naturalHeight,image:url,entities:[],calibrated:false,sourceType:'image'};
 }
-function vectorPaths(list:Awaited<ReturnType<Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>['getPage']>['getOperatorList']>>,vp:ReturnType<Awaited<ReturnType<Awaited<ReturnType<typeof pdfjs.getDocument>['promise']>['getPage']>['getViewport']>>):Entity[]{
+function vectorPaths(list:any,vp:any):Entity[]{
   const entities:Entity[]=[];const ops=pdfjs.OPS;
   for(let n=0;n<list.fnArray.length;n++){
     if(list.fnArray[n]!==ops.constructPath)continue;

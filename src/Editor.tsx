@@ -1,4 +1,5 @@
 import {useState,useEffect,useRef,useCallback} from 'react';
+import type {PointerEvent,WheelEvent} from 'react';
 import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from './model';
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
@@ -14,17 +15,17 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
   const pointer=useRef<{type:'pan'|'move';x:number;y:number;world:Point}|null>(null),camRef=useRef(camera),imageRef=useRef(sheet.image);
   useEffect(()=>{camRef.current=camera;},[camera]);
   useEffect(()=>{const r=frame.current;if(!r)return;const obs=new ResizeObserver(()=>setSize({w:Math.max(250,r.clientWidth),h:Math.max(250,r.clientHeight)}));obs.observe(r);return ()=>obs.disconnect();},[]);
-  useEffect(()=>{const aspect=size.w/size.h;const w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});setDraft([]);onSelect(null);},[sheet.id,size.w,size.h]);
+  useEffect(()=>{const aspect=size.w/size.h;const w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});setDraft([]);onSelect(null);},[sheet.id,sheet.width,sheet.height,size.w,size.h]);
   useEffect(()=>{if(sheet.image===imageRef.current&&image)return;imageRef.current=sheet.image;let cancelled=false;if(!sheet.image){setImage(undefined);return;}const img=new Image();img.src=sheet.image;img.decode().then(()=>{if(!cancelled)setImage(img);}).catch(()=>{if(!cancelled)setImage(undefined);});return()=>{cancelled=true;};},[sheet.image]);
   useEffect(()=>{const cv=canvas.current;if(!cv)return;const dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(size.w*dpr);cv.height=Math.round(size.h*dpr);const ctx=cv.getContext('2d');if(!ctx)return;drawScene(ctx,size.w,size.h,dpr,sheet,project.layers,camera,image,{source,compare,grid,selected,draft,cursor,drag});},[size,sheet,project.layers,camera,image,source,compare,grid,selected,draft,cursor,drag]);
-  const toWorld=useCallback((ev:React.PointerEvent<HTMLCanvasElement>|React.WheelEvent<HTMLCanvasElement>):Point=>{
+  const toWorld=useCallback((ev:PointerEvent<HTMLCanvasElement>|WheelEvent<HTMLCanvasElement>):Point=>{
     const rect=ev.currentTarget.getBoundingClientRect();return {x:camera.x+(ev.clientX-rect.left)*camera.w/rect.width,y:camera.y+(ev.clientY-rect.top)*camera.h/rect.height};
   },[camera]);
   const tol=12*camera.w/size.w;
   const workingEntities=sheet.entities.filter(e=>{const l=project.layers.find(l=>l.name===e.layer);return !l||l.visible&&!l.locked;});
   const takePoint=(p:Point)=>snap?snapPoint(p,workingEntities,Math.max(2,tol),grid?Math.max(1,Math.pow(10,Math.floor(Math.log10(Math.max(1,40*camera.w/size.w))))):0):p;
   function finish(points:Point[],kind:'polyline'|'hatch'){if(points.length<2){setDraft([]);return;}const e=entity(kind,points,kind==='hatch'?'Штриховка':'Контуры');e.closed=kind==='hatch';onCreate(e);setDraft([]);}
-  function down(ev:React.PointerEvent<HTMLCanvasElement>){
+  function down(ev:PointerEvent<HTMLCanvasElement>){
     ev.currentTarget.setPointerCapture(ev.pointerId);const p=takePoint(toWorld(ev));
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
@@ -54,7 +55,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(kind==='leader'){e.text=window.prompt('Текст выноски','')||'';e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);}
     onCreate(e);
   }
-  function move(ev:React.PointerEvent<HTMLCanvasElement>){
+  function move(ev:PointerEvent<HTMLCanvasElement>){
     const p=takePoint(toWorld(ev));setCursor(p);
     if(!pointer.current)return;
     if(pointer.current.type==='pan'){
@@ -66,7 +67,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(pointer.current?.type==='move'&&drag&&selected){const e=sheet.entities.find(e=>e.id===selected);if(e&&dist(drag,{x:0,y:0})>1e-4)onMove(e,drag);}
     pointer.current=null;setDrag(null);
   }
-  function wheel(ev:React.WheelEvent<HTMLCanvasElement>){
+  function wheel(ev:WheelEvent<HTMLCanvasElement>){
     const p=toWorld(ev),factor=Math.exp(Math.max(-.45,Math.min(.45,ev.deltaY*.001)));
     setCamera(c=>{const w=Math.max(.01,Math.min(5e8,c.w*factor)),h=w*size.h/size.w;const x=p.x-(p.x-c.x)*(w/c.w),y=p.y-(p.y-c.y)*(h/c.h);return {x,y,w,h};});
   }
