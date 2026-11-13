@@ -29,4 +29,14 @@ jobs:
           assert not audit.has_errors, str(audit.errors)
           print('DXF R2000 successfully parsed: '+str(len(ms))+' objects')
           PY
+      - name: ZIP archive smoke check
+        run: |
+          python3 - <<'PY'
+          import zipfile
+          with zipfile.ZipFile('/tmp/cadrecon-test.zip') as z:
+              assert len(z.namelist()) == 2
+              assert 'лист_01.dxf' in z.namelist()
+              assert z.testzip() is None
+          print('ZIP archive validated')
+          PY
       - run: npm run build

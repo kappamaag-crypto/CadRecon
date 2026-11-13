@@ -3,6 +3,7 @@ import {describe,it,expect} from 'vitest';
 import {newProject,entity,validateProject} from './model';
 import {dist,snapPoint,scaleSheet,auditSheet} from './geometry';
 import {createDxf} from './dxf';
+import {createZip} from './zip';
 describe('CadRecon model and export',()=>{
  it('calculates and snaps metric geometry',()=>{
   expect(dist({x:0,y:0},{x:30,y:40})).toBe(50);
@@ -14,6 +15,10 @@ describe('CadRecon model and export',()=>{
   const s=scaleSheet(p.sheets[0],600);expect(s.entities[0].points[1].x).toBe(6000);
   expect(s.calibrated).toBe(true);expect(validateProject(p).version).toBe(1);
   expect(()=>validateProject({...p,version:2})).toThrow();
+ });
+ it('packs multiple DXF sheets in a standard ZIP',()=>{
+  const p=newProject();const z=createZip([{name:'лист_01.dxf',data:createDxf(p.sheets[0],p)},{name:'02.dxf',data:'test'}]);
+  expect(z[0]).toBe(0x50);expect(z[1]).toBe(0x4b);writeFileSync('/tmp/cadrecon-test.zip',z);
  });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
   const p=newProject(),s=p.sheets[0];

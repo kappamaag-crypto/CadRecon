@@ -3,6 +3,7 @@ import Editor from './Editor';
 import {newProject,newSheet,newId,validateProject,type CadProject,type Entity,type Tool} from './model';
 import {auditSheet,scaleSheet,translateEntity} from './geometry';
 import {createDxf} from './dxf';
+import {createZip,downloadZip} from './zip';
 import {createBackup,downloadFile,exportProject,importProject,loadProject,listBackups,restoreBackup,saveProject} from './storage';
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
@@ -42,6 +43,15 @@ export default function App(){
  async function handleProject(files:FileList|null){if(!files?.length)return;setBusy('Открытие проекта…');try{const p=await importProject(files[0]);await createBackup(project);setProject(p);undo.current=[];redo.current=[];setSheetIndex(0);setSelected(null);setStatus('Проект открыт: '+p.name);}catch(e){setStatus('Ошибка проекта: '+String(e));}finally{setBusy('');if(jsonInput.current)jsonInput.current.value='';}}
  async function vectorize(){setBusy('Обработка скана…');try{const r=await traceImage(sheet);addEntities(r.entities);setStatus(r.note);}catch(e){setStatus('Обводка: '+String(e));}finally{setBusy('');}}
  async function runOcr(){setBusy('Распознавание текста…');try{const r=await recognizeText(sheet,setBusy);setOcrText(r.text);addEntities(r.entities);setStatus('OCR: '+r.entities.length+' строк. Проверьте каждую надпись.');}catch(e){setStatus('OCR: '+String(e));}finally{setBusy('');}}
+ function exportAllDxf(){
+   const uncalibrated=project.sheets.filter(s=>!s.calibrated);
+   if(uncalibrated.length&&!window.confirm('Есть некалиброванные листы: '+uncalibrated.length+'. Выгрузить их с условными единицами?'))return;
+   try{
+     const files=project.sheets.map((s,i)=>({name:String(i+1).padStart(2,'0')+'_'+slug(s.name)+'.dxf',data:createDxf(s,project)}));
+     downloadZip(createZip(files),slug(project.name)+'_all_DXF.zip');
+     setStatus('Архив '+files.length+' DXF-листов сохранён');
+   }catch(e){setStatus('Ошибка пакетного DXF: '+e);}
+ }
  function exportDxf(){if(!sheet.calibrated&&!window.confirm('Масштаб листа не подтверждён. Экспортировать DXF с условными единицами?'))return;
   try{downloadFile(createDxf(sheet,project),slug(project.name)+'_'+slug(sheet.name)+'.dxf','application/dxf');setStatus('DXF экспортирован. Проверьте его в целевой CAD-системе.');}catch(e){setStatus('Ошибка DXF: '+e);}}
  async function showBackups(){try{setBackups(await listBackups());setPanel('backups');}catch(e){setStatus('Резервные копии: '+e);}}
@@ -60,7 +70,7 @@ export default function App(){
       <button onClick={()=>input.current?.click()} className="primary">＋ Загрузить PDF / скан</button>
       <button title="Сохранить проект в JSON" onClick={()=>exportProject(project)}>↓ JSON</button>
       <button title="Открыть проект JSON" onClick={()=>jsonInput.current?.click()}>↑ JSON</button>
-      <button className="primary outline" onClick={exportDxf}>↓ DXF</button>
+      <button className="primary outline" onClick={exportDxf}>↓ DXF</button><button title="Скачать DXF всех листов одним ZIP" onClick={exportAllDxf}>↓ Все DXF</button>
     </div>
   </header>
   <nav className="quickbar"><button onClick={newDocument}>Новый</button><button onClick={()=>{changeSheet(s=>s);apply(p=>({...p,sheets:[...p.sheets,newSheet('Лист '+(p.sheets.length+1))]}));setSheetIndex(project.sheets.length);}}>＋ Лист</button><button disabled={!undo.current.length} onClick={undoAction}>↶ Отмена</button><button disabled={!redo.current.length} onClick={redoAction}>↷ Повтор</button><span className="vr"/>

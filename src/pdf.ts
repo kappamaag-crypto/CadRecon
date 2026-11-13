@@ -55,6 +55,16 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
       await page.render({canvasContext:ctx,canvas,viewport:vp}).promise;
       const list=await page.getOperatorList();
       const entities=vectorPaths(list,vp);
+      // Digital PDF text remains editable; scans are handled by OCR separately.
+      const textContent=await page.getTextContent();
+      for(const item of textContent.items){
+        if(!('str' in item)||!item.str.trim())continue;
+        const pos=vp.convertToViewportPoint(item.transform[4],item.transform[5]);
+        const e=entity('text',[{x:pos[0],y:pos[1]}],'Текст','pdf');
+        e.text=item.str.trim();
+        e.size=Math.max(2,Math.hypot(item.transform[2],item.transform[3])*scale);
+        entities.push(e);
+      }
       sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.92),entities,calibrated:false,sourceType:'pdf'});
       page.cleanup();
     }
