@@ -1,12 +1,15 @@
 export type Point = { x:number; y:number };
-export type Kind = 'line'|'polyline'|'circle'|'arc'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp';
+export type Kind = 'line'|'polyline'|'circle'|'arc'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp'|'eskd';
 export type Origin = 'manual'|'pdf'|'trace'|'ocr';
+export type EskdType = 'weld'|'roughness'|'datum'|'geotol'|'section'|'detail'|'elevation'|'diameter'|'radius'|'thread'|'slope'|'taper';
 export interface Entity {
   id:string; kind:Kind; layer:string; origin:Origin; verified:boolean;
   points:Point[]; center?:Point; radius?:number; startAngle?:number; endAngle?:number;
   closed?:boolean; text?:string; size?:number; offset?:number;
   rows?:number; cols?:number; width?:number; height?:number;
-  confidence?:number; color?:string;
+  confidence?:number; color?:string; symbol?:EskdType;
+  reason?:string; sourceId?:string; chainId?:string;
+  bbox?:{x0:number;y0:number;x1:number;y1:number};
 }
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
 export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; sourceType:'pdf'|'image'|'blank'; }
@@ -21,7 +24,9 @@ export const DEFAULT_LAYERS:Layer[] = [
   {name:'Штриховка',color:'#94a3b8',visible:true,locked:false},
   {name:'PDF векторы',color:'#a78bfa',visible:true,locked:false},
   {name:'Автообводка',color:'#22d3ee',visible:true,locked:false},
-  {name:'OCR',color:'#fb7185',visible:true,locked:false}
+  {name:'OCR',color:'#fb7185',visible:true,locked:false},
+  {name:'Авторазмеры',color:'#f97316',visible:true,locked:false},
+  {name:'ЕСКД',color:'#d6aaff',visible:true,locked:false}
 ];
 export const newId = () => typeof crypto!=='undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now();
 export function newSheet(name='Лист 1',width=1189,height=841):Sheet {return {id:newId(),name,width,height,entities:[],calibrated:false,sourceType:'blank'};}
