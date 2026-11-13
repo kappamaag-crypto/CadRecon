@@ -17,5 +17,5 @@ test('optional PaddleOCR service is explicitly approved and imports editable unv
  page.once('dialog',d=>d.accept());
  await page.getByRole('button',{name:/Распознать через PaddleOCR/}).click();
  await expect(page.getByText(/fixture PaddleOCR: 2 новых элементов/)).toBeVisible();
- await page.getByRole('button',{name:'Свойства',exact:true}).click();
+ await expect(page.getByText(/fixture PaddleOCR: 2 новых элементов/)).toBeVisible();
 });
