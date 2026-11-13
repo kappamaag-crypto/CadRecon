@@ -8,12 +8,12 @@ const unicode=(s:string)=>[...s].map(ch=>{const c=ch.codePointAt(0)!;return c>12
 const escapeText=(s:string)=>unicode(s.replace(/\r?\n/g,' '));
 const clamp=(n:number)=>Number.isFinite(n)?Number(n.toFixed(6)):0;
 const col=(hex:string)=>{const colors:Record<string,number>={'#4ade80':3,'#38bdf8':4,'#f9bd5a':2,'#e4ebf4':7,'#94a3b8':8,'#a78bfa':6,'#22d3ee':4,'#fb7185':1};return colors[hex.toLowerCase()]||7;};
-function dxfLine(a:Point,b:Point,layer:string,lineType='') {return emit(0,'LINE',8,layer)+(lineType?emit(6,lineType):'')+v(a)+p2(11,b);}
-function dxfCircle(c:Point,r:number,layer:string) {return emit(0,'CIRCLE',8,layer)+v(c)+emit(40,clamp(r));}
-function dxfText(p:Point,text:string,height:number,layer:string){return emit(0,'TEXT',8,layer)+v(p)+emit(40,clamp(height),1,escapeText(text||' '),7,'Standard',50,0);}
+function dxfLine(a:Point,b:Point,layer:string,lineType='') {return emit(0,'LINE',100,'AcDbEntity',8,layer,100,'AcDbLine')+(lineType?emit(6,lineType):'')+v(a)+p2(11,b);}
+function dxfCircle(c:Point,r:number,layer:string) {return emit(0,'CIRCLE',100,'AcDbEntity',8,layer,100,'AcDbCircle')+v(c)+emit(40,clamp(r));}
+function dxfText(p:Point,text:string,height:number,layer:string){return emit(0,'TEXT',100,'AcDbEntity',8,layer,100,'AcDbText')+v(p)+emit(40,clamp(height),1,escapeText(text||' '),7,'Standard',50,0);}
 function polygon(points:Point[],layer:string,closed=true){
   if(points.length<2)return '';
-  return emit(0,'LWPOLYLINE',8,layer,90,points.length,70,closed?1:0)+points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y))).join('');
+  return emit(0,'LWPOLYLINE',100,'AcDbEntity',8,layer,100,'AcDbPolyline',90,points.length,70,closed?1:0)+points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y))).join('');
 }
 function solidHatch(points:Point[],layer:string){
   if(points.length<3)return polygon(points,layer,true);
@@ -37,7 +37,7 @@ function entityDxf(e:Entity){
     case 'arc':{
       if(!e.center||!e.radius)return '';
       const a=(e.startAngle||0)*180/Math.PI,b=(e.endAngle||0)*180/Math.PI;
-      return emit(0,'ARC',8,layer)+v(e.center)+emit(40,clamp(e.radius),50,clamp((360-b%360)%360),51,clamp((360-a%360)%360));
+      return emit(0,'ARC',100,'AcDbEntity',8,layer,100,'AcDbCircle')+v(e.center)+emit(40,clamp(e.radius),100,'AcDbArc',50,clamp((360-b%360)%360),51,clamp((360-a%360)%360));
     }
     case 'text':return dxfText(pts[0],e.text||' ',e.size||4,layer);
     case 'leader':{
@@ -56,8 +56,8 @@ function dimensionBlock(e:Entity,i:number):DimBlock {
   const u=mul(d,1/len),arrow=5,arr=(p:Point,dir:number)=>polygon([p,add(p,add(mul(u,dir*arrow),mul(n,arrow/4))),add(p,add(mul(u,dir*arrow),mul(n,-arrow/4)))],layer,true);
   const label=e.text||Number(dimensionLength(e).toFixed(2)).toString();
   const parts=dxfLine(a,aa,layer)+dxfLine(b,bb,layer)+dxfLine(aa,bb,layer)+arr(aa,1)+arr(bb,-1)+dxfText(add(m,mul(n,-height*.7)),label,height,layer);
-  const block=emit(0,'BLOCK',8,layer,2,name,70,1,10,0,20,0,30,0,3,name,1,'')+parts+emit(0,'ENDBLK',8,layer);
-  const obj=emit(0,'DIMENSION',8,layer,2,name,3,'Standard',70,32,1,escapeText(e.text||''),42,clamp(dimensionLength(e)),10,clamp(m.x),20,clamp(-m.y),30,0,11,clamp(m.x),21,clamp(-m.y),31,0)+p2(13,a)+p2(14,b);
+  const block=emit(0,'BLOCK',100,'AcDbEntity',8,layer,100,'AcDbBlockBegin',2,name,70,1,10,0,20,0,30,0,3,name,1,'')+parts+emit(0,'ENDBLK',100,'AcDbEntity',8,layer,100,'AcDbBlockEnd');
+  const obj=emit(0,'DIMENSION',100,'AcDbEntity',8,layer,100,'AcDbDimension',2,name,3,'Standard',70,32,1,escapeText(e.text||''),42,clamp(dimensionLength(e)),10,clamp(m.x),20,clamp(-m.y),30,0,11,clamp(m.x),21,clamp(-m.y),31,0)+emit(100,'AcDbAlignedDimension')+p2(13,a)+p2(14,b);
   return {name,data:block,entity:obj};
 }
 export function createDxf(sheet:Sheet,project:CadProject) {
