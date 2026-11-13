@@ -8,6 +8,8 @@ import {createBackup,downloadFile,exportProject,importProject,loadProject,listBa
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
 import {recognizeText} from './ocr';
+import {recognizeAdvanced,validateAdvancedEndpoint} from './advanced';
+import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import type {EskdType} from './model';
@@ -29,6 +31,7 @@ export default function App(){
  const [project,setProject]=useState<CadProject>(newProject);
  const [sheetIndex,setSheetIndex]=useState(0),[tool,setTool]=useState<Tool>('select'),[selected,setSelected]=useState<string|null>(null),[panel,setPanel]=useState<Panel>('tools');
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
+ const [advancedUrl,setAdvancedUrl]=useState('http://127.0.0.1:8765'),[advancedToken,setAdvancedToken]=useState('');
  const [source,setSource]=useState(true),[compare,setCompare]=useState(false),[snap,setSnap]=useState(true),[grid,setGrid]=useState(false),[busy,setBusy]=useState(''),[status,setStatus]=useState('Загрузите PDF или скан, чтобы начать.'),[ocrText,setOcrText]=useState('');
  const [backups,setBackups]=useState<{key:string;time:number;name:string}[]>([]),[loaded,setLoaded]=useState(false);
  const input=useRef<HTMLInputElement>(null),jsonInput=useRef<HTMLInputElement>(null),undo=useRef<CadProject[]>([]),redo=useRef<CadProject[]>([]);
@@ -46,7 +49,32 @@ export default function App(){
  window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[project,selected,busy]);
  async function handleDrawing(files:FileList|null){if(!files?.length)return;setBusy('Импорт документа…');try{const nextSheets:CadProject['sheets']=[];for(const f of Array.from(files)){const parts=await importDrawing(f,setBusy);nextSheets.push(...parts);}await createBackup(project);apply(p=>({...p,name:p.name==='Новый проект'?files[0].name:p.name,sheets:[...(p.sheets.length===1&&!p.sheets[0].entities.length&&!p.sheets[0].image?[]:p.sheets),...nextSheets]}));setSheetIndex(project.sheets.length===1&&!project.sheets[0].entities.length&&!project.sheets[0].image?0:project.sheets.length);setSelected(null);setStatus('Импортировано листов: '+nextSheets.length+'. Векторные элементы PDF требуют проверки.');}catch(e){setStatus('Ошибка импорта: '+String(e));}finally{setBusy('');if(input.current)input.current.value='';}}
  async function handleProject(files:FileList|null){if(!files?.length)return;setBusy('Открытие проекта…');try{const p=await importProject(files[0]);await createBackup(project);setProject(p);undo.current=[];redo.current=[];setSheetIndex(0);setSelected(null);setStatus('Проект открыт: '+p.name);}catch(e){setStatus('Ошибка проекта: '+String(e));}finally{setBusy('');if(jsonInput.current)jsonInput.current.value='';}}
- async function vectorize(){setBusy('Обработка скана…');try{const r=await traceImage(sheet);addEntities(r.entities);setStatus(r.note);}catch(e){setStatus('Обводка: '+String(e));}finally{setBusy('');}}
+ async function vectorize(){setBusy('Обработка скана в полном разрешении…');try{const r=await traceImage(sheet,12,setBusy,'detailed');addEntities(r.entities);setStatus(r.note);}catch(e){setStatus('Обводка: '+String(e));}finally{setBusy('');}}
+ async function advancedProcessing(){
+  if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
+  let url:string;
+  try{url=validateAdvancedEndpoint(advancedUrl);}catch(e){setStatus('Адрес сервиса: '+e);return;}
+  if(!window.confirm('Текущий лист будет передан в выбранный OCR-сервис: '+url+
+    '\nДля удалённого сервера это выход за пределы браузера. Продолжить?'))return;
+  setBusy('PaddleOCR + OpenCV: распознавание на выбранном компьютере…');
+  try{
+    const result=await recognizeAdvanced(sheet,url,advancedToken);
+    addEntities(result.entities);setStatus(result.note);setPanel('recognition');
+  }catch(e){setStatus('Усиленное распознавание не выполнено: '+String(e)+
+    '. Проверьте запуск локального backend и доступность CORS/HTTPS.');}
+  finally{setBusy('');}
+ }
+ function repairImportedPdfText(){
+  let changed=0;
+  changeSheet(s=>({...s,entities:s.entities.map(e=>{
+    if(e.kind!=='text'||e.origin!=='pdf'||!e.text)return e;
+    const fix=repairPdfText(e.text);
+    if(!fix.changed)return e;
+    changed++;return {...e,text:fix.text,reason:fix.reason,confidence:fix.confidence,verified:false};
+  })}));
+  setStatus('Исправлено надписей с предполагаемой ошибкой кодировки: '+changed+
+    '. Проверьте текст по оригиналу.');
+ }
  async function mergeLines(){
   if(!window.confirm('Объединить короткие отрезки только в автоматически распознанных слоях? При сомнениях используйте «Отмена».'))return;
   try{await createBackup(project);const result=mergeAutoLines(sheet.entities,Math.max(.7,Math.min(sheet.width,sheet.height)/3000));
@@ -66,7 +94,7 @@ export default function App(){
      }
      if(!source.some(e=>e.kind==='line'&&e.origin!=='manual')&&sheet.image){
        setBusy('Анализ линий, выносок и цепочек...');
-       const v=await traceImage(sheet);source=[...source,...v.entities];
+       const v=await traceImage(sheet,12,setBusy,'detailed');source=[...source,...v.entities];
      }
      setBusy('Анализ размерных цепочек и ЕСКД...');
      const extracted=source.filter(e=>!sheet.entities.some(old=>old.id===e.id));
@@ -140,8 +168,19 @@ export default function App(){
       </label>
       <label className="selector-label">Значение / надпись<input value={symbolText} onChange={e=>setSymbolText(e.target.value)}/></label>
       <button className="action" onClick={()=>setTool('eskd')}>⌗ Установить обозначение</button>
-      <h3>Обработка документа</h3><p className="muted">Векторный PDF импортируется со штрихами. Для скана доступны автоматическая обводка и OCR; результат требует проверки.</p><div className="stack"><button className="action" onClick={vectorize} disabled={!sheet.image||!!busy}>⌁ Автообводка линий</button><button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Объединить короткие линии</button><button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
-      <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button><button className="action" onClick={()=>setTool('calibrate')}>⊞ Калибровать по размеру</button><button className="action" onClick={()=>setTool('measure')}>↔ Измерить расстояние</button></div><h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
+      <h3>Обработка документа</h3><p className="muted">Векторный PDF импортируется со штрихами. Для скана доступны автоматическая обводка и OCR; результат требует проверки.</p><div className="stack"><button className="action" onClick={vectorize} disabled={!sheet.image||!!busy}>⌁ Детальная обводка (исходное разрешение)</button>
+      <button className="action" onClick={repairImportedPdfText} disabled={!!busy}>АЯ Исправить кодировку PDF-текста</button><button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Объединить короткие линии</button><button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
+      <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button><button className="action" onClick={()=>setTool('calibrate')}>⊞ Калибровать по размеру</button><button className="action" onClick={()=>setTool('measure')}>↔ Измерить расстояние</button></div><h3>Усиленная модель распознавания</h3>
+      <p className="muted">PaddleOCR PP-OCRv5 (русский) + OpenCV LSD/Hough на вашем ПК или сервере. Требуется отдельно запустить бесплатный Python-модуль. GitHub Pages сам по себе его не запускает.</p>
+      <label className="selector-label">Адрес локального или HTTPS-сервиса
+        <input aria-label="Адрес усиленного OCR-сервиса" value={advancedUrl} onChange={e=>setAdvancedUrl(e.target.value)} placeholder="http://127.0.0.1:8765"/>
+      </label>
+      <label className="selector-label">Токен доступа (не сохраняется)
+        <input aria-label="Токен усиленного OCR" type="password" autoComplete="off" value={advancedToken} onChange={e=>setAdvancedToken(e.target.value)}/>
+      </label>
+      <button className="action" disabled={!sheet.image||!!busy} onClick={advancedProcessing}>◈ Распознать через PaddleOCR + OpenCV</button>
+      <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/backend/README.md" target="_blank" rel="noreferrer">Инструкция по установке локального сервера</a></p>
+      <h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
         <p className="muted">Значения в оранжевом слое не меняют геометрию и не подтверждены. Проверяйте каждый объект по подложке и независимым размерам.</p>

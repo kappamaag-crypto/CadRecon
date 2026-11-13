@@ -2,6 +2,7 @@ import * as pdfjs from 'pdfjs-dist';
 import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
 import * as UTIF from 'utif';
 import {entity,newId,type Entity,type Sheet} from './model';
+import {repairPdfText,suspiciousText} from './textRepair';
 pdfjs.GlobalWorkerOptions.workerSrc=pdfWorker;
 async function imagePage(file:File):Promise<Sheet>{
   let url:string;
@@ -48,12 +49,17 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
     for(let pageIndex=1;pageIndex<=Math.min(pdf.numPages,40);pageIndex++){
       onProgress?.('Обработка страницы '+pageIndex+' из '+pdf.numPages);
       const page=await pdf.getPage(pageIndex);
-      const initial=page.getViewport({scale:1});const scale=Math.min(3,Math.max(1,2400/Math.max(initial.width,initial.height)));
+      const initial=page.getViewport({scale:1});
+      const list=await page.getOperatorList();
+      const paths=list.fnArray.filter(fn=>fn===pdfjs.OPS.constructPath).length;
+      const longest=paths>25?3200:4800;
+      const pixelLimit=22000000;
+      const scale=Math.min(5,Math.max(1,Math.min(longest/Math.max(initial.width,initial.height),
+        Math.sqrt(pixelLimit/(initial.width*initial.height)))));
       const vp=page.getViewport({scale});
       const canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
       const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');
       await page.render({canvasContext:ctx,canvas,viewport:vp}).promise;
-      const list=await page.getOperatorList();
       const entities=vectorPaths(list,vp);
       // Digital PDF text remains editable; scans are handled by OCR separately.
       const textContent=await page.getTextContent();
@@ -61,12 +67,15 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
         if(!('str' in item)||!item.str.trim())continue;
         const pos=vp.convertToViewportPoint(item.transform[4],item.transform[5]);
         const e=entity('text',[{x:pos[0],y:pos[1]}],'Текст','pdf');
-        e.text=item.str.trim();
+        const decoded=repairPdfText(item.str.trim());
+        e.text=decoded.text;
+        if(decoded.changed){e.reason=decoded.reason;e.confidence=decoded.confidence;}
+        else if(suspiciousText(item.str)){e.reason='Возможна ошибка PDF-кодировки. Сверьте по оригиналу.';e.confidence=.4;}
         e.size=Math.max(2,Math.hypot(item.transform[2],item.transform[3])*scale);
         e.bbox={x0:pos[0],y0:pos[1]-e.size,x1:pos[0]+Math.abs(item.width||0)*scale,y1:pos[1]};
         entities.push(e);
       }
-      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.92),entities,calibrated:false,sourceType:'pdf'});
+      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.985),entities,calibrated:false,sourceType:'pdf'});
       page.cleanup();
     }
     return sheets;

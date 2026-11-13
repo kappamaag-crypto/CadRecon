@@ -45,6 +45,10 @@ jobs:
               assert z.testzip() is None
           print('ZIP archive validated')
           PY
+      - name: Validate Python OCR geometry service without downloading models
+        run: |
+          python3 -m pip install --quiet -r backend/requirements-test.txt
+          python3 -m unittest discover -s backend/tests -v
       - run: npm run build
       - name: Install browser for UI smoke tests
         run: npx playwright install --with-deps chromium

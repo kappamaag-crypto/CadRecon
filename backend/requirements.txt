@@ -1,0 +1,12 @@
+# Install on a CPU/GPU machine, not on GitHub Pages.
+# PaddlePaddle's installation method depends on CPU/GPU/OS:
+# https://www.paddlepaddle.org.cn/install/quick
+fastapi>=0.115,<1
+uvicorn[standard]>=0.32,<1
+python-multipart>=0.0.20
+pillow>=10,<13
+numpy>=1.26
+opencv-python-headless>=4.10,<5
+paddleocr>=3.3,<4
+# CPU inference generally also requires:
+# paddlepaddle>=3.0,<4
