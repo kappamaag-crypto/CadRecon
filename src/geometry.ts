@@ -57,3 +57,36 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   return issues;
 }
 export function measure(p:Point,q:Point) {return dist(p,q).toFixed(2)+' мм';}
+
+/** Merge only automatically imported, nearly collinear and contiguous LINE objects.
+ * This is deliberately conservative and preserves all manual CAD geometry. */
+export function mergeAutoLines(entities:Entity[],tolerance=2):{entities:Entity[];removed:number} {
+  const buckets=new Map<string,Array<{e:Entity;start:number;end:number;ux:number;uy:number;off:number}>>();
+  const keep:Entity[]=[];
+  const angStep=Math.PI/360;
+  for(const e of entities){
+    if(e.kind!=='line'||e.points.length!==2||e.verified||e.origin==='manual'){keep.push(e);continue;}
+    let a=e.points[0],b=e.points[1],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
+    if(len<1e-6){keep.push(e);continue;}
+    if(dx<0 || (Math.abs(dx)<1e-10&&dy<0)){[a,b]=[b,a];dx=-dx;dy=-dy;}
+    const ux=dx/len,uy=dy/len,angle=Math.atan2(uy,ux),off=-uy*a.x+ux*a.y;
+    const key=e.layer+':'+Math.round(angle/angStep)+':'+Math.round(off/Math.max(.01,tolerance));
+    const t1=ux*a.x+uy*a.y,t2=ux*b.x+uy*b.y;
+    const list=buckets.get(key)||[];list.push({e,start:Math.min(t1,t2),end:Math.max(t1,t2),ux,uy,off});buckets.set(key,list);
+  }
+  let removed=0;
+  for(const list of buckets.values()){
+    list.sort((a,b)=>a.start-b.start);
+    let cur=list[0];if(!cur)continue;
+    for(let i=1;i<list.length;i++){
+      const next=list[i];
+      if(next.start<=cur.end+Math.max(.01,tolerance)){
+        cur={...cur,end:Math.max(cur.end,next.end)};removed++;
+      }else{
+        const e={...cur.e,verified:false,points:[{x:cur.ux*cur.start-cur.uy*cur.off,y:cur.uy*cur.start+cur.ux*cur.off},{x:cur.ux*cur.end-cur.uy*cur.off,y:cur.uy*cur.end+cur.ux*cur.off}]};keep.push(e);cur=next;
+      }
+    }
+    keep.push({...cur.e,verified:false,points:[{x:cur.ux*cur.start-cur.uy*cur.off,y:cur.uy*cur.start+cur.ux*cur.off},{x:cur.ux*cur.end-cur.uy*cur.off,y:cur.uy*cur.end+cur.ux*cur.off}]});
+  }
+  return {entities:keep,removed};
+}

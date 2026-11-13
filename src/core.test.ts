@@ -1,7 +1,7 @@
 import {writeFileSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import {newProject,entity,validateProject} from './model';
-import {dist,snapPoint,scaleSheet,auditSheet} from './geometry';
+import {dist,snapPoint,scaleSheet,auditSheet,mergeAutoLines} from './geometry';
 import {createDxf} from './dxf';
 import {createZip} from './zip';
 describe('CadRecon model and export',()=>{
@@ -9,6 +9,13 @@ describe('CadRecon model and export',()=>{
   expect(dist({x:0,y:0},{x:30,y:40})).toBe(50);
   const l=entity('line',[{x:0,y:0},{x:100,y:0}]);
   expect(snapPoint({x:99,y:1},[l],3)).toEqual({x:100,y:0});
+ });
+ it('merges imported collinear fragments but preserves manually drawn lines',()=>{
+  const a=entity('line',[{x:0,y:0},{x:10,y:0}],'PDF векторы','pdf');
+  const b=entity('line',[{x:10.4,y:0},{x:20,y:0}],'PDF векторы','pdf');
+  const manual=entity('line',[{x:20,y:0},{x:30,y:0}]);
+  const out=mergeAutoLines([a,b,manual],1);expect(out.removed).toBe(1);
+  expect(out.entities.length).toBe(2);expect(out.entities.some(e=>e.id===manual.id)).toBe(true);
  });
  it('calibrates without losing shape geometry',()=>{
   const p=newProject(),l=entity('line',[{x:0,y:0},{x:10,y:0}]);p.sheets[0].entities=[l];

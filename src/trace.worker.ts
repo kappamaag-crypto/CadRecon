@@ -32,5 +32,39 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   }
   return found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y)).slice(0,2400);
 }
-self.onmessage=(ev:MessageEvent<Msg>)=>{try{(self as unknown as Worker).postMessage({lines:trace(ev.data)});}catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
+
+interface CircleCandidate {x:number;y:number;radius:number;confidence:number;}
+function detectCircles({rgba,width,height,scale}:Msg):CircleCandidate[] {
+  const count=width*height,mask=new Uint8Array(count),visited=new Uint8Array(count);
+  for(let i=0;i<count;i++){const j=i*4;mask[i]=(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2])<145?1:0;}
+  const queue=new Int32Array(count),circles:CircleCandidate[]=[];
+  for(let start=0;start<count;start++){
+    if(!mask[start]||visited[start])continue;
+    visited[start]=1;queue[0]=start;let head=0,tail=1,minx=width,miny=height,maxx=0,maxy=0;
+    const sample:number[]=[];
+    while(head<tail){
+      const at=queue[head++],x=at%width,y=Math.floor(at/width);
+      if(x<minx)minx=x;if(y<miny)miny=y;if(x>maxx)maxx=x;if(y>maxy)maxy=y;
+      if(sample.length<30000)sample.push(at);
+      for(let dy=-1;dy<=1;dy++)for(let dx=-1;dx<=1;dx++){
+        if(!dx&&!dy)continue;
+        const xx=x+dx,yy=y+dy;if(xx<0||yy<0||xx>=width||yy>=height)continue;
+        const k=yy*width+xx;if(mask[k]&&!visited[k]){visited[k]=1;queue[tail++]=k;}
+      }
+    }
+    const w=maxx-minx+1,h=maxy-miny+1, r=(w+h)/4;
+    if(tail<24||tail>30000||w<12||h<12||w>450||h>450||w/h<.82||w/h>1.22)continue;
+    const cx=(minx+maxx)/2,cy=(miny+maxy)/2;
+    const tolerance=Math.max(2,r*.18);
+    let matches=0;
+    for(const k of sample){const x=k%width,y=Math.floor(k/width);if(Math.abs(Math.hypot(x-cx,y-cy)-r)<tolerance)matches++;}
+    const ratio=matches/sample.length;
+    if(ratio<.77)continue;
+    const candidate={x:cx*scale,y:cy*scale,radius:r*scale,confidence:Math.min(.95,ratio)};
+    if(!circles.some(c=>Math.hypot(c.x-candidate.x,c.y-candidate.y)<r*scale*.3))circles.push(candidate);
+    if(circles.length>=300)break;
+  }
+  return circles;
+}
+self.onmessage=(ev:MessageEvent<Msg>)=>{try{(self as unknown as Worker).postMessage({lines:trace(ev.data),circles:detectCircles(ev.data)});}catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
 export {};
