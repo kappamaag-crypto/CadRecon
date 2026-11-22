@@ -1,7 +1,7 @@
 import {entity,type Entity,type Sheet} from './model';
 import {consolidateScanLines} from './scanTopology';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
-type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number};
+type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number;inkSupport?:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
 type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];circleStrokeDuplicates?:number;inkStrokeDuplicates?:number;error?:string};
 
@@ -82,7 +82,9 @@ export async function traceImage(
         const a={x:(t.x+l.a.x)*sx,y:(t.y+l.a.y)*sy};
         const b={x:(t.x+l.b.x)*sx,y:(t.y+l.b.y)*sy};
         const key=lineKey(a,b);if(seen.has(key))continue;seen.add(key);
-        const e=entity('line',[a,b],'Автообводка','trace');e.confidence=l.confidence;lines.push(e);
+        const e=entity('line',[a,b],'Автообводка','trace');e.confidence=l.confidence;
+        e.reason='Обводка: эвристический балл, опора на исходный штрих '+(l.inkSupport===undefined?'не измерена':Math.round(l.inkSupport*100)+'%')+'. Проверить по оригиналу.';
+        lines.push(e);
       }
       for(const c of data.circles||[]){
         const center={x:(t.x+c.x)*sx,y:(t.y+c.y)*sy};
