@@ -55,8 +55,8 @@
 - [x] Аудит исходного кода `main`, три предложенных ADR о координатах, online security, форматах/ЕСКД.
 - [x] Воспроизводимый генератор четырёх синтетических PDF/PNG-эталонов и Playwright diagnostic baseline.
 - [x] [Документ W0 baseline/status](docs/W0_BASELINE_STATUS.md) и [тестовый корпус](benchmarks/w0/README.md).
-- [ ] Результаты нового CI benchmark зафиксированы и оценены (не путать зеленую сборку с точностью).
+- [x] Диагностический CI baseline пройден и записан: [run 45010047191 — 7 passed](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45010047191). **Native geometry: 0 линий** на обоих PDF-кейсах, растровый чистый эталон: 93 фрагмента и 0 окружностей — см. [числовой отчет](docs/W0_BASELINE_STATUS.md).
 - [ ] Разрешенные реальные пары CAD↔PDF/скан, независимые контрольные размеры и инженерная разметка.
 - [ ] ADR formally accepted, измеренный quality gate перед W1.
 
-**W1 разрешен как следующий этап разработки после W0 review, но не как подтвержденный «accurate release».** Не считать W0 выполненным без реального корпуса/метрик. Никакие production OCR/CAD-функции в W0 не менялись.
+**W1 P0:** [issue #4 — вернуть PDF paths](https://github.com/kappamaag-crypto/CadRecon/issues/4) основана на воспроизводимой регрессии: native PDF хранит текст, но теряет линии. Сначала исправить детектор PDF paths и зафиксировать lossless geometry gate. **W1 разрешен как следующий этап разработки после W0 review, но не как подтвержденный «accurate release».** Не считать W0 выполненным без реального корпуса/метрик. W0 не менял OCR/CAD алгоритмы; выполнено только точечное исправление сбоя импорта (FileList) для тестируемости.
