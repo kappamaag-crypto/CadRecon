@@ -34,6 +34,14 @@ jobs:
           audit2=semantic.audit()
           assert not audit2.has_errors, str(audit2.errors)
           print('All 12 ESKD INSERT blocks validated')
+          spline=ezdxf.readfile('/tmp/cadrecon-spline-test.dxf')
+          cad_splines=spline.modelspace().query('SPLINE')
+          assert len(cad_splines)==1, f'Expected 1 editable SPLINE, got {len(cad_splines)}'
+          assert len(cad_splines[0].control_points)==4
+          assert len(cad_splines[0].knots)==8
+          assert spline.header.get('$INSUNITS')==0, 'Uncalibrated PDF cannot claim mm'
+          assert not spline.audit().has_errors
+          print('Native cubic SPLINE and unitless uncalibrated header audited')
           PY
       - name: ZIP archive smoke check
         run: |
