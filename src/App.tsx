@@ -837,6 +837,26 @@ export default function App(){
         </label>}
         <label className="check"><input type="checkbox" checked={selection.verified} onChange={e=>modifyEntity({...selection,verified:e.target.checked},true)}/> Проверен по оригиналу</label>
         {['text','leader','dimension','table','stamp','eskd'].includes(selection.kind)&&<label>Текст <textarea value={selection.text||''} onChange={e=>modifyEntity({...selection,text:e.target.value})} rows={3}/></label>}
+        {selection.kind==='hatch'&&<>
+          <label>Эскизный рисунок штриховки (не утверждённый ГОСТ)
+            <select aria-label="Рисунок штриховки" value={selection.hatchPattern||'solid'}
+              onChange={e=>modifyEntity({...selection,
+                hatchPattern:e.target.value as 'solid'|'diagonal'|'cross'})}>
+              <option value="solid">Сплошная заливка (DXF HATCH)</option>
+              <option value="diagonal">Диагональные линии 45°</option>
+              <option value="cross">Перекрёстные линии 45° / 135°</option>
+            </select>
+          </label>
+          {selection.hatchPattern&&selection.hatchPattern!=='solid'&&
+            <label>Шаг эскизной штриховки (ед. листа)
+              <input type="number" min="1" max="10000" step="1"
+                value={selection.hatchSpacing||12}
+                onChange={e=>modifyEntity({...selection,
+                  hatchSpacing:Math.max(1,Math.min(10000,Number(e.target.value)||12))})}/>
+            </label>}
+          <p className="muted">В DXF диагональные и перекрёстные линии экспортируются как
+            редактируемые LINE с замкнутой границей. Это не родной ассоциативный CAD HATCH и не сертифицированный узор ГОСТ 2.306.</p>
+        </>}
         {selection.kind==='eskd'&&<label>Тип обозначения
           <select value={selection.symbol||'weld'} onChange={e=>modifyEntity({...selection,symbol:e.target.value as EskdType})}>
             {ESKD_SYMBOLS.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}

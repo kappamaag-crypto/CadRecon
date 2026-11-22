@@ -9,6 +9,7 @@ export interface Entity {
   rows?:number; cols?:number; width?:number; height?:number;
   confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
   reason?:string; sourceId?:string; chainId?:string;
+  hatchPattern?:'solid'|'diagonal'|'cross'; hatchSpacing?:number;
   bbox?:{x0:number;y0:number;x1:number;y1:number};
 }
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
@@ -83,6 +84,8 @@ export function validateProject(value:unknown):CadProject {
         (e.center!==undefined&&!isPoint(e.center))||
         (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
         (e.axisRatio!==undefined&&(!Number.isFinite(e.axisRatio)||e.axisRatio<=0||e.axisRatio>1))||
+        (e.hatchPattern!==undefined&&(e.kind!=='hatch'||!['solid','diagonal','cross'].includes(e.hatchPattern)))||
+        (e.hatchSpacing!==undefined&&(!Number.isFinite(e.hatchSpacing)||e.hatchSpacing<1||e.hatchSpacing>10000))||
         (e.kind==='ellipse'&&(!e.center||!e.radius||!e.axisRatio))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
         (e.confidence!==undefined&&!Number.isFinite(e.confidence))||

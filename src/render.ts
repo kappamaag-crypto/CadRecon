@@ -2,6 +2,7 @@ import type {Entity,Point,Sheet,Layer} from './model';
 import {add,mid,dist,mul,sub,dimensionLength} from './geometry';
 import {eskdParts} from './eskd';
 import {visibleConstructionLine} from './cadPrimitives';
+import {hatchStrokeSegments} from './cadHatch';
 export interface Camera {x:number;y:number;w:number;h:number;}
 const pi=Math.PI;
 function poly(ctx:CanvasRenderingContext2D,points:Point[],close=false){if(!points.length)return;ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);if(close)ctx.closePath();}
@@ -25,7 +26,16 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
   else if(e.lineStyle==='dashed'){ctx.setLineDash([10*lineWidth,6*lineWidth]);}
   if(e.kind==='point'){const p=pts[0],r=Math.max(2*lineWidth,1.3);ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke();}
   if(e.kind==='line'||e.kind==='axis'||e.kind==='polyline'||e.kind==='hatch'){
-    if(e.kind==='hatch'){poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;}
+    if(e.kind==='hatch'){
+      if(!e.hatchPattern||e.hatchPattern==='solid'){
+        poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;
+      }else{
+        const pattern=hatchStrokeSegments(pts,e.hatchPattern,e.hatchSpacing||12,500);
+        for(const stroke of pattern.segments){poly(ctx,[stroke.a,stroke.b]);ctx.stroke();}
+        // Invalid or over-dense patterns keep their outlined boundary visible,
+        // but are not silently replaced with a misleading solid fill.
+      }
+    }
     poly(ctx,pts,!!e.closed||e.kind==='hatch');ctx.stroke();
   }else if(e.kind==='bezier'&&pts.length===4){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.bezierCurveTo(pts[1].x,pts[1].y,pts[2].x,pts[2].y,pts[3].x,pts[3].y);ctx.stroke();}
   else if(e.kind==='circle'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,0,2*pi);ctx.stroke();}

@@ -1,6 +1,7 @@
 import type {CadProject,Entity,Point,Sheet} from './model';
 import {dimensionLength,mid,add,mul,sub} from './geometry';
 import {eskdParts} from './eskd';
+import {hatchStrokeSegments} from './cadHatch';
 type Pair=string|number;
 const emit=(...pairs:Pair[])=>pairs.map(value=>String(value).replace(/[\r\n\u0000\u2028\u2029]/g,' ')).join('\n')+'\n';
 const v=(p:Point)=>emit(10,p.x,20,-p.y,30,0);
@@ -53,7 +54,13 @@ function entityDxf(e:Entity){
         v(e.center)+p2(11,major)+emit(40,clamp(e.axisRatio),41,0,42,clamp(2*Math.PI));
     }
     case 'bezier':return cubicSpline(pts,layer);
-    case 'hatch':return solidHatch(pts,layer);
+    case 'hatch':{
+      if(!e.hatchPattern||e.hatchPattern==='solid')return solidHatch(pts,layer);
+      const pattern=hatchStrokeSegments(pts,e.hatchPattern,e.hatchSpacing||12,600);
+      // Conservative editable DXF LINE strokes and outline. Do not falsely
+      // claim an associative/ГОСТ 2.306-compliant native patterned HATCH.
+      return polygon(pts,layer,true)+pattern.segments.map(s=>dxfLine(s.a,s.b,layer)).join('');
+    }
     case 'circle':return e.center && e.radius?dxfCircle(e.center,e.radius,layer):'';
     case 'arc':{
       if(!e.center||!e.radius)return '';
