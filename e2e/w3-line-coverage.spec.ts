@@ -2,6 +2,7 @@ import {test,expect} from '@playwright/test';
 import {execFileSync} from 'node:child_process';
 import {mkdir,readFile,writeFile} from 'node:fs/promises';
 import {join} from 'node:path';
+import {isRedundantCircleStroke} from '../src/circleStrokeFilter';
 
 type P={x:number;y:number};
 type Ent={kind:string;points:P[];center?:P;radius?:number;verified:boolean};
@@ -53,8 +54,32 @@ for(const [kind,filename] of [
       centerErrorPx:dist(e.center!,{x:550,y:320}),
       radiusErrorPx:Math.abs(e.radius!-80),
     })).sort((a,b)=>a.centerErrorPx-b.centerErrorPx)[0]||null;
+    // False-positive proxy can only be calculated for the synthetic fixture:
+    // candidates are not labelled as valid LINE by merely following a circle
+    // already exported as editable CIRCLE.
+    const circle={x:550,y:320,radius:80,confidence:.9};
+    let outsideKnownStraight=0,explainedStraight=0,nearKnownCircle=0;
+    for(const e of lines){
+      if(e.points.length!==2)continue;
+      let matched=0,circular=0;
+      for(let i=0;i<=12;i++){
+        const t=i/12;
+        const p={x:e.points[0].x*(1-t)+e.points[1].x*t,
+          y:e.points[0].y*(1-t)+e.points[1].y*t};
+        if(truth.some(([a,b])=>segmentDistance(p,a,b)<=4))matched++;
+        if(Math.abs(dist(p,{x:circle.x,y:circle.y})-circle.radius)<=4)circular++;
+      }
+      if(matched>=9)explainedStraight++;
+      else outsideKnownStraight++;
+      if(circular>=12)nearKnownCircle++;
+    }
     const observed={
       fixture:kind,lines:lines.length,circles:circles.length,
+      candidateReferenceProxy:{alignedStraight:explainedStraight,
+        notMostlyAlignedStraight:outsideKnownStraight,
+        mostlyOnCircleRim:nearKnownCircle,
+        redundantCircularChordsRemaining:lines.filter(e=>e.points.length===2&&
+          isRedundantCircleStroke({a:e.points[0],b:e.points[1],confidence:.8},circle)).length},
       lineCoverageAt4px:lineCoverage,
       nearestCircle:nearest,
       autoApproved:entities.filter(e=>e.verified).length,
