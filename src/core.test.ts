@@ -46,6 +46,15 @@ describe('CadRecon model and export',()=>{
   p.layers[0].name='INJECT\n0\nLINE';
   expect(createDxf(p.sheets[0],p)).not.toContain('INJECT\n0\nLINE');
  });
+ it('rejects incomplete text and ambiguous verified field before the CAD editor can crash or trust it',()=>{
+  const p=newProject();
+  const t=entity('text',[], 'Текст','ocr');t.text='6000';
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],entities:[t]}]})).toThrow(/геометрия/);
+  const shape=entity('line',[{x:0,y:0},{x:10,y:0}]);
+  const forged={...shape,verified:'true'};
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],entities:[forged]}]})).toThrow();
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],sourceType:'remote'}]})).toThrow();
+ });
  it('packs multiple DXF sheets in a standard ZIP',()=>{
   const p=newProject();const z=createZip([{name:'лист_01.dxf',data:createDxf(p.sheets[0],p)},{name:'02.dxf',data:'test'}]);
   expect(z[0]).toBe(0x50);expect(z[1]).toBe(0x4b);writeFileSync('/tmp/cadrecon-test.zip',z);
