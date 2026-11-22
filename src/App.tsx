@@ -3,6 +3,7 @@ import Editor from './Editor';
 import CadPalette from './CadPalette';
 import ReconstructionPanel from './ReconstructionPanel';
 import {assessRecognitionQuality} from './recognitionQuality';
+import {proposeTraceNoiseCleanup} from './traceCleanup';
 import ArchivePanel from './ArchivePanel';
 import {projectReportXlsx} from './xlsxExport';
 import {auditScanGeometry,scanReviewCSV} from './scanReview';
@@ -276,6 +277,22 @@ export default function App(){
    addEntities(review.additions);
    setStatus('Авторазмер: создано '+review.additions.length+
      ' кандидатов. '+(sheet.calibrated?'Проверьте геометрию и масштаб.':'Сначала установите масштаб по известному размеру.'));
+ }
+ function cleanupTraceNoise(){
+   const review=proposeTraceNoiseCleanup(sheet.entities);
+   if(!review.eligible){
+     setStatus('Автообводка: явных кандидатов шума по трём строгим признакам не найдено. Непроверенные линии сохранены.');
+     return;
+   }
+   const message='Очистка шумовых гипотез W3: найдено '+review.eligible+
+     ' из '+review.examined+' автоотрезков.\\n'+review.reason+
+     '\\nУдалить ТОЛЬКО эти неподтверждённые сплошные кандидаты? Можно отменить Ctrl+Z.';
+   if(!window.confirm(message))return;
+   const ids=new Set(review.ids);
+   changeSheet(s=>({...s,entities:s.entities.filter(e=>!ids.has(e.id))}));
+   setSelected(null);
+   setStatus('Удалено явно слабых автоотрезков: '+review.eligible+
+     '. Штриховые/осевые, PDF, подтверждённые и ручные объекты сохранены. Отмена: Ctrl+Z.');
  }
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);
@@ -650,7 +667,8 @@ export default function App(){
         onReview={()=>{setPanel('recognition');setReviewPage(0);}}
         onCompare={()=>{setCompare(true);setSource(true);}}
         onExport={exportDxf} onCalibrate={()=>setTool('calibrate')}
-        onEdit={()=>setPanel('tools')} onStop={()=>localController.current?.abort()}
+        onEdit={()=>setPanel('tools')} onCleanup={cleanupTraceNoise}
+        onStop={()=>localController.current?.abort()}
         onPrepareOcr={()=>void prepareBrowserOcr()}/>}
       {panel==='tools'&&<>
       <CadPalette tools={TOOLS} active={tool} onSelect={next=>{setTool(next);

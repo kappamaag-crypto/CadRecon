@@ -9,7 +9,7 @@ interface Props {
   ocrLanguages:'rus+eng'|'rus'|'eng';
   onLanguages:(v:'rus+eng'|'rus'|'eng')=>void;
   onImport:()=>void;onRecognize:()=>void;onTrace:()=>void;onOcr:()=>void;
-  onReview:()=>void;onCompare:()=>void;onExport:()=>void;
+  onReview:()=>void;onCompare:()=>void;onExport:()=>void;onCleanup:()=>void;
   onCalibrate:()=>void;onEdit:()=>void;onStop:()=>void;onPrepareOcr:()=>void;
 }
 /** Recognition-first workflow, CAD drawing tools deliberately remain optional.
@@ -17,7 +17,7 @@ interface Props {
  */
 export default function ReconstructionPanel({
   quality,loaded,busy,recognitionMode,onMode,ocrLanguages,onLanguages,
-  onImport,onRecognize,onTrace,onOcr,onReview,onCompare,onExport,
+  onImport,onRecognize,onTrace,onOcr,onReview,onCompare,onExport,onCleanup,
   onCalibrate,onEdit,onStop,onPrepareOcr,
 }:Props){
   const names:Record<RecognitionQuality['source'],string>={
@@ -90,6 +90,8 @@ export default function ReconstructionPanel({
       </div>}
       <button className="action" disabled={!loaded} onClick={onCompare}>◫ Сравнить до / после</button>
       <button className="action" disabled={!loaded} onClick={onReview}>✓ Проверить сомнительные объекты</button>
+      <button className="action" disabled={!loaded||busy} onClick={onCleanup}>
+        ⌁ Найти и удалить явно слабые линии (с подтверждением и Undo)</button>
       <button className="action" disabled={!loaded} onClick={onCalibrate}>⊞ Калибровать по размеру</button>
       <details>
         <summary>Рекомендуемые действия по качеству</summary>
