@@ -44,13 +44,25 @@ export function validateProject(value:unknown):CadProject {
   const kinds:Kind[]=['point','line','polyline','bezier','circle','arc','text','dimension','axis','leader','hatch','table','stamp','eskd'];
   if(p.layers.length>250||p.layers.some(l=>!safeName(l.name)||typeof l.color!=='string'||!/^#[0-9A-Fa-f]{6}$/.test(l.color)||
     typeof l.visible!=='boolean'||typeof l.locked!=='boolean'))throw new Error('Повреждённое описание слоёв');
+  const minimumPoints=(kind:Kind):number=>{
+    if(['line','axis','dimension','leader','polyline'].includes(kind))return 2;
+    if(kind==='bezier')return 4;
+    if(kind==='hatch')return 3;
+    return 1;
+  };
   for(const s of p.sheets){
     if(!Number.isFinite(s.width)||!Number.isFinite(s.height)||s.width<=0||s.height<=0||s.width>1e8||s.height>1e8||!Array.isArray(s.entities)||s.entities.length>200000) throw new Error('Неверная геометрия листа');
+    if(!['pdf','image','blank'].includes(s.sourceType))
+      throw new Error('Повреждённый тип источника чертежа');
+    if(s.importWarnings!==undefined&&(!Array.isArray(s.importWarnings)||s.importWarnings.length>100||
+      s.importWarnings.some(w=>typeof w!=='string'||w.length>1000)))
+      throw new Error('Повреждённый отчёт импорта');
     if(s.image!==undefined && (typeof s.image!=='string'||s.image.length>180_000_000||!imageData.test(s.image)))
       throw new Error('Неподдерживаемая подложка: файл проекта может содержать только встроенное растровое изображение, без внешних URL');
     for(const e of s.entities){
       if(!kinds.includes(e.kind)||!safeName(e.layer)||!['manual','pdf','trace','ocr'].includes(e.origin)||
-        !Array.isArray(e.points)||e.points.length>30000||!e.points.every(isPoint)||
+        typeof e.verified!=='boolean'||!Array.isArray(e.points)||
+        e.points.length<minimumPoints(e.kind)||e.points.length>30000||!e.points.every(isPoint)||
         (e.center!==undefined&&!isPoint(e.center))||
         (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
