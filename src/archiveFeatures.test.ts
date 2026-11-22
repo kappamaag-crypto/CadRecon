@@ -3,7 +3,7 @@ import {entity,newProject,validateProject} from './model';
 import {
  searchDrawings,duplicateTechnicalRequirements,parseSpecificationCSV,
  compareSpecification,inventoryProject,weldSchedule,stampText,applyStampFields,
- exportTableCSV,specificationCSV,inventoryCSV,explicitPosition,
+ exportTableCSV,specificationCSV,inventoryCSV,explicitPosition,analyzeCadFilenames,cadFileProposalsCSV,
  type SpecificationRow,type StampFields,
 } from './archiveFeatures';
 const e=(kind:'text'|'dimension'|'leader'|'circle'|'eskd'|'stamp',text='')=>{
@@ -127,5 +127,28 @@ describe('ГАЛС-style inventory, weld candidates and stamp change audit',()=>
   expect(all.sheets[1].entities).toHaveLength(1);
   expect(all.sheets[1].entities[0].text).toContain('Лист: 2');
   expect(all.sheets[1].entities[0].verified).toBe(false);
+ });
+});
+
+describe('ГАЛС batch native CAD naming proposals, never edits',()=>{
+ it('reads KOMPAS and SOLIDWORKS file naming convention without opening bytes',()=>{
+  const rows=analyzeCadFilenames([
+    'АБВГ.КЛМН.01-01.0100.000 - Изделие N.a3d',
+    'АБВГ.01.КЛМН-110.0500-01.110.0500 - Деталь.m3d',
+    'СБОРКА.SLDASM',
+    'folder\\01.110.0500 - Кронштейн.CDW',
+  ]);
+  expect(rows[0].designation).toBe('АБВГ.КЛМН.01-01.0100.000');
+  expect(rows[0].name).toBe('Изделие N');
+  expect(rows[0].documentType).toContain('КОМПАС');
+  expect(rows[2].status).toBe('unresolved');
+  expect(rows[3].designation).toBe('01.110.0500');
+  expect(rows[3].extension).toBe('cdw');
+ });
+ it('rejects file-list resource bombs and encodes CSV as literal cells',()=>{
+  expect(()=>analyzeCadFilenames(Array(4001).fill('part.m3d'))).toThrow(/4000/);
+  const rows=analyzeCadFilenames(['=HYPERLINK("evil").cdw']);
+  expect(rows[0].status).toBe('unresolved');
+  expect(cadFileProposalsCSV(rows)).toContain('"\'=HYPERLINK');
  });
 });
