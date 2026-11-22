@@ -6,15 +6,17 @@ import {drawScene,type Camera} from './render';
 import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities,type OperationResult} from './cadOperations';
 import {mirrorEntity,stretchVertex} from './geometryTransform';
 import type {EskdType} from './model';
+import type {SheetRect} from './ocrRegion';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
   focusTarget?:{id:string;token:number};
   onCreate:(e:Entity)=>void;onMove:(e:Entity,delta:Point)=>void;
   onOperation:(result:OperationResult)=>void;onCalibrate:(factor:number)=>void;
+  onOcrRegion:(rect:SheetRect)=>void;
   onMessage:(message:string)=>void;source:boolean;compare:boolean;grid:boolean;snap:boolean;
   symbolType:EskdType;symbolText:string;
 }
-export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onOperation,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText,focusTarget}:Props){
+export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onOperation,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText,focusTarget,onOcrRegion}:Props){
   const canvas=useRef<HTMLCanvasElement>(null),frame=useRef<HTMLDivElement>(null);
   const [size,setSize]=useState({w:1000,h:700}),[camera,setCamera]=useState<Camera>({x:0,y:0,w:1200,h:850});
   const [image,setImage]=useState<HTMLImageElement|undefined>(),[draft,setDraft]=useState<Point[]>([]),[cursor,setCursor]=useState<Point|null>(null),[drag,setDrag]=useState<Point|null>(null);
@@ -45,7 +47,8 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     setCamera({x:cx-w/2,y:cy-w/(2*aspect),w,h:w/aspect});
   },[focusTarget?.token,sheet.id]);
   useEffect(()=>{if(sheet.image===imageRef.current&&image)return;imageRef.current=sheet.image;let cancelled=false;if(!sheet.image){setImage(undefined);return;}const img=new Image();img.src=sheet.image;img.decode().then(()=>{if(!cancelled)setImage(img);}).catch(()=>{if(!cancelled)setImage(undefined);});return()=>{cancelled=true;};},[sheet.image]);
-  useEffect(()=>{const cv=canvas.current;if(!cv)return;const dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(size.w*dpr);cv.height=Math.round(size.h*dpr);const ctx=cv.getContext('2d');if(!ctx)return;drawScene(ctx,size.w,size.h,dpr,sheet,project.layers,camera,image,{source,compare,grid,selected,draft,cursor,drag});},[size,sheet,project.layers,camera,image,source,compare,grid,selected,draft,cursor,drag]);
+  useEffect(()=>{const cv=canvas.current;if(!cv)return;const dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(size.w*dpr);cv.height=Math.round(size.h*dpr);const ctx=cv.getContext('2d');if(!ctx)return;drawScene(ctx,size.w,size.h,dpr,sheet,project.layers,camera,image,{source,compare,grid,selected,draft,cursor,drag,
+    roi:tool==='ocr-region'&&draft[0]&&cursor?{a:draft[0],b:cursor}:undefined});},[size,sheet,project.layers,camera,image,source,compare,grid,selected,draft,cursor,drag]);
   const toWorld=useCallback((ev:PointerEvent<HTMLCanvasElement>|WheelEvent<HTMLCanvasElement>):Point=>{
     const rect=ev.currentTarget.getBoundingClientRect();return {x:camera.x+(ev.clientX-rect.left)*camera.w/rect.width,y:camera.y+(ev.clientY-rect.top)*camera.h/rect.height};
   },[camera]);
@@ -169,6 +172,15 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       const e=entity(tool,[p],'Текст');e.rows=tool==='stamp'?5:3;e.cols=tool==='stamp'?4:3;e.width=tool==='stamp'?185:Math.max(100,sheet.width*.16);e.height=tool==='stamp'?55:Math.max(60,sheet.height*.11);e.text=tool==='stamp'?'Основная надпись':'';onCreate(e);return;
     }
     const pts=[...draft,p];
+    if(tool==='ocr-region'){
+      if(pts.length<2){
+        setDraft(pts);onMessage('OCR области: укажите противоположный угол рамки. Esc — отмена.');
+        return;
+      }
+      setDraft([]);
+      onOcrRegion({x0:pts[0].x,y0:pts[0].y,x1:pts[1].x,y1:pts[1].y});
+      return;
+    }
     if(tool==='polyline'||tool==='hatch'){setDraft(pts);return;}
     if(tool==='rectangle'){
       if(pts.length<2){setDraft(pts);return;}
@@ -234,7 +246,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <canvas ref={canvas} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={()=>{if(tool==='polyline'||tool==='hatch')finish(draft,tool);}} onWheel={wheel} onContextMenu={e=>e.preventDefault()} style={{cursor:tool==='pan'?'grab':tool==='select'?'default':'crosshair'}} aria-label="Редактор CAD"/>
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
-    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
+    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='ocr-region'?'OCR: укажите второй угол прямоугольной области':tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
     {pending&&<div className="hint">{tool==='stretch'?'STRETCH: укажите новое положение вершины':tool==='mirror'?'MIRROR: укажите конец оси':tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }

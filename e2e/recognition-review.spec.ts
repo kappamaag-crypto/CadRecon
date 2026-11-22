@@ -32,3 +32,20 @@ test('browser review lists unverified scan geometry in bounded pages, not just O
   await expect(page.getByRole('heading',{name:'Свойства объекта'})).toBeVisible();
   await expect(page.getByText(/Эвристический балл алгоритма/)).toBeVisible();
 });
+
+test('OCR region tool shows rectangle guidance and can be cancelled without fetching models',async ({page})=>{
+  await page.goto('/CadRecon/');
+  // A drawing image is needed before the action becomes enabled.
+  const drawing=newProject();drawing.sheets[0].image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9SAAAAABJRU5ErkJggg==';
+  await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
+    name:'ocr-region.cadrecon.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify(drawing)),
+  });
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
+  await page.getByRole('button',{name:/OCR области — выбрать два угла рамки/}).click();
+  const cv=page.locator('canvas[aria-label="Редактор CAD"]');
+  await cv.click({position:{x:80,y:70}});
+  await expect(page.getByText(/OCR: укажите второй угол прямоугольной области/)).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByText(/OCR: укажите второй угол прямоугольной области/)).toHaveCount(0);
+});

@@ -20,6 +20,7 @@ import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import {proposeAutoDimensions} from './dimensionTools';
+import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {arrayEntity} from './geometryTransform';
 import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
@@ -44,6 +45,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'stamp',title:'Основная надпись',icon:'▤'},
   {id:'eskd',title:'Обозначения ЕСКД',icon:'⌗'},
   {id:'measure',title:'Измерить расстояние',icon:'📏',hotkey:'M'},
+  {id:'ocr-region',title:'OCR выделенной области (2 угла)',icon:'▧'},
   {id:'calibrate',title:'Калибровка по известному размеру',icon:'⊞'}
 ];
 function slug(s:string){return s.replace(/[^\p{L}\p{N}._-]/gu,'_');}
@@ -244,6 +246,37 @@ export default function App(){
    } catch(err){setStatus('Ошибка семантического распознавания: '+String(err));}
    finally{setBusy('');}
  }
+ async function recognizeArea(rect:SheetRect){
+   if(localController.current){setStatus('OCR области: предыдущая обработка ещё выполняется.');return;}
+   const ctrl=new AbortController(),sheetId=sheet.id;
+   localController.current=ctrl;setLocalBusy(true);
+   setBusy('OCR выделенной области: подготовка фрагмента…');
+   try{
+     const cropped=await cropOcrRegion(sheet,rect);
+     if(ctrl.signal.aborted)return;
+     const result=await recognizeText(cropped.sheet,setBusy,ctrl.signal,{
+       mode:ocrMode,detectVertical:ocrVertical,maxRetries:60,
+     });
+     if(ctrl.signal.aborted)return;
+     const shifted=placeOcrRegionReadings(result.entities,cropped.offset);
+     apply(p=>{
+       const original=p.sheets.find(s=>s.id===sheetId);
+       if(!original)return p;
+       const fresh=uniqueCandidates(original.entities,shifted);
+       return fresh.length?{...p,sheets:p.sheets.map(s=>s.id===sheetId?
+         {...s,entities:[...s.entities,...fresh]}:s)}:p;
+     });
+     setOcrText(result.text);setReviewType('text');setReviewPage(0);setPanel('recognition');
+     setStatus('OCR области: найдено '+shifted.length+' строк, размер '+
+       cropped.pixels.width+'×'+cropped.pixels.height+' пикселей. '+
+       (result.diagnostics?.conflicts?'Есть неоднозначные символы: '+result.diagnostics.conflicts+'. ':'')+
+       'Сверьте текст по оригиналу; повторные надписи не добавляются.');
+   }catch(e){
+     setStatus(ctrl.signal.aborted?'OCR области отменён.':'OCR области: '+String(e));
+   }finally{
+     localController.current=null;setLocalBusy(false);setBusy('');setTool('select');
+   }
+ }
  async function runOcr(){
    if(localController.current)return;
    const ctrl=new AbortController(),sheetId=sheet.id;localController.current=ctrl;setLocalBusy(true);
@@ -399,7 +432,7 @@ export default function App(){
         <button className="sheet-close" disabled={!!busy} onClick={()=>void closeSheet(i)}
           title={'Закрыть лист '+s.name} aria-label={'Закрыть лист '+s.name}>×</button>
       </div>)}</div><span className="meta">{sheet.entities.length.toLocaleString('ru-RU')} объектов · {Math.round(sheet.width)} × {Math.round(sheet.height)} {sheet.calibrated?'мм':'ед.'}</span></div>
-      <Editor key={sheet.id} focusTarget={focusTarget} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
+      <Editor key={sheet.id} focusTarget={focusTarget} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onOcrRegion={rect=>{void recognizeArea(rect);}} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
       <div className="statusbar"><span className={busy?'pulse':''}>{busy||status}</span><span className="status-right">Esc — отмена · Enter — завершить контур · Del — удалить · Ctrl+Z — назад</span></div>
     </section>
     <aside className="sidebar">
@@ -464,6 +497,8 @@ export default function App(){
       <div className="stack">
         <button className="action" onClick={vectorize} disabled={!sheet.image||!!busy}>⌁ Детальная обводка (исходное разрешение)</button>
         <button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
+        <button className="action" onClick={()=>setTool('ocr-region')} disabled={!sheet.image||!!busy}>
+          ▧ OCR области — выбрать два угла рамки</button>
         <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button>
         <button className="action" onClick={repairImportedPdfText} disabled={!!busy}>АЯ Исправить кодировку PDF-текста</button>
         <button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Убрать дубли автоотрезков</button>

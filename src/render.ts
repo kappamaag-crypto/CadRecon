@@ -45,7 +45,7 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
   if(selected){ctx.fillStyle='#facc15';for(const p of pts){ctx.fillRect(p.x-lineWidth*3,p.y-lineWidth*3,lineWidth*6,lineWidth*6);}if(e.center)ctx.fillRect(e.center.x-lineWidth*3,e.center.y-lineWidth*3,lineWidth*6,lineWidth*6);}
   ctx.restore();
 }
-export function drawScene(ctx:CanvasRenderingContext2D,width:number,height:number,dpr:number,sheet:Sheet,layers:Layer[],camera:Camera,image:HTMLImageElement|undefined,options:{source:boolean;compare:boolean;grid:boolean;selected:string|null;draft?:Point[];cursor?:Point|null;drag?:Point|null}){
+export function drawScene(ctx:CanvasRenderingContext2D,width:number,height:number,dpr:number,sheet:Sheet,layers:Layer[],camera:Camera,image:HTMLImageElement|undefined,options:{source:boolean;compare:boolean;grid:boolean;selected:string|null;draft?:Point[];cursor?:Point|null;drag?:Point|null;roi?:{a:Point;b:Point}}){
   ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,width,height);ctx.fillStyle='#08111f';ctx.fillRect(0,0,width,height);
   const scale=width/camera.w,layerColors=new Map(layers.map(l=>[l.name,l]));
   const draw=(source:boolean,entities:boolean)=>{
@@ -55,7 +55,12 @@ export function drawScene(ctx:CanvasRenderingContext2D,width:number,height:numbe
       for(let y=Math.floor(camera.y/s)*s;y<camera.y+camera.h;y+=s){ctx.moveTo(camera.x,y);ctx.lineTo(camera.x+camera.w,y);}ctx.stroke();}
     if(source && image){ctx.save();ctx.globalAlpha=options.compare?1:.47;ctx.drawImage(image,0,0,sheet.width,sheet.height);ctx.restore();}
     if(entities){for(const e of sheet.entities){const l=layerColors.get(e.layer);if(l&&!l.visible)continue;ctx.strokeStyle=e.color||l?.color||'#e4ebf4';drawEntity(ctx,options.selected===e.id&&options.drag?{...e,points:e.points.map(p=>add(p,options.drag!)),center:e.center?add(e.center,options.drag!):undefined}:e,1.4/scale,options.selected===e.id);}
-      if(options.draft?.length){ctx.strokeStyle='#facc15';drawEntity(ctx,{id:'preview',kind:'polyline',points:[...options.draft,...(options.cursor?[options.cursor]:[])],layer:'',origin:'manual',verified:false},1.2/scale);}}
+      if(options.draft?.length&&!options.roi){ctx.strokeStyle='#facc15';drawEntity(ctx,{id:'preview',kind:'polyline',points:[...options.draft,...(options.cursor?[options.cursor]:[])],layer:'',origin:'manual',verified:false},1.2/scale);}
+      if(options.roi){const {a,b}=options.roi;
+        ctx.save();ctx.strokeStyle='#38bdf8';ctx.setLineDash([6/scale,3/scale]);ctx.lineWidth=2/scale;
+        ctx.strokeRect(Math.min(a.x,b.x),Math.min(a.y,b.y),Math.abs(a.x-b.x),Math.abs(a.y-b.y));
+        ctx.restore();
+      }}
     ctx.restore();
   };
   if(options.compare){
