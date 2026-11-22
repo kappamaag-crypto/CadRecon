@@ -153,6 +153,12 @@ describe('W4 JOIN finite CAD entities with exact shared endpoints',()=>{
     const closed=entity('polyline',[p(0,0),p(50,0),p(50,50)]);closed.closed=true;
     expect(joinCadEntities(closed,back)).toBeNull();
   });
+  it('rejects a JOIN which would create a new self-crossing polyline',()=>{
+    const first=entity('polyline',[p(0,0),p(50,0),p(50,50)]);
+    const second=entity('polyline',[p(50,50),p(0,50),p(25,-20)]);
+    expect(joinCadEntities(first,second)).toBeNull();
+    expect(first.points).toEqual([p(0,0),p(50,0),p(50,50)]);
+  });
   it('rejects infinite coordinates, same entity, zero-length segments, and T-intersections',()=>{
     const a=line(p(0,0),p(50,0));
     expect(joinCadEntities(a,a)).toBeNull();
