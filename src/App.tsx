@@ -285,8 +285,8 @@ export default function App(){
      return;
    }
    const message='Очистка шумовых гипотез W3: найдено '+review.eligible+
-     ' из '+review.examined+' автоотрезков.\\n'+review.reason+
-     '\\nУдалить ТОЛЬКО эти неподтверждённые сплошные кандидаты? Можно отменить Ctrl+Z.';
+     ' из '+review.examined+' автоотрезков.\n'+review.reason+
+     '\nУдалить ТОЛЬКО эти неподтверждённые сплошные кандидаты? Можно отменить Ctrl+Z.';
    if(!window.confirm(message))return;
    const ids=new Set(review.ids);
    changeSheet(s=>({...s,entities:s.entities.filter(e=>!ids.has(e.id))}));
