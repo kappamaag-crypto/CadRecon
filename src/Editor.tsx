@@ -6,6 +6,7 @@ import {drawScene,type Camera} from './render';
 import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities,type OperationResult} from './cadOperations';
 import {mirrorEntity,stretchVertex} from './geometryTransform';
 import {angleBetweenCadLines} from './cadMeasurements';
+import {makeRequirements} from './cadAnnotations';
 import {constructionLine,angleBisector,regularPolygon,circleByThreePoints,
   ellipseFromAxes,arcThroughThreePoints} from './cadPrimitives';
 import type {EskdType} from './model';
@@ -185,6 +186,15 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       e.symbol=symbolType;e.text=symbolText;e.size=sheet.calibrated?4:Math.max(8,sheet.width/145);
       e.verified=false;e.reason='Добавлено вручную: проверьте обозначение и позицию по оригиналу';
       onCreate(e);return;
+    }
+    if(tool==='technical-requirements'){
+      const value=window.prompt('Технические требования: один пункт на строку; нумерация добавится автоматически','Технические требования');
+      if(!value?.trim())return;
+      try{
+        const additions=makeRequirements(sheet,p,value);
+        if(additions.length)onOperation({replacements:[],additions});
+      }catch(e){onMessage(String(e));}
+      return;
     }
     if(tool==='text'){
       const text=window.prompt('Текст надписи','Текст');if(!text)return;const e=entity('text',[p],'Текст');e.text=text;e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);onCreate(e);return;

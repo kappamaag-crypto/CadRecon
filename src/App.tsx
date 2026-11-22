@@ -24,6 +24,7 @@ import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {arrayEntity} from './geometryTransform';
+import {centerAxes,circleDimensionLeader} from './cadAnnotations';
 import {measureCadEntity,inspectCadTopology} from './cadMeasurements';
 import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
   polarArrayCad,alignCadLine} from './affineCad';
@@ -61,7 +62,9 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'dimension-3pt',title:'Размер с размещением (3 точки)',icon:'⇤'},
   {id:'axis',title:'Осевая линия',icon:'┈'},
   {id:'leader',title:'Выноска',icon:'➤'},{id:'hatch',title:'Замкнутый контур / заливка',icon:'▨'},
-  {id:'text',title:'Надпись',icon:'T',hotkey:'T'},{id:'table',title:'Таблица',icon:'▦'},
+  {id:'text',title:'Надпись',icon:'T',hotkey:'T'},
+  {id:'technical-requirements',title:'Технические требования с нумерацией',icon:'№'},
+  {id:'table',title:'Таблица',icon:'▦'},
   {id:'stamp',title:'Основная надпись',icon:'▤'},
   {id:'eskd',title:'Обозначения ЕСКД',icon:'⌗'},
   {id:'measure',title:'Измерить расстояние',icon:'📏',hotkey:'M'},
@@ -178,6 +181,24 @@ export default function App(){
    if(!result){setStatus('ARRAY: допустимы 1–20 строк/столбцов и максимум 100 объектов, ненулевые шаги; поддерживаются POINT/LINE/POLYLINE/CIRCLE.');return;}
    if(!window.confirm('Создать '+result.additions.length+' независимых CAD-копий? Исходный объект останется без изменений; отмена Ctrl+Z.'))return;
    applyOperation(result);
+ }
+ function annotateCircle(kind:'radius'|'diameter'|'axes'){
+   const selectedCircle=sheet.entities.find(e=>e.id===selected);
+   if(!selectedCircle||selectedCircle.kind!=='circle'){
+     setStatus('Размер окружности и центровые оси: сначала выделите окружность.');return;
+   }
+   if(kind==='axes'){
+     const axes=centerAxes(selectedCircle,sheet.entities);
+     if(!axes.length){setStatus('Оси окружности: уже существуют или геометрия некорректна.');return;}
+     addEntities(axes);
+     setStatus('Добавлено две оси окружности. Не экспортировать, пока не проверено назначение.');
+     return;
+   }
+   const d=circleDimensionLeader(selectedCircle,sheet,kind);
+   if(!d){setStatus('Размер окружности: некорректная геометрия.');return;}
+   addEntities([d]);
+   setStatus('Создана выноска '+(kind==='radius'?'радиуса':'диаметра')+
+     '. Не является ассоциативным CAD-размером; сверьте число с оригиналом.');
  }
  function makeAutoDimensions(mode:'selected'|'all'){
    const targets=mode==='selected'?
@@ -575,6 +596,9 @@ export default function App(){
         <button className="action" onClick={()=>setTool('dimension-3pt')}>⇤ Размер с размещением (3 точки)</button>
         <button className="action" disabled={!selected||!!busy} onClick={()=>makeAutoDimensions('selected')}>◎ Авторазмер выбранного объекта</button>
         <button className="action" disabled={!!busy} onClick={()=>makeAutoDimensions('all')}>◎ Авторазмеры линий и окружностей</button>
+        <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('radius')}>R Радиальный размер (выноска)</button>
+        <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('diameter')}>⌀ Диаметральный размер (выноска)</button>
+        <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('axes')}>⊕ Центровые оси окружности</button>
       </div>
       <p className="muted">{sheet.calibrated?'Калибровка установлена; размеры нужно проверить.':
         '⚠ Масштаб не подтверждён. Авторазмеры создаются без чисел (?).'} Диаметр окружности предлагается как редактируемая выноска, не как ассоциативный DIMDIAMETER.</p>

@@ -16,7 +16,7 @@ const groups:{title:string;hint:string;ids:Tool[]}[]=[
   {title:'Размеры и измерения',hint:'Значения требуют калибровки',
     ids:['dimension','dimension-h','dimension-v','dimension-3pt','leader','measure','measure-angle','calibrate']},
   {title:'Оформление и ЕСКД',hint:'Отметки, текст, таблицы',
-    ids:['hatch','text','table','stamp','eskd']},
+    ids:['hatch','text','technical-requirements','table','stamp','eskd']},
   {title:'Текст и OCR',hint:'Обработка на вашем устройстве',
     ids:['ocr-region']},
 ];
