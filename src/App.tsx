@@ -24,6 +24,7 @@ import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {arrayEntity} from './geometryTransform';
+import {lineFromCoordinates,orientedLineAtPoint,tangentFromPoint,pointOnCurve} from './cadConstructions';
 import {centerAxes,circleDimensionLeader} from './cadAnnotations';
 import {measureCadEntity,inspectCadTopology} from './cadMeasurements';
 import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
@@ -169,6 +170,47 @@ export default function App(){
    const operation=alignCadLine(source,axis);
    if(!operation){setStatus('Выравнивание поддерживает один обычный прямой LINE.');return;}
    applyOperation(operation);
+ }
+ function constructSelected(kind:'coordinates'|'parallel'|'perpendicular'|'tangent-left'|'tangent-right'|'point-on-curve'){
+   const source=sheet.entities.find(e=>e.id===selected);
+   const missing=kind!=='coordinates'&&!source;
+   if(missing){setStatus('Построение: сначала выделите опорную линию, окружность или кривую.');return;}
+   const defaults={
+     coordinates:'0;0;100;0',
+     parallel:'20;20;100;0',
+     perpendicular:'20;20;100;0',
+     'tangent-left':'150;100',
+     'tangent-right':'150;100',
+     'point-on-curve':'0.5',
+   };
+   const prompts={
+     coordinates:'Точный отрезок: X1;Y1;X2;Y2 (единицы листа)',
+     parallel:'Параллельный LINE: X начала;Y начала;длина;реверс (0 или 1)',
+     perpendicular:'Перпендикулярный LINE: X начала;Y начала;длина;реверс (0 или 1)',
+     'tangent-left':'Касательная к окружности: X;Y внешней точки, решение слева',
+     'tangent-right':'Касательная к окружности: X;Y внешней точки, решение справа',
+     'point-on-curve':'Точка на выбранной кривой: параметр t от 0 до 1',
+   };
+   const raw=window.prompt(prompts[kind],defaults[kind]);
+   if(raw===null)return;
+   const parts=raw.split(';').map(v=>v.trim());
+   const values=parts.map(v=>v?Number(v.replace(',','.')):NaN);
+   const expected=kind==='coordinates'||kind==='parallel'||kind==='perpendicular'?4:
+     kind==='point-on-curve'?1:2;
+   if(values.length!==expected||!values.every(Number.isFinite)){
+     setStatus('Построение: нужны '+expected+' числовых значения через «;» (для дробей используйте точку).');return;
+   }
+   const e=kind==='coordinates'?lineFromCoordinates(values[0],values[1],values[2],values[3]):
+     kind==='parallel'||kind==='perpendicular'?
+       orientedLineAtPoint(source!,{x:values[0],y:values[1]},kind,
+         values[2],values[3]===1):
+     kind==='tangent-left'||kind==='tangent-right'?
+       tangentFromPoint(source!,{x:values[0],y:values[1]},
+         kind==='tangent-left'?'left':'right'):
+       pointOnCurve(source!,values[0]);
+   if(!e){setStatus('Построение: геометрия или параметры недопустимы. Касательная требует внешней точки вне окружности.');return;}
+   addEntities([e]);
+   setStatus('CAD: создано точное геометрическое построение. Оно не является постоянной параметрической связью.');
  }
  function makeRectangularArray(){
    const source=sheet.entities.find(e=>e.id===selected);
@@ -589,6 +631,19 @@ export default function App(){
       <CadPalette tools={TOOLS} active={tool} onSelect={next=>{setTool(next);
         setStatus('Инструмент: '+(TOOLS.find(x=>x.id===next)?.title||next)+'. Укажите точки на чертеже.');}}
         selection={!!selected}/>
+      <details className="cad-tool-group cad-precision">
+        <summary><span>Точные построения по координатам</span><small>6</small></summary>
+        <p className="cad-group-hint">Для построений по выделенному объекту сначала нажмите «Выделение».
+          Это разовые геометрические команды без сохраняемой связи с оригиналом.</p>
+        <div className="cad-command-list">
+          <button className="action" onClick={()=>constructSelected('coordinates')}>Отрезок X1/Y1 → X2/Y2</button>
+          <button className="action" disabled={!selected||!!busy} onClick={()=>constructSelected('parallel')}>Параллельный отрезок через точку</button>
+          <button className="action" disabled={!selected||!!busy} onClick={()=>constructSelected('perpendicular')}>Перпендикулярный отрезок через точку</button>
+          <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>constructSelected('tangent-left')}>Касательная слева от внешней точки</button>
+          <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>constructSelected('tangent-right')}>Касательная справа от внешней точки</button>
+          <button className="action" disabled={!selected||!!busy} onClick={()=>constructSelected('point-on-curve')}>Точка на кривой, параметр t</button>
+        </div>
+      </details>
       <h3>Размеры и авторазмеры</h3>
       <p className="muted">Как в CAD: две точки задают размер, третья размещает размерную линию. Авторазмеры — только кандидаты по текущей геометрии, не аттестованные размеры изделия.</p>
       <div className="stack">
