@@ -1,4 +1,5 @@
 /// <reference lib="webworker" />
+import {detectOverlappedCircles} from './circleDetector';
 type P={x:number;y:number};type Segment={a:P;b:P;confidence:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
@@ -66,5 +67,16 @@ function detectCircles({rgba,width,height,scale}:Msg):CircleCandidate[] {
   }
   return circles;
 }
-self.onmessage=(ev:MessageEvent<Msg>)=>{try{(self as unknown as Worker).postMessage({lines:trace(ev.data),circles:detectCircles(ev.data)});}catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
+self.onmessage=(ev:MessageEvent<Msg>)=>{try{
+  const msg=ev.data;
+  const circles=detectCircles(msg);
+  // Circle+line intersections are a single connected contour; independent
+  // gradient voting recovers candidates the contour-only pass cannot see.
+  for(const p of detectOverlappedCircles(msg.rgba,msg.width,msg.height)){
+    const c={x:p.x*msg.scale,y:p.y*msg.scale,radius:p.radius*msg.scale,confidence:p.confidence};
+    if(!circles.some(x=>Math.hypot(x.x-c.x,x.y-c.y)<Math.max(6,c.radius*.12)&&
+      Math.abs(x.radius-c.radius)<Math.max(5,c.radius*.1)))circles.push(c);
+  }
+  (self as unknown as Worker).postMessage({lines:trace(msg),circles:circles.slice(0,300)});
+}catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
 export {};
