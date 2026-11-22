@@ -24,6 +24,7 @@ export interface PdfVectorReport {
   nonPaintedPaths:number;
   clippedGeometry:number;
   rectangularClipLines:number;
+  fullyClippedObjects:number;
   truncated:boolean;
   warnings:string[];
 }
@@ -130,10 +131,31 @@ function intersectRect(a:ClipRect,b:ClipRect):ClipRect{
     x1:Math.min(a.x1,b.x1),y1:Math.min(a.y1,b.y1)};
 }
 
+/** Conservative curve bounds. A cubic lies inside its control point hull.
+ * A circle/arc/ellipse is contained by the radius square; this deliberately
+ * overestimates, so a legitimate visible curve cannot be deleted as outside.
+ */
+function geometricBounds(e:Entity):ClipRect|null{
+  const points=[...e.points];
+  if((e.kind==='circle'||e.kind==='arc'||e.kind==='ellipse')&&e.center&&e.radius){
+    points.push({x:e.center.x-e.radius,y:e.center.y-e.radius},
+      {x:e.center.x+e.radius,y:e.center.y+e.radius});
+  }
+  if(!points.length||points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return null;
+  return {x0:Math.min(...points.map(p=>p.x)),y0:Math.min(...points.map(p=>p.y)),
+    x1:Math.max(...points.map(p=>p.x)),y1:Math.max(...points.map(p=>p.y))};
+}
+function outsideRect(a:ClipRect,b:ClipRect):boolean{
+  return a.x1<b.x0||b.x1<a.x0||a.y1<b.y0||b.y1<a.y0;
+}
+function insideRect(a:ClipRect,b:ClipRect):boolean{
+  return a.x0>=b.x0&&a.y0>=b.y0&&a.x1<=b.x1&&a.y1<=b.y1;
+}
+
 export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):PdfVectorReport {
   const entities:Entity[]=[],warnings:string[]=[];
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
-  let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,clipActive=false,unknownAlpha=false,formScope=false;
+  let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,fullyClippedObjects=0,clipActive=false,unknownAlpha=false,formScope=false;
   let clipRect:ClipRect|null=null;
   const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null}>=[];
   // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
@@ -149,6 +171,15 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       if(!visible)return;
       e.points=visible;
       e.reason='Нативный PDF LINE: прямоугольное отсечение рассчитано; требуется проверка';
+    }else if(clipActive&&clipRect){
+      const area=geometricBounds(e);
+      if(area&&outsideRect(area,clipRect)){fullyClippedObjects++;return;}
+      if(area&&insideRect(area,clipRect)){
+        e.reason='Нативный PDF path полностью внутри прямоугольного clipping; форма сохранена';
+      }else{
+        clippedGeometry++;
+        e.reason='Нативный PDF path пересекает прямоугольный clipping; частичное отсечение кривой НЕ реализовано, требуется проверка';
+      }
     }else{
       if(clipActive)clippedGeometry++;
       e.reason='Нативный PDF path; проверьте тип объекта, масштаб и контекст'+
@@ -338,9 +369,10 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   if(nonPaintedPaths)warnings.push('Пропущено '+nonPaintedPaths+' невидимых или ограничивающих PDF path: это не CAD-линии.');
   if(clippedGeometry)warnings.push('PDF содержит clipping: у '+clippedGeometry+' CAD-объектов отсечение НЕ рассчитано; видимость и контуры могут отличаться от оригинала.');
   if(rectangularClipLines)warnings.push('Прямоугольный PDF clipping применён к '+rectangularClipLines+' LINE; сложные кривые и маски всё ещё требуют проверки.');
+  if(fullyClippedObjects)warnings.push('Прямоугольный PDF clipping исключил '+fullyClippedObjects+' заведомо невидимых кривых или контуров.');
   if(unknownAlpha)warnings.push('PDF использует графические состояния: прозрачность/альфа пока не учитываются при извлечении векторов.');
   if(formScope)warnings.push('PDF использует Form XObject: требуется проверить вложенные координаты и clipping по оригиналу.');
   if(rejectedPaths)warnings.push('Часть команд PDF не распознана: '+rejectedPaths+'. Результат неполный.');
   if(truncated)warnings.push('Превышен лимит CAD-объектов PDF: фрагменты не импортированы. Разделите документ.');
-  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,rectangularClipLines,truncated,warnings};
+  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,rectangularClipLines,fullyClippedObjects,truncated,warnings};
 }
