@@ -123,6 +123,9 @@ def validate_image(payload: bytes) -> np.ndarray:
     img = cv2.imdecode(np.frombuffer(payload, dtype=np.uint8), cv2.IMREAD_COLOR)
     if img is None:
         raise HTTPException(415, "Cannot decode image")
+    decoded_height, decoded_width = img.shape[:2]
+    if decoded_height < 2 or decoded_width < 2 or decoded_height * decoded_width > MAX_PIXELS:
+        raise HTTPException(413, "Decoded image exceeds 42 MP")
     return img
 
 
