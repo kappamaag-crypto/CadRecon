@@ -240,9 +240,9 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
       }}>✓ Применить после просмотра</button>
     </div>}
     {tab==='files'&&<div className="stack">
-      <p className="muted">Пакетный разбор имен по принципу ГАЛС: «Обозначение - Наименование». Пользователь самостоятельно выбирает файлы. Содержимое файлов КОМПАС, STEP и SOLIDWORKS НЕ читается и НЕ изменяется.</p>
+      <p className="muted">Дополнительный разбор имен 2D чертежей по принципу ГАЛС: «Обозначение - Наименование». Пользователь выбирает PDF/DXF/DWG/CDW/SPW. Содержимое файлов не читается и не изменяется.</p>
       <input ref={cadInput} hidden type="file" multiple
-        accept=".a3d,.m3d,.cdw,.spw,.step,.stp,.sldprt,.sldasm,.pdf,.dxf,.dwg"
+        accept=".cdw,.spw,.pdf,.dxf,.dwg"
         onChange={e=>{
           try{
             const picked=Array.from(e.currentTarget.files||[]).map(f=>f.webkitRelativePath||f.name);
@@ -263,13 +263,13 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
         <span>Обозначение: {f.designation||'не определено'}</span>
         <span>Наименование: {f.name||'не определено'}</span>
       </div>)}
-      <p className="notice">Это не пакетное изменение свойств КОМПАС-3D. Для записи в A3D/M3D/CDW необходим установленный КОМПАС-3D, совместимый лицензированный SDK и отдельный локальный коннектор.</p>
+      <p className="notice">В этом режиме анализируются только имена 2D файлов. Программа не изменяет CDW или DWG; 3D исключено из проекта.</p>
     </div>}
     {tab==='package'&&<div className="stack">
       <p className="muted">Локальный ZIP-пакет проекта: DXF по листам, результаты анализа, CSV-ведомости, данные спецификации и README с предупреждениями. Не отправляет чертежи на сервер.</p>
       <button className="action" onClick={downloadExcel}>↓ Сводный отчёт Excel XLSX</button>
       <button className="action" onClick={onPackage}>↓ Скачать пакет проекта ZIP</button>
-      <p className="muted">В архивах не создаются и не изменяются исходные файлы КОМПАС-3D, STEP и SOLIDWORKS. Их можно связать отдельно через локальный лицензионный SDK.</p>
+      <p className="muted">Пакет содержит результаты распознавания 2D. Никакие 3D-форматы, STEP или SOLIDWORKS не создаются.</p>
     </div>}
   </div>;
 }
