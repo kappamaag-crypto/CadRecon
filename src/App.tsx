@@ -486,12 +486,12 @@ export default function App(){
         {selection.kind==='line'&&<label>Тип линии (DXF)
           <select aria-label="Тип линии (DXF)" value={selection.lineStyle||'solid'}
             onChange={e=>modifyEntity({...selection,
-              lineStyle:e.target.value==='solid'?undefined:e.target.value as 'dashed'|'center'})}>
+              lineStyle:e.target.value==='solid'?undefined:(e.target.value as 'dashed'|'center')})}>
             <option value="solid">Сплошная (CONTINUOUS)</option>
             <option value="dashed">Штриховая (DASHED)</option>
             <option value="center">Осевая / штрихпунктирная (CENTER)</option>
           </select>
-        </label>
+        </label>}
         <label className="check"><input type="checkbox" checked={selection.verified} onChange={e=>modifyEntity({...selection,verified:e.target.checked},true)}/> Проверен по оригиналу</label>
         {['text','leader','dimension','table','stamp','eskd'].includes(selection.kind)&&<label>Текст <textarea value={selection.text||''} onChange={e=>modifyEntity({...selection,text:e.target.value})} rows={3}/></label>}
         {selection.kind==='eskd'&&<label>Тип обозначения
