@@ -78,5 +78,7 @@ jobs:
             test-results/w0-vector-baseline.json
             test-results/w0-ctm-baseline.json
             test-results/w0-scan-baseline.json
+            test-results/w3-clean-quality.json
+            test-results/w3-degraded-quality.json
           if-no-files-found: ignore
           retention-days: 14
