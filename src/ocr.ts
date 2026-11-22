@@ -12,18 +12,25 @@ export async function preloadOcrModels(progress?:(message:string)=>void):Promise
   try{progress?.('OCR-модели русского и английского готовы в текущем браузере.');}
   finally{await worker.terminate();}
 }
-export async function recognizeText(sheet:Sheet,progress?:(s:string)=>void):Promise<{entities:Entity[];text:string}> {
+export async function recognizeText(sheet:Sheet,progress?:(s:string)=>void,signal?:AbortSignal):Promise<{entities:Entity[];text:string}> {
   if(!sheet.image)throw new Error('Для OCR нужен скан или PDF');
+  const assertActive=()=>{if(signal?.aborted)throw new DOMException('OCR отменён','AbortError');};
+  assertActive();
   progress?.('Загрузка OCR-моделей русского и английского языков…');
   const worker=await createWorker(['rus','eng'],1,{logger:m=>{if(m.status)progress?.(m.status+' '+Math.round((m.progress||0)*100)+'%');}});
+  const onAbort=()=>{void worker.terminate().catch(()=>{});};
+  signal?.addEventListener('abort',onAbort,{once:true});
   try {
+    assertActive();
     // Scattered labels on an engineering sheet are not one continuous paragraph.
     await worker.setParameters({
       tessedit_pageseg_mode: PSM.SPARSE_TEXT,
       preserve_interword_spaces:'1',
       user_defined_dpi:'300',
     });
+    assertActive();
     const result=await worker.recognize(sheet.image,{}, {blocks:true, text:true});
+    assertActive();
     const raw=result.data as unknown as {text?:string;blocks?:Array<{paragraphs?:Array<{lines?:Array<{text?:string;confidence?:number;bbox?:{x0:number;y0:number;x1:number;y1:number}}>} >}>};
     const img=new Image();img.src=sheet.image;await img.decode();const sx=sheet.width/img.naturalWidth,sy=sheet.height/img.naturalHeight;
     const entities:Entity[]=[];
@@ -37,5 +44,5 @@ export async function recognizeText(sheet:Sheet,progress?:(s:string)=>void):Prom
       e.bbox={x0:x0*sx,y0:y0*sy,x1:x1*sx,y1:y1*sy};entities.push(e);
     }
     return {entities,text:raw.text||''};
-  } finally {await worker.terminate();}
+  } finally {signal?.removeEventListener('abort',onAbort);await worker.terminate();}
 }
