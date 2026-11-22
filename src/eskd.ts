@@ -69,11 +69,12 @@ export function detectESKDLabels(entities:Entity[]):Entity[]{
     if(source.kind!=='text'||!source.text||source.origin==='manual'||source.verified)continue;
     const result=classifyESKDText(source.text);
     if(!result)continue;
-    if((source.confidence??100)<45)continue;
+    const score=source.confidence??1;
+    const conf=Math.max(0,Math.min(1,score>1?score/100:score));
+    if(conf<.45)continue;
     const mark=entity('eskd',[{...source.points[0]}],'ЕСКД',source.origin);
     mark.symbol=result.symbol;mark.text=source.text;mark.size=source.size||4;
     mark.reason=result.reason;mark.sourceId=source.id;mark.verified=false;
-    const conf=(source.confidence??100)>1?(source.confidence??100)/100:(source.confidence??1);
     mark.confidence=Number(Math.min(.85,result.confidence*conf).toFixed(3));
     found.push(mark);
   }
