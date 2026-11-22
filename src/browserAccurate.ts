@@ -110,6 +110,7 @@ export async function recognizeBrowserAccurate(
   sheet:Sheet,
   onProgress?:(status:string)=>void,
   signal?:AbortSignal,
+  mode:'auto'|'hybrid'='auto',
 ):Promise<BrowserAccurateResult>{
   if(!sheet.image)throw new Error('Для распознавания нужен загруженный PDF или скан');
   const assertActive=()=>{if(signal?.aborted)throw new DOMException('Обработка чертежа отменена','AbortError');};
@@ -118,7 +119,8 @@ export async function recognizeBrowserAccurate(
   let candidates:Entity[]=[],ocrText='';
   const native=sheet.sourceType==='pdf'&&sheet.entities.some(hasNativeGeometry);
   const digitalText=sheet.sourceType==='pdf'&&sheet.entities.some(hasDigitalText);
-  const scanned=!native;
+  const scanned=!native||mode==='hybrid';
+  if(mode==='hybrid'&&native)warnings.push('Гибридный PDF: дополнительная обводка может создать повторяющиеся и ложные линии поверх исходных векторов. Проверьте по подложке.');
 
   if(scanned){
     onProgress?.('Браузер: подробная векторизация по фрагментам...');
@@ -133,7 +135,7 @@ export async function recognizeBrowserAccurate(
   }else{
     onProgress?.('Браузер: сохраняем точные векторные объекты исходного PDF...');
   }
-  if(!digitalText){
+  if(!digitalText||mode==='hybrid'){
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
     const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal);
     assertActive();
