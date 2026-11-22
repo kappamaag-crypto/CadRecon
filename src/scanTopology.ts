@@ -61,7 +61,7 @@ export function consolidateScanLines(
       const list=bins.get(key(ai+da,oi+dn,p.e.layer));
       if(!list)continue;
       for(const g of list){
-        if(g.e.origin!==p.e.origin)continue;
+        if(g.e.origin!==p.e.origin||g.e.lineStyle!==p.e.lineStyle)continue;
         const cos=dot(p.u,g.u);
         if(cos<Math.cos(Math.PI/180))continue;
         const a=p.e.points[0],b=p.e.points[1];

@@ -29,6 +29,14 @@ describe('conservative browser scan topology',()=>{
     expect(out.removed).toBe(0);
     expect(out.entities).toHaveLength(4);
   });
+  it('never merges different print patterns into a false solid or centerline',()=>{
+    const solid=line(p(0,60),p(120,60));
+    const dashed=line(p(15,60),p(110,60));dashed.lineStyle='dashed';
+    const center=line(p(15,60),p(110,60));center.lineStyle='center';
+    const out=consolidateScanLines([solid,dashed,center]);
+    expect(out.removed).toBe(0);
+    expect(out.entities.map(e=>e.lineStyle||'solid').sort()).toEqual(['center','dashed','solid']);
+  });
   it('retains short dimension ticks, manual and verified entities',()=>{
     const manual=line(p(0,20),p(100,20),'manual');
     const verified=line(p(0,25),p(100,25));verified.verified=true;

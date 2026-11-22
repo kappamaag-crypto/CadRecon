@@ -113,7 +113,7 @@ export function mergeAutoLines(entities:Entity[],tolerance=2):{entities:Entity[]
     const candidate:Candidate={e,a,u,n,start:dot(a,u),end:dot(b,u),angle,offset,length:len};
     const crossTol=e.origin==='pdf'?1e-4:Math.min(.12,Math.max(1e-5,tolerance));
     const step=Math.max(1e-4,2*crossTol);
-    const key=[e.layer,e.origin,Math.round(angle/(Math.PI/360)),Math.round(offset/step)].join('|');
+    const key=[e.layer,e.origin,e.lineStyle||'solid',Math.round(angle/(Math.PI/360)),Math.round(offset/step)].join('|');
     const bucket=bins.get(key)||[];bucket.push(candidate);bins.set(key,bucket);
   }
   let removed=0;

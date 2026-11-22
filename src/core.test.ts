@@ -43,6 +43,16 @@ describe('CadRecon model and export',()=>{
   expect(output.entities.every(x=>!x.verified)).toBe(true);
   expect(output.entities.some(x=>x.id===c.id)).toBe(true);
  });
+ it('does not erase dashed/center lines while cleaning solid auto-duplicates',()=>{
+  const solid=entity('line',[{x:0,y:30},{x:100,y:30}],'Автообводка','trace');
+  const dashed=entity('line',[{x:15,y:30},{x:90,y:30}],'Автообводка','trace');
+  dashed.lineStyle='dashed';
+  const center=entity('line',[{x:15,y:30},{x:90,y:30}],'Автообводка','trace');
+  center.lineStyle='center';
+  const result=mergeAutoLines([solid,dashed,center],2);
+  expect(result.removed).toBe(0);
+  expect(result.entities).toHaveLength(3);
+ });
  it('does not falsely approve manual objects or report pixel lengths as millimetres',()=>{
   const p=newProject(),manual=entity('line',[{x:0,y:0},{x:30,y:40}]);
   expect(manual.verified).toBe(false);
