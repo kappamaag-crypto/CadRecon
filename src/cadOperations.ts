@@ -14,6 +14,7 @@ const sub=(a:Point,b:Point):Point=>({x:a.x-b.x,y:a.y-b.y});
 const add=(a:Point,b:Point):Point=>({x:a.x+b.x,y:a.y+b.y});
 const scale=(a:Point,s:number):Point=>({x:a.x*s,y:a.y*s});
 const cross=(a:Point,b:Point)=>a.x*b.y-a.y*b.x;
+const dot=(a:Point,b:Point)=>a.x*b.x+a.y*b.y;
 const length=(a:Point)=>Math.hypot(a.x,a.y);
 const lerp=(a:Point,b:Point,t:number):Point=>add(a,scale(sub(b,a),t));
 const between=(x:number)=>x>=-EPS&&x<=1+EPS;
@@ -34,6 +35,38 @@ function edited(e:Entity,points:Point[]):Entity {
   return {...e,points,verified:false,
     reason:'Изменена пользователем в CAD-операции: проверьте геометрию'};
 }
+/** W4 BREAK: remove a finite span between two manually picked points.
+ * Both cut points must project into the INTERIOR of the selected LINE.
+ * No OCR information may modify cut coordinates. The original ID remains
+ * on the first part; the remainder is one new editable LINE, one Undo step.
+ */
+export function breakLine(
+  source:Entity,firstClick:Point,secondClick:Point,
+  pickTolerance=Infinity
+):OperationResult|null{
+  if(source.kind!=='line'||source.points.length!==2||
+    ![firstClick.x,firstClick.y,secondClick.x,secondClick.y].every(Number.isFinite)||
+    !Number.isFinite(pickTolerance)&&pickTolerance!==Infinity)return null;
+  const [a,b]=source.points,delta=sub(b,a),squared=dot(delta,delta);
+  if(!Number.isFinite(squared)||squared<EPS)return null;
+  const len=Math.sqrt(squared);
+  const project=(p:Point)=>{
+    const t=dot(sub(p,a),delta)/squared;
+    const closest=lerp(a,b,t);
+    return {t,error:length(sub(p,closest))};
+  };
+  const x=project(firstClick),y=project(secondClick);
+  if(x.error>pickTolerance||y.error>pickTolerance)return null;
+  const lo=Math.min(x.t,y.t),hi=Math.max(x.t,y.t);
+  const eps=Math.max(1e-7,1e-5/len);
+  if(lo<=eps||hi>=1-eps||hi-lo<=Math.max(eps,1e-4/len))return null;
+  const first=edited(source,[a,lerp(a,b,lo)]);
+  const second=entity('line',[lerp(a,b,hi),b],source.layer,'manual');
+  second.verified=false;
+  second.reason='BREAK: создан оставшийся участок; геометрия не подтверждена инженером';
+  return {replacements:[first],additions:[second]};
+}
+
 /** W4 OFFSET: create a separate parallel LINE at an explicitly chosen
  * distance and side. Leaves the original line untouched. The measurement unit
  * is controlled by sheet.calibrated in the UI; a raw scan cannot claim mm. */
