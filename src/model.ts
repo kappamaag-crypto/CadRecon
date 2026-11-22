@@ -13,7 +13,7 @@ export interface Entity {
 }
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
 export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; importWarnings?:string[]; sourceType:'pdf'|'image'|'blank'; }
-export interface CadProject { version:1; id:string; name:string; sheets:Sheet[]; layers:Layer[]; created:string; updated:string; }
+export interface CadProject { version:1; id:string; name:string; sheets:Sheet[]; layers:Layer[]; created:string; updated:string; specification?:Array<{position:string;designation:string;name:string;quantity:string;material?:string;mass?:string;note?:string}>; }
 export type Tool = 'select'|'pan'|'point'|'rectangle'|'trim'|'extend'|'offset'|'break'|'chamfer'|'fillet'|'line'|'polyline'|'circle'|'arc'|'dimension'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'calibrate'|'eskd';
 export const COLORS = ['#e4ebf4','#38bdf8','#4ade80','#f9bd5a','#e879f9','#fb7185','#94a3b8','#22d3ee'];
 export const DEFAULT_LAYERS:Layer[] = [
@@ -50,6 +50,22 @@ export function validateProject(value:unknown):CadProject {
     if(kind==='hatch')return 3;
     return 1;
   };
+  // Imported CSV specification is part of the local project and subject to
+  // the same bounded validation before persistence / restoring backups.
+  if(p.specification!==undefined){
+    if(!Array.isArray(p.specification)||p.specification.length>5000)
+      throw new Error('Повреждённая спецификация');
+    for(const row of p.specification){
+      if(!row||typeof row!=='object'||!['position','designation','name','quantity'].every(k=>
+          typeof row[k as keyof typeof row]==='string'&&
+          (row[k as keyof typeof row] as string).length<=400)||
+        !row.position||!row.name||
+        !['material','mass','note'].every(k=>row[k as keyof typeof row]===undefined||
+          (typeof row[k as keyof typeof row]==='string'&&
+            (row[k as keyof typeof row] as string).length<=400)))
+        throw new Error('Повреждённая строка спецификации');
+    }
+  }
   for(const s of p.sheets){
     if(!Number.isFinite(s.width)||!Number.isFinite(s.height)||s.width<=0||s.height<=0||s.width>1e8||s.height>1e8||!Array.isArray(s.entities)||s.entities.length>200000) throw new Error('Неверная геометрия листа');
     if(!['pdf','image','blank'].includes(s.sourceType))
