@@ -24,6 +24,8 @@ import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {arrayEntity} from './geometryTransform';
+import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
+  polarArrayCad,alignCadLine} from './affineCad';
 import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
@@ -120,6 +122,46 @@ export default function App(){
    setSheetIndex(current=>index<current?current-1:Math.min(current,Math.max(0,project.sheets.length-2)));
    setSelected(null);setFocusTarget(undefined);
    setStatus('Лист «'+target.name+'» закрыт. Ctrl+Z — вернуть. Резервная копия сохранена.');
+ }
+ function transformSelected(kind:'rotate'|'scale'|'move'|'shear'|'polar'){
+   const source=sheet.entities.find(e=>e.id===selected);
+   if(!source){setStatus('CAD: сперва выделите один примитив.');return;}
+   const pivot=source.center||source.points[0];
+   if(!pivot){setStatus('CAD: у объекта нет опорной точки.');return;}
+   const variants={
+     rotate:['Поворот вокруг опорной точки ('+pivot.x.toFixed(1)+'; '+pivot.y.toFixed(1)+'), угол в градусах','45'],
+     scale:['Масштабирование относительно опорной точки. Коэффициент >0','1.5'],
+     move:['Точный перенос ΔX;ΔY (единицы листа, не обязательно мм)','20;10'],
+     shear:['Деформация сдвигом по X относительно опорной точки, коэффициент (-5..5)','0.3'],
+     polar:['Круговой массив: количество (2–64); угол разворота (0..360); центр X; центр Y',
+       '6;360;'+pivot.x.toFixed(2)+';'+pivot.y.toFixed(2)],
+   } as const;
+   const raw=window.prompt(variants[kind][0],variants[kind][1]);
+   if(raw===null)return;
+   const fields=raw.split(';').map(s=>s.trim());
+   const numbers=fields.map(s=>s?Number(s.replace(',','.')):NaN);
+   if((kind==='move'&&numbers.length!==2)||(kind==='polar'&&numbers.length!==4)||
+     (kind!=='move'&&kind!=='polar'&&numbers.length!==1)||
+     !numbers.every(Number.isFinite)){
+     setStatus('CAD: неправильные числа. Для нескольких значений используйте «;».');return;
+   }
+   const op=kind==='rotate'?rotateCadEntity(source,pivot,numbers[0]):
+     kind==='scale'?scaleCadEntity(source,pivot,numbers[0]):
+     kind==='move'?moveCadEntity(source,numbers[0],numbers[1]):
+     kind==='shear'?shearCadEntity(source,pivot,numbers[0]):
+     polarArrayCad(source,{x:numbers[2],y:numbers[3]},numbers[0],numbers[1]);
+   if(!op){
+     setStatus('CAD: неподдерживаемая геометрия или недопустимые параметры. Окружности и дуги нельзя деформировать сдвигом.');return;
+   }
+   if(kind==='polar'&&!window.confirm('Создать '+op.additions.length+' новых объектов кругового массива? Оригинал сохранится.'))return;
+   applyOperation(op);
+ }
+ function alignSelected(axis:'horizontal'|'vertical'){
+   const source=sheet.entities.find(e=>e.id===selected);
+   if(!source)return;
+   const operation=alignCadLine(source,axis);
+   if(!operation){setStatus('Выравнивание поддерживает один обычный прямой LINE.');return;}
+   applyOperation(operation);
  }
  function makeRectangularArray(){
    const source=sheet.entities.find(e=>e.id===selected);
@@ -537,6 +579,21 @@ export default function App(){
         <button className="action" disabled={!selected} onClick={()=>setTool('mirror')}>◀ MIRROR — две точки оси</button>
         <button className="action" disabled={!selected} onClick={makeRectangularArray}>▦ ARRAY — прямоугольный массив</button>
       </div>
+      <h3>Точные преобразования объекта</h3>
+      <p className="muted">Укажите объект «Выделением». Опорная точка — центр окружности/эллипса или первый узел.
+        Единицы перемещения — координаты листа. Поворот, масштаб и массив сохраняются как редактируемая геометрия,
+        без автоматического пересчёта сопряжённых размеров.</p>
+      <div className="cad-action-grid">
+        <button className="action" disabled={!selected||!!busy} onClick={()=>transformSelected('rotate')}>⤾ ROTATE · угол</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>transformSelected('scale')}>⤢ SCALE · коэффициент</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>transformSelected('move')}>⇆ MOVE · ΔX/ΔY</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>transformSelected('shear')}>▱ SHEAR · сдвиг X</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>transformSelected('polar')}>◎ Круговой массив</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>alignSelected('horizontal')}>━ Выровнять LINE по горизонтали</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>alignSelected('vertical')}>┃ Выровнять LINE по вертикали</button>
+      </div>
+      <p className="muted">Выравнивание — однократная правка, не параметрическая связь.
+        Круги/дуги не преобразуются в некорректные примитивы при сдвиговой деформации.</p>
       <h3>Обозначения ЕСКД — конструктор</h3>
       <p className="muted">Выберите тип и текст, затем укажите место на чертеже инструментом ⌗. Объект сохраняется единым редактируемым знаком.</p>
       <label className="selector-label">Тип обозначения
