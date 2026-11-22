@@ -1,21 +1,14 @@
 import {test,expect} from '@playwright/test';
-import {newProject} from '../src/model';
-test('optional PaddleOCR service is explicitly approved and imports editable unverified entities',async ({page})=>{
- const p=newProject(),s=p.sheets[0];
- s.width=300;s.height=200;s.sourceType='image';
- s.image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9SAAAAABJRU5ErkJggg==';
- await page.route('http://127.0.0.1:8765/recognize',async route=>{
-   await route.fulfill({status:200,contentType:'application/json',
-     headers:{'Access-Control-Allow-Origin':'*'},
-     body:JSON.stringify({engine:'fixture PaddleOCR',width:300,height:200,
-       texts:[{text:'Áîëò M24x90',box:[10,10,130,22],confidence:.98}],
-       lines:[{a:[0,40],b:[200,40],confidence:.8}],circles:[],polygons:[]})});
- });
- await page.goto('/CadRecon/');
- await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
-   name:'backend-fixture.cadrecon.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(p))});
- page.once('dialog',d=>d.accept());
- await page.getByRole('button',{name:/Распознать через PaddleOCR/}).click();
- await expect(page.getByText(/fixture PaddleOCR: 2 новых элементов/)).toBeVisible();
- await expect(page.getByText(/fixture PaddleOCR: 2 новых элементов/)).toBeVisible();
+test('GitHub Pages uses browser-only recognition by default and hides optional local Ultra',async ({page})=>{
+  await page.goto('/CadRecon/');
+  await expect(page.getByRole('button',{name:/Точное распознавание в браузере/})).toBeVisible();
+  await expect(page.getByRole('button',{name:/Подготовить языковые модели OCR/})).toBeVisible();
+  await expect(page.getByText('GitHub Pages — единственный хостинг.',{exact:false})).toBeVisible();
+  await expect(page.getByLabel('Адрес Online Accurate')).toHaveCount(0);
+  await expect(page.getByRole('button',{name:/Распознать через PaddleOCR/})).toHaveCount(0);
+  const settings=page.locator('details.local-ultra');
+  await expect(settings).not.toHaveAttribute('open',/.+/);
+  await settings.locator('summary').click();
+  await expect(page.getByLabel('Локальный адрес Ultra')).toBeVisible();
+  await expect(page.getByLabel('Токен Ultra')).toBeVisible();
 });
