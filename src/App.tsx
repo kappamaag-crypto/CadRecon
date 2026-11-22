@@ -220,19 +220,27 @@ export default function App(){
   }catch(e){setStatus('Объединение линий: '+e);}
  }
  async function runSemanticRecognition(){
+   if(localController.current)return;
    if(!sheet.image&&!sheet.entities.length){setStatus('Сначала загрузите чертёж.');return;}
+   const ctrl=new AbortController(),sheetId=sheet.id;
+   localController.current=ctrl;setLocalBusy(true);
    setBusy('Восстановление размерных цепочек и обозначений ЕСКД…');
-   try {
+   try{
      let source=sheet.entities;
      if(!source.some(e=>e.kind==='text'&&e.origin!=='manual')&&sheet.image){
        setBusy('OCR: распознавание надписей...');
-       const o=await recognizeText(sheet,setBusy,undefined,{mode:'enhanced',detectVertical:ocrVertical,maxRetries:35});
+       const o=await recognizeText(sheet,setBusy,ctrl.signal,
+         {mode:'enhanced',detectVertical:ocrVertical,maxRetries:35});
+       if(ctrl.signal.aborted)return;
        source=[...source,...o.entities];setOcrText(o.text);
      }
      if(!source.some(e=>e.kind==='line'&&e.origin!=='manual')&&sheet.image){
        setBusy('Анализ линий, выносок и цепочек...');
-       const v=await traceImage(sheet,12,setBusy,'detailed');source=[...source,...v.entities];
+       const v=await traceImage(sheet,12,setBusy,'detailed',ctrl.signal);
+       if(ctrl.signal.aborted)return;
+       source=[...source,...v.entities];
      }
+     if(ctrl.signal.aborted)return;
      setBusy('Анализ размерных цепочек и ЕСКД...');
      const extracted=source.filter(e=>!sheet.entities.some(old=>old.id===e.id));
      const recognized=reconstructDimensionChains({...sheet,entities:source});
@@ -241,12 +249,18 @@ export default function App(){
      const newDims=recognized.dimensions.filter(e=>!existing.has(e.sourceId+'|'+e.kind));
      const newSymbols=symbols.filter(e=>!existing.has(e.sourceId+'|'+e.kind));
      const fresh=[...extracted,...newDims,...newSymbols];
-     if(fresh.length)addEntities(fresh);
-     setReviewType('semantic');setReviewPage(0);
-     setPanel('recognition');
-     setStatus('Автоанализ: '+newDims.length+' размерных объектов, '+newSymbols.length+' обозначений ЕСКД, '+recognized.chains.length+' цепочек. Все требуют проверки.');
-   } catch(err){setStatus('Ошибка семантического распознавания: '+String(err));}
-   finally{setBusy('');}
+     if(ctrl.signal.aborted)return;
+     if(fresh.length)addToOriginalSheet(sheetId,fresh);
+     setReviewType('semantic');setReviewPage(0);setPanel('recognition');
+     setStatus('Автоанализ: '+newDims.length+' размерных объектов, '+newSymbols.length+
+       ' обозначений ЕСКД, '+recognized.chains.length+
+       ' цепочек. Все требуют проверки.');
+   }catch(err){
+     setStatus(ctrl.signal.aborted?'Автоанализ отменён.':
+       'Ошибка семантического распознавания: '+String(err));
+   }finally{
+     localController.current=null;setLocalBusy(false);setBusy('');
+   }
  }
  async function measureOcrAccuracy(file:File|null){
    if(!file)return;
