@@ -98,3 +98,30 @@ test('W4 OFFSET adds a separate parallel line and one Undo restores original',as
   expect(undone.sheets[0].entities).toHaveLength(1);
   expect(undone.sheets[0].entities[0].id).toBe(original.id);
 });
+
+
+test('W4 BREAK cuts one manual line into two DXF-editable parts and one Undo restores source',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;sheet.calibrated=true;
+  const source=entity('line',[{x:40,y:100},{x:200,y:100}]);
+  sheet.entities=[source];
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Разорвать прямой отрезок (BREAK)'}).click();
+  await worldClick(page,{x:80,y:100});
+  await expect(page.getByText(/BREAK: первая точка зафиксирована/)).toBeVisible();
+  await worldClick(page,{x:150,y:100});
+  await expect(page.getByText(/CAD: изменено 1 объектов, добавлено 1/)).toBeVisible();
+  const result=await exportProject(page);
+  expect(result.sheets[0].entities).toHaveLength(2);
+  const first=result.sheets[0].entities.find(e=>e.id===source.id);
+  const second=result.sheets[0].entities.find(e=>e.id!==source.id);
+  expect(first!.points[0].x).toBe(40);
+  expect(first!.points[1].x).toBeCloseTo(80,1);
+  expect(second!.points[0].x).toBeCloseTo(150,1);
+  expect(second!.points[1].x).toBe(200);
+  expect(result.sheets[0].entities.every(e=>!e.verified)).toBe(true);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  const back=await exportProject(page);
+  expect(back.sheets[0].entities).toHaveLength(1);
+  expect(back.sheets[0].entities[0].points).toEqual(source.points);
+});
