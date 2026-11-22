@@ -65,5 +65,16 @@ for(const [kind,filename] of [
     console.log('W3_QUALITY '+JSON.stringify(observed));
     expect(observed.autoApproved).toBe(0);
     expect(lineCoverage).toHaveLength(3);
+    // Synthetic regression GATE: catch catastrophic axis-aligned loss.
+    // This is a line-sample coverage metric, NOT global CAD recall/F1.
+    const floor=kind==='clean'?.97:.85;
+    for(const c of lineCoverage)expect(c).toBeGreaterThanOrEqual(floor);
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    expect(lines.length).toBeLessThan(700);
+    if(kind==='clean'){
+      expect(nearest).not.toBeNull();
+      expect(nearest!.centerErrorPx).toBeLessThanOrEqual(6);
+      expect(nearest!.radiusErrorPx).toBeLessThanOrEqual(6);
+    }
   });
 }
