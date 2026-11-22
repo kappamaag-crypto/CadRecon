@@ -67,6 +67,33 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(traceImage).toHaveBeenCalledOnce();
     expect(recognizeText).toHaveBeenCalledOnce();
   });
+  it('keeps browser geometry when OCR models are unavailable or offline',async ()=>{
+    const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,fixture';
+    vi.mocked(traceImage).mockResolvedValue({entities:[line(0,0,100,0)],note:'scan'});
+    vi.mocked(recognizeText).mockRejectedValue(new Error('language models unavailable offline'));
+    const result=await recognizeBrowserAccurate(sheet);
+    expect(result.entities.some(e=>e.kind==='line')).toBe(true);
+    expect(result.warnings.join(' ')).toContain('OCR RU/EN не выполнен');
+    expect(result.entities.every(e=>!e.verified)).toBe(true);
+  });
+  it('keeps browser OCR when detailed line worker is unsupported',async ()=>{
+    const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,fixture';
+    vi.mocked(traceImage).mockRejectedValue(new Error('Web Worker unavailable'));
+    vi.mocked(recognizeText).mockResolvedValue({entities:[ocr('R20',20,20)],text:'R20'});
+    const result=await recognizeBrowserAccurate(sheet);
+    expect(result.entities.filter(e=>e.kind==='text')).toHaveLength(1);
+    expect(result.warnings.join(' ')).toContain('Автообводка не выполнена');
+  });
+  it('does not convert user cancellation into a partial successful reconstruction',async ()=>{
+    const ctrl=new AbortController();
+    const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,fixture';
+    vi.mocked(traceImage).mockImplementation(async ()=>{
+      ctrl.abort();
+      throw new Error('Worker cancelled');
+    });
+    await expect(recognizeBrowserAccurate(sheet,undefined,ctrl.signal)).rejects.toThrow();
+    expect(recognizeText).not.toHaveBeenCalled();
+  });
   it('does not duplicate previously recovered candidate geometry/text on rerun',async ()=>{
     const sheet=newProject().sheets[0];
     sheet.sourceType='image';
