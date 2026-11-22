@@ -32,3 +32,47 @@
 .archive-tools h3{margin-top:14px}
 .archive-tools .issue button{font-size:10px;margin:5px 3px 0 0}
 @media(max-width:760px){.panel-tabs button{padding:6px 2px}.archive-tools .archive-tabs button{font-size:10px;padding:6px}}
+
+
+/* W4: searchable CAD command palette and adjustable/collapsible sidebar. */
+.sidebar{width:390px;transition:width .18s ease;min-width:0}
+.sidebar.wide{width:min(515px,44vw)}
+.sidebar.is-collapsed{width:43px;min-width:43px}
+.sidebar.is-collapsed .panel-tabs,.sidebar.is-collapsed .panelcontent{display:none}
+.sidebar-header{height:38px;display:flex;align-items:center;justify-content:space-between;gap:5px;background:#15273b;border-bottom:1px solid #2d465d;padding:0 8px}
+.sidebar-header strong{font-size:12px;color:#d9eefb;white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+.sidebar-header-actions{display:flex;flex-shrink:0;gap:3px}
+.sidebar-header-actions button{font-size:16px;font-weight:700;border:0;background:#203a51;padding:3px 7px;min-width:27px;line-height:1.2}
+.sidebar.is-collapsed .sidebar-header{height:100%;padding:5px 3px;flex-direction:column;justify-content:flex-start}
+.sidebar.is-collapsed .sidebar-header strong{display:none}
+.sidebar.is-collapsed .sidebar-header-actions{flex-direction:column}
+.sidebar .panelcontent{scrollbar-gutter:stable;overscroll-behavior:contain}
+.cad-palette{border:1px solid #315570;border-radius:10px;background:linear-gradient(180deg,#142b43,#101e30);padding:12px;margin-bottom:16px}
+.cad-search-label{display:flex;align-items:center;justify-content:space-between;font-size:12px;font-weight:750;color:#c8e8f6;margin-bottom:7px}
+.cad-palette kbd{font:10px ui-monospace,Consolas,monospace;color:#9fc5d4;background:#20364a;padding:2px 5px;border:1px solid #385873;border-radius:4px}
+.cad-palette input[type=search]{width:100%;background:#0d1e30;outline-offset:2px;font-size:12px;padding:10px}
+.cad-palette input:focus-visible{outline:2px solid #54cbe7}
+.cad-palette-hint{font-size:11px;color:#9db9ce;line-height:1.45;margin:8px 0 12px}
+.cad-tool-group{border:1px solid #294359;border-radius:7px;margin:6px 0;background:#0d1c2d;overflow:hidden}
+.cad-tool-group summary{cursor:pointer;padding:11px 9px;color:#dfedf8;font-size:12px;font-weight:700;display:flex;align-items:center;gap:8px;list-style:inside}
+.cad-tool-group summary:hover{background:#1c364c}
+.cad-tool-group summary span{flex:1;min-width:0}
+.cad-tool-group summary small{color:#9cb8c9;background:#1e394e;border-radius:8px;padding:1px 7px}
+.cad-group-hint{font-size:11px;color:#8ba9bf;margin:6px 10px}
+.cad-command-list{display:flex;flex-direction:column;gap:4px;padding:5px 7px 9px}
+.cad-command{display:flex;align-items:stretch;gap:3px}
+.cad-command-main{display:flex;align-items:center;gap:8px;flex:1;min-width:0;border:1px solid #2c4c64;background:#172b41;padding:8px 6px;text-align:left;font-size:11px}
+.cad-command-main>span:nth-child(2){flex:1;overflow-wrap:anywhere}
+.cad-command-icon{font-size:18px;width:22px;text-align:center;flex-shrink:0}
+.cad-pin{border:1px solid #294359;background:transparent;font-size:16px;color:#91b1c5;padding:3px 6px}
+.cad-pin.active{color:#ffd178}
+@media(max-width:1100px){.sidebar{width:345px}.sidebar.wide{width:min(445px,49vw)}}
+@media(max-width:760px){.sidebar{width:315px}.sidebar.wide{width:min(390px,61vw)}.cad-palette{padding:9px}}
+@media(max-width:560px){
+ .workspace{position:relative}
+ .drawing{margin-right:0;min-width:0}
+ .sidebar,.sidebar.wide{position:absolute;right:0;top:0;bottom:0;width:min(88vw,390px);z-index:6;opacity:.985;box-shadow:-10px 0 30px #0008}
+ .sidebar.is-collapsed{width:40px;box-shadow:none}
+ .sidebar-header{height:35px}
+ .sidebar .panelcontent{padding:10px}
+}
