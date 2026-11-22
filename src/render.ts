@@ -24,7 +24,8 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
   if(e.kind==='line'||e.kind==='axis'||e.kind==='polyline'||e.kind==='hatch'){
     if(e.kind==='hatch'){poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;}
     poly(ctx,pts,!!e.closed||e.kind==='hatch');ctx.stroke();
-  }else if(e.kind==='circle'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,0,2*pi);ctx.stroke();}
+  }else if(e.kind==='bezier'&&pts.length===4){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.bezierCurveTo(pts[1].x,pts[1].y,pts[2].x,pts[2].y,pts[3].x,pts[3].y);ctx.stroke();}
+  else if(e.kind==='circle'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,0,2*pi);ctx.stroke();}
   else if(e.kind==='arc'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,e.startAngle||0,e.endAngle||0);ctx.stroke();}
   else if(e.kind==='text')text(ctx,pts[0],e.text||'Текст',e.size||4);
   else if(e.kind==='dimension'&&pts.length>=2){
