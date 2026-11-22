@@ -145,6 +145,28 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(out.rectangularClipLines).toBe(2);
     expect(out.clippedGeometry).toBe(0);
   });
+  it('culls entirely invisible native circles/Bezier but never trims a partly clipped curve',()=>{
+    const clip=[29,[Float32Array.from([0,20,20,1,100,20,1,100,100,1,20,100,4])],null];
+    const circle=(cx:number,cy:number,r:number)=>{
+      const d=k*r;
+      return [20,[Float32Array.from([0,cx+r,cy,
+        2,cx+r,cy+d,cx+d,cy+r,cx,cy+r,
+        2,cx-d,cy+r,cx-r,cy+d,cx-r,cy,
+        2,cx-r,cy-d,cx-d,cy-r,cx,cy-r,
+        2,cx+d,cy-r,cx+r,cy-d,cx+r,cy,4])],null];
+    };
+    const outside=[20,[Float32Array.from([0,150,150,2,165,155,180,170,200,170])],null];
+    const inside=[20,[Float32Array.from([0,25,25,2,30,30,45,30,50,25])],null];
+    const crossing=[20,[Float32Array.from([0,80,80,2,95,105,130,120,140,125])],null];
+    const out=extract([91,91,91,91,91,91],
+      [clip,circle(50,50,12),circle(200,180,10),outside,inside,crossing]);
+    expect(out.entities.filter(e=>e.kind==='circle')).toHaveLength(1);
+    expect(out.entities.some(e=>e.kind==='bezier'&&e.reason?.includes('полностью внутри'))).toBe(true);
+    expect(out.entities.some(e=>e.kind==='bezier'&&e.reason?.includes('частичное отсечение'))).toBe(true);
+    expect(out.fullyClippedObjects).toBe(2);
+    expect(out.clippedGeometry).toBe(1);
+    expect(out.entities.every(e=>!e.verified)).toBe(true);
+  });
   it('refuses to falsely clip vectors through a rotated/nonrectangular path',()=>{
     const irregular=[29,[Float32Array.from([
       0,20,20,1,100,20,1,60,100,1,20,100,4,
