@@ -5,6 +5,8 @@ import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
 import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities,type OperationResult} from './cadOperations';
 import {mirrorEntity,stretchVertex} from './geometryTransform';
+import {constructionLine,angleBisector,regularPolygon,circleByThreePoints,
+  ellipseFromAxes,arcThroughThreePoints} from './cadPrimitives';
 import type {EskdType} from './model';
 import type {SheetRect} from './ocrRegion';
 interface Props {
@@ -153,6 +155,12 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       else onMessage('CAD: геометрия или выбор стороны не допускает эту операцию. Проверьте пересечение, направление и расстояние.');
       return;
     }
+    if(tool==='construction-h'||tool==='construction-v'){
+      const other=tool==='construction-h'?{x:p.x+1,y:p.y}:{x:p.x,y:p.y+1};
+      const e=constructionLine(p,other);
+      if(e)onCreate(e);
+      return;
+    }
     if(tool==='point'){
       const e=entity('point',[p],'Контуры');e.verified=false;
       e.reason='Создана точка: не означает инженерную проверку';
@@ -182,6 +190,69 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       return;
     }
     if(tool==='polyline'||tool==='hatch'){setDraft(pts);return;}
+    if(tool==='construction-line'){
+      if(pts.length<2){setDraft(pts);return;}
+      setDraft([]);
+      const e=constructionLine(pts[0],pts[1]);
+      if(e)onCreate(e);else onMessage('Вспомогательная прямая: точки не должны совпадать.');
+      return;
+    }
+    if(tool==='construction-bisector'){
+      if(pts.length<3){setDraft(pts);return;}
+      setDraft([]);
+      const e=angleBisector(pts[0],pts[1],pts[2]);
+      if(e)onCreate(e);else onMessage('Биссектриса: нужно три точки и ненулевой угол.');
+      return;
+    }
+    if(tool==='circle-3pt'||tool==='arc-3pt'){
+      if(pts.length<3){setDraft(pts);return;}
+      setDraft([]);
+      const e=tool==='circle-3pt'?circleByThreePoints(pts[0],pts[1],pts[2]):
+        arcThroughThreePoints(pts[0],pts[1],pts[2]);
+      if(e)onCreate(e);else onMessage('Три точки почти на одной прямой или совпадают.');
+      return;
+    }
+    if(tool==='ellipse'){
+      if(pts.length<3){setDraft(pts);return;}
+      setDraft([]);
+      const e=ellipseFromAxes(pts[0],pts[1],pts[2]);
+      if(e)onCreate(e);
+      else onMessage('Эллипс: задайте центр, главную полуось и меньшую полуось перпендикулярно ей.');
+      return;
+    }
+    if(tool==='bezier'){
+      if(pts.length<4){setDraft(pts);return;}
+      setDraft([]);
+      if(pts.slice(1).some((q,i)=>dist(q,pts[i])<1e-7)){
+        onMessage('Безье: соседние контрольные точки должны различаться.');return;
+      }
+      const e=entity('bezier',pts,'Контуры');
+      e.reason='Кубическая кривая Безье по четырём контрольным точкам (DXF SPLINE), не NURBS с произвольной степенью';
+      onCreate(e);return;
+    }
+    if(tool==='polygon-inscribed'||tool==='polygon-circumscribed'){
+      if(pts.length<2){setDraft(pts);return;}
+      setDraft([]);
+      const input=window.prompt('Количество сторон правильного многоугольника (3–128)','6');
+      if(input===null)return;
+      const count=Number(input);
+      const e=regularPolygon(pts[0],pts[1],count,
+        tool==='polygon-inscribed'?'inscribed':'circumscribed');
+      if(e)onCreate(e);
+      else onMessage('Многоугольник: нужны 3–128 сторон и ненулевой радиус.');
+      return;
+    }
+    if(tool==='rect-center'){
+      if(pts.length<2){setDraft(pts);return;}
+      setDraft([]);
+      const [center,corner]=pts,dx=Math.abs(corner.x-center.x),dy=Math.abs(corner.y-center.y);
+      if(dx<1e-7||dy<1e-7){onMessage('Прямоугольник: нужны ненулевые полуоси.');return;}
+      const e=entity('polyline',[
+        {x:center.x-dx,y:center.y-dy},{x:center.x+dx,y:center.y-dy},
+        {x:center.x+dx,y:center.y+dy},{x:center.x-dx,y:center.y+dy}]);
+      e.closed=true;e.reason='Прямоугольник по центру и противоположному углу';
+      onCreate(e);return;
+    }
     if(tool==='rectangle'){
       if(pts.length<2){setDraft(pts);return;}
       const [a,b]=pts;setDraft([]);
@@ -246,7 +317,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <canvas ref={canvas} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={()=>{if(tool==='polyline'||tool==='hatch')finish(draft,tool);}} onWheel={wheel} onContextMenu={e=>e.preventDefault()} style={{cursor:tool==='pan'?'grab':tool==='select'?'default':'crosshair'}} aria-label="Редактор CAD"/>
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
-    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='ocr-region'?'OCR: укажите второй угол прямоугольной области':tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
+    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='construction-bisector'?'Вершина угла, затем точки на двух лучах':tool==='ellipse'?'Центр, конец главной полуоси, затем малая полуось':tool==='bezier'?'Начало, два контрольных узла, конец кривой':tool==='ocr-region'?'OCR: укажите второй угол прямоугольной области':tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
     {pending&&<div className="hint">{tool==='stretch'?'STRETCH: укажите новое положение вершины':tool==='mirror'?'MIRROR: укажите конец оси':tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }

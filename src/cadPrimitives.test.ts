@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {newProject,validateProject} from './model';
 import {circleByThreePoints,regularPolygon,ellipseFromAxes,constructionLine,
-  visibleConstructionLine,angleBisector} from './cadPrimitives';
+  visibleConstructionLine,angleBisector,arcThroughThreePoints} from './cadPrimitives';
 const p=(x:number,y:number)=>({x,y});
 describe('W4 exact browser 2D primitives',()=>{
   it('reconstructs a 3-point circle without arbitrary ellipse fitting',()=>{
@@ -10,6 +10,13 @@ describe('W4 exact browser 2D primitives',()=>{
     expect(e.center?.y).toBeCloseTo(0,8);expect(e.radius).toBeCloseTo(10,8);
     expect(e.verified).toBe(false);
     expect(circleByThreePoints(p(0,0),p(10,10),p(20,20))).toBeNull();
+  });
+  it('places a 3-point arc on the specified intermediate point',()=>{
+    const e=arcThroughThreePoints(p(10,0),p(0,10),p(-10,0))!;
+    expect(e.kind).toBe('arc');expect(e.center?.x).toBeCloseTo(0,8);
+    expect(e.radius).toBeCloseTo(10,8);
+    expect(e.endAngle!-e.startAngle!).toBeCloseTo(Math.PI,6);
+    expect(arcThroughThreePoints(p(0,0),p(10,10),p(20,20))).toBeNull();
   });
   it('makes inscribed and circumscribed polygons distinguishable',()=>{
     const ins=regularPolygon(p(0,0),p(10,0),4,'inscribed')!;
