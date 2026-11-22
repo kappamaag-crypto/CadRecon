@@ -40,6 +40,8 @@ export default function App(){
  const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
  const [modelsReady,setModelsReady]=useState(false);
  const onlineController=useRef<AbortController|null>(null);
+ const localController=useRef<AbortController|null>(null);
+ const [localBusy,setLocalBusy]=useState(false);
  const [source,setSource]=useState(true),[compare,setCompare]=useState(false),[snap,setSnap]=useState(true),[grid,setGrid]=useState(false),[busy,setBusy]=useState(''),[status,setStatus]=useState('Загрузите PDF или скан, чтобы начать.'),[ocrText,setOcrText]=useState('');
  const [backups,setBackups]=useState<{key:string;time:number;name:string}[]>([]),[loaded,setLoaded]=useState(false);
  const input=useRef<HTMLInputElement>(null),jsonInput=useRef<HTMLInputElement>(null),undo=useRef<CadProject[]>([]),redo=useRef<CadProject[]>([]);
@@ -49,6 +51,7 @@ export default function App(){
  function redoAction(){if(!redo.current.length)return;const next=redo.current.pop()!;undo.current.push(project);setProject(next);setSelected(null);}
  function changeSheet(fn:(s:typeof sheet)=>typeof sheet){apply(p=>({...p,sheets:p.sheets.map((s,i)=>i===sheetIndex?fn(s):s)}));}
  function addEntities(es:Entity[]){if(!es.length)return;changeSheet(s=>({...s,entities:[...s.entities,...es]}));setStatus('Добавлено объектов: '+es.length);}
+ function addToOriginalSheet(id:string,es:Entity[]){if(!es.length)return;apply(p=>p.sheets.some(x=>x.id===id)?({...p,sheets:p.sheets.map(x=>x.id===id?{...x,entities:[...x.entities,...es]}:x)}):p);}
  function modifyEntity(e:Entity,explicitReview=false){const edited=explicitReview?e:{...e,verified:false,reason:'Объект изменён: требуется повторная проверка по оригиналу'};changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?edited:x)}));}
  function applyOperation(result:OperationResult){
   const ids=new Set(result.replacements.map(e=>e.id));
@@ -69,7 +72,17 @@ export default function App(){
   }else setStatus('Импортировано листов: '+nextSheets.length+'. Векторные элементы PDF требуют проверки.');
  }catch(e){setStatus('Ошибка импорта: '+String(e));}finally{setBusy('');if(input.current)input.current.value='';}}
  async function handleProject(files:FileList|null){if(!files?.length)return;setBusy('Открытие проекта…');try{const p=await importProject(files[0]);await createBackup(project);setProject(p);undo.current=[];redo.current=[];setSheetIndex(0);setSelected(null);setStatus('Проект открыт: '+p.name);}catch(e){setStatus('Ошибка проекта: '+String(e));}finally{setBusy('');if(jsonInput.current)jsonInput.current.value='';}}
- async function vectorize(){setBusy('Обработка скана в полном разрешении…');try{const r=await traceImage(sheet,12,setBusy,'detailed');addEntities(r.entities);setStatus(r.note);}catch(e){setStatus('Обводка: '+String(e));}finally{setBusy('');}}
+ async function vectorize(){
+   if(localController.current)return;
+   const ctrl=new AbortController(),sheetId=sheet.id;localController.current=ctrl;setLocalBusy(true);
+   setBusy('Обработка скана в полном разрешении…');
+   try{
+     const r=await traceImage(sheet,12,setBusy,'detailed',ctrl.signal);
+     if(ctrl.signal.aborted)return;
+     addToOriginalSheet(sheetId,r.entities);setStatus(r.note);
+   }catch(e){setStatus(ctrl.signal.aborted?'Обводка отменена пользователем.':'Обводка: '+String(e));}
+   finally{localController.current=null;setLocalBusy(false);setBusy('');}
+ }
  async function prepareBrowserOcr(){
    setBusy('Загрузка OCR-моделей RU/EN на компьютер пользователя…');
    try{
@@ -80,16 +93,20 @@ export default function App(){
    finally{setBusy('');}
  }
  async function browserAccurateProcessing(){
+   if(localController.current)return;
    if(!sheet.image){setStatus('Сначала загрузите PDF или скан.');return;}
+   const ctrl=new AbortController(),sheetId=sheet.id;
+   localController.current=ctrl;setLocalBusy(true);
    setBusy('Точная реконструкция непосредственно в браузере…');
    try{
-     const result=await recognizeBrowserAccurate(sheet,setBusy);
-     if(result.entities.length)addEntities(result.entities);
+     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal);
+     if(ctrl.signal.aborted)return;
+     addToOriginalSheet(sheetId,result.entities);
      if(result.ocrText)setOcrText(result.ocrText);
      setPanel('recognition');
      setStatus(result.note+(result.warnings.length?' Предупреждения: '+result.warnings.slice(0,2).join('; '):''));
-   }catch(e){setStatus('Браузерное распознавание: '+String(e)+'. Попробуйте обводку и OCR по отдельности.');}
-   finally{setBusy('');}
+   }catch(e){setStatus(ctrl.signal.aborted?'Распознавание отменено.':'Браузерное распознавание: '+String(e)+'. Попробуйте обводку и OCR по отдельности.');}
+   finally{localController.current=null;setLocalBusy(false);setBusy('');}
  }
  async function onlineProcessing(){
    if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
@@ -153,7 +170,18 @@ export default function App(){
    } catch(err){setStatus('Ошибка семантического распознавания: '+String(err));}
    finally{setBusy('');}
  }
- async function runOcr(){setBusy('Распознавание текста…');try{const r=await recognizeText(sheet,setBusy);setOcrText(r.text);addEntities(r.entities);setStatus('OCR: '+r.entities.length+' строк. Проверьте каждую надпись.');}catch(e){setStatus('OCR: '+String(e));}finally{setBusy('');}}
+ async function runOcr(){
+   if(localController.current)return;
+   const ctrl=new AbortController(),sheetId=sheet.id;localController.current=ctrl;setLocalBusy(true);
+   setBusy('Распознавание текста…');
+   try{
+     const r=await recognizeText(sheet,setBusy,ctrl.signal);
+     if(ctrl.signal.aborted)return;
+     setOcrText(r.text);addToOriginalSheet(sheetId,r.entities);
+     setStatus('OCR: '+r.entities.length+' строк. Проверьте каждую надпись.');
+   }catch(e){setStatus(ctrl.signal.aborted?'OCR отменён.':'OCR: '+String(e));}
+   finally{localController.current=null;setLocalBusy(false);setBusy('');}
+ }
  function exportAllDxf(){
    const uncalibrated=project.sheets.filter(s=>!s.calibrated);
    if(uncalibrated.length&&!window.confirm('Есть некалиброванные листы: '+uncalibrated.length+'. Выгрузить их с условными единицами?'))return;
@@ -214,6 +242,7 @@ export default function App(){
       <h3>Точная обработка — прямо в браузере</h3>
       <p className="muted">GitHub Pages — единственный хостинг. Файл чертежа не передаётся на сервер. Обработка PDF, сканов, OCR и CAD выполняется на вашем устройстве. Для OCR браузер при первом запуске скачает языковые модели.</p>
       <button className="action primary" onClick={browserAccurateProcessing} disabled={!sheet.image||!!busy}>◎ Точное распознавание в браузере</button>
+      {localBusy&&<button className="action" onClick={()=>localController.current?.abort()}>× Остановить обработку на устройстве</button>}
       <p className="muted">Цифровой PDF: исходные векторы без повторной растровой обводки. Скан: детальная обводка + OCR RU/EN + проверка размерных цепочек и ЕСКД. Результат необходимо проверить по оригиналу.</p>
       <button className="action" onClick={prepareBrowserOcr} disabled={!!busy}>↓ Подготовить языковые модели OCR (RU/EN)</button>
       <p className="muted">{modelsReady?'✓ Языковые модели подготовлены для текущего сеанса.':'Дополнительные пакеты скачиваются на устройство пользователя при необходимости; использование после очистки кэша потребует повторной загрузки.'}</p>
