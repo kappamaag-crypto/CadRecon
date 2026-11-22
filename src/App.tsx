@@ -226,7 +226,7 @@ export default function App(){
      let source=sheet.entities;
      if(!source.some(e=>e.kind==='text'&&e.origin!=='manual')&&sheet.image){
        setBusy('OCR: распознавание надписей...');
-       const o=await recognizeText(sheet,setBusy);
+       const o=await recognizeText(sheet,setBusy,undefined,{mode:'enhanced',detectVertical:ocrVertical,maxRetries:35});
        source=[...source,...o.entities];setOcrText(o.text);
      }
      if(!source.some(e=>e.kind==='line'&&e.origin!=='manual')&&sheet.image){
