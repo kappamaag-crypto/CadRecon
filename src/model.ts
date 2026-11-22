@@ -1,10 +1,10 @@
 export type Point = { x:number; y:number };
-export type Kind = 'point'|'line'|'polyline'|'bezier'|'circle'|'arc'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp'|'eskd';
+export type Kind = 'point'|'line'|'polyline'|'bezier'|'circle'|'ellipse'|'arc'|'construction'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp'|'eskd';
 export type Origin = 'manual'|'pdf'|'trace'|'ocr';
 export type EskdType = 'weld'|'roughness'|'datum'|'geotol'|'section'|'detail'|'elevation'|'diameter'|'radius'|'thread'|'slope'|'taper';
 export interface Entity {
   id:string; kind:Kind; layer:string; origin:Origin; verified:boolean;
-  points:Point[]; center?:Point; radius?:number; startAngle?:number; endAngle?:number;
+  points:Point[]; center?:Point; radius?:number; axisRatio?:number; startAngle?:number; endAngle?:number;
   closed?:boolean; text?:string; size?:number; offset?:number;
   rows?:number; cols?:number; width?:number; height?:number;
   confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
@@ -18,6 +18,7 @@ export type Tool = 'select'|'pan'|'point'|'rectangle'|'stretch'|'mirror'|'trim'|
 export const COLORS = ['#e4ebf4','#38bdf8','#4ade80','#f9bd5a','#e879f9','#fb7185','#94a3b8','#22d3ee'];
 export const DEFAULT_LAYERS:Layer[] = [
   {name:'Контуры',color:'#4ade80',visible:true,locked:false},
+  {name:'Вспомогательные',color:'#708ca6',visible:true,locked:false},
   {name:'Оси',color:'#38bdf8',visible:true,locked:false},
   {name:'Размеры',color:'#f9bd5a',visible:true,locked:false},
   {name:'Текст',color:'#e4ebf4',visible:true,locked:false},
@@ -41,11 +42,11 @@ export function validateProject(value:unknown):CadProject {
   // arbitrary remote image URLs (tracking, privacy or CORS bypass).
   const imageData=/^data:image\/(?:png|jpe?g|webp|gif|bmp|avif);base64,[A-Za-z0-9+/]*={0,2}$/i;
   const safeName=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=180&&!/[\x00-\x1f\x7f]/.test(v);
-  const kinds:Kind[]=['point','line','polyline','bezier','circle','arc','text','dimension','axis','leader','hatch','table','stamp','eskd'];
+  const kinds:Kind[]=['point','line','polyline','bezier','circle','ellipse','arc','construction','text','dimension','axis','leader','hatch','table','stamp','eskd'];
   if(p.layers.length>250||p.layers.some(l=>!safeName(l.name)||typeof l.color!=='string'||!/^#[0-9A-Fa-f]{6}$/.test(l.color)||
     typeof l.visible!=='boolean'||typeof l.locked!=='boolean'))throw new Error('Повреждённое описание слоёв');
   const minimumPoints=(kind:Kind):number=>{
-    if(['line','axis','dimension','leader','polyline'].includes(kind))return 2;
+    if(['line','axis','dimension','leader','polyline','ellipse','construction'].includes(kind))return 2;
     if(kind==='bezier')return 4;
     if(kind==='hatch')return 3;
     return 1;
@@ -81,6 +82,8 @@ export function validateProject(value:unknown):CadProject {
         e.points.length<minimumPoints(e.kind)||e.points.length>30000||!e.points.every(isPoint)||
         (e.center!==undefined&&!isPoint(e.center))||
         (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
+        (e.axisRatio!==undefined&&(!Number.isFinite(e.axisRatio)||e.axisRatio<=0||e.axisRatio>1))||
+        (e.kind==='ellipse'&&(!e.center||!e.radius||!e.axisRatio))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
         (e.confidence!==undefined&&!Number.isFinite(e.confidence))||
         (e.lineStyle!==undefined&&(e.kind!=='line'||!['dashed','center'].includes(e.lineStyle)))||

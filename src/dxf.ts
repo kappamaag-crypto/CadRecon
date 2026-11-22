@@ -43,6 +43,15 @@ function entityDxf(e:Entity){
     case 'point':return pts.length?emit(0,'POINT',100,'AcDbEntity',8,layer,100,'AcDbPoint')+v(pts[0]):'';
     case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'||e.lineStyle==='center'?'CENTER':e.lineStyle==='dashed'?'DASHED':''):'';
     case 'polyline':return polygon(pts,layer,!!e.closed);
+    // Construction geometry exists only in the editor; never printed/exported.
+    case 'construction':return '';
+    case 'ellipse':{
+      if(!e.center||!e.radius||!e.axisRatio||pts.length<2)return '';
+      const major=sub(pts[1],e.center);
+      if(Math.hypot(major.x,major.y)<1e-8)return '';
+      return emit(0,'ELLIPSE',100,'AcDbEntity',8,layer,100,'AcDbEllipse')+
+        v(e.center)+p2(11,major)+emit(40,clamp(e.axisRatio),41,0,42,clamp(2*Math.PI));
+    }
     case 'bezier':return cubicSpline(pts,layer);
     case 'hatch':return solidHatch(pts,layer);
     case 'circle':return e.center && e.radius?dxfCircle(e.center,e.radius,layer):'';

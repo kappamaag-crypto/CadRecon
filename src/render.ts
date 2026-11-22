@@ -1,6 +1,7 @@
 import type {Entity,Point,Sheet,Layer} from './model';
 import {add,mid,dist,mul,sub,dimensionLength} from './geometry';
 import {eskdParts} from './eskd';
+import {visibleConstructionLine} from './cadPrimitives';
 export interface Camera {x:number;y:number;w:number;h:number;}
 const pi=Math.PI;
 function poly(ctx:CanvasRenderingContext2D,points:Point[],close=false){if(!points.length)return;ctx.beginPath();ctx.moveTo(points[0].x,points[0].y);for(let i=1;i<points.length;i++)ctx.lineTo(points[i].x,points[i].y);if(close)ctx.closePath();}
@@ -28,6 +29,11 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
     poly(ctx,pts,!!e.closed||e.kind==='hatch');ctx.stroke();
   }else if(e.kind==='bezier'&&pts.length===4){ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);ctx.bezierCurveTo(pts[1].x,pts[1].y,pts[2].x,pts[2].y,pts[3].x,pts[3].y);ctx.stroke();}
   else if(e.kind==='circle'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,0,2*pi);ctx.stroke();}
+  else if(e.kind==='ellipse'&&e.center&&e.radius&&e.axisRatio){
+    const axis={x:(pts[1]?.x??e.center.x)-e.center.x,y:(pts[1]?.y??e.center.y)-e.center.y};
+    ctx.beginPath();ctx.ellipse(e.center.x,e.center.y,e.radius,e.radius*e.axisRatio,
+      Math.atan2(axis.y,axis.x),0,2*pi);ctx.stroke();
+  }
   else if(e.kind==='arc'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,e.startAngle||0,e.endAngle||0);ctx.stroke();}
   else if(e.kind==='text')text(ctx,pts[0],e.text||'Текст',e.size||4);
   else if(e.kind==='dimension'&&pts.length>=2){
@@ -54,7 +60,16 @@ export function drawScene(ctx:CanvasRenderingContext2D,width:number,height:numbe
       for(let x=Math.floor(camera.x/s)*s;x<camera.x+camera.w;x+=s){ctx.moveTo(x,camera.y);ctx.lineTo(x,camera.y+camera.h);}
       for(let y=Math.floor(camera.y/s)*s;y<camera.y+camera.h;y+=s){ctx.moveTo(camera.x,y);ctx.lineTo(camera.x+camera.w,y);}ctx.stroke();}
     if(source && image){ctx.save();ctx.globalAlpha=options.compare?1:.47;ctx.drawImage(image,0,0,sheet.width,sheet.height);ctx.restore();}
-    if(entities){for(const e of sheet.entities){const l=layerColors.get(e.layer);if(l&&!l.visible)continue;ctx.strokeStyle=e.color||l?.color||'#e4ebf4';drawEntity(ctx,options.selected===e.id&&options.drag?{...e,points:e.points.map(p=>add(p,options.drag!)),center:e.center?add(e.center,options.drag!):undefined}:e,1.4/scale,options.selected===e.id);}
+    if(entities){for(const e of sheet.entities){const l=layerColors.get(e.layer);if(l&&!l.visible)continue;
+      ctx.strokeStyle=e.color||l?.color||'#e4ebf4';
+      if(e.kind==='construction'){
+        const moved=options.selected===e.id&&options.drag?e.points.map(p=>add(p,options.drag!)):e.points;
+        const ends=visibleConstructionLine(moved[0],moved[1],sheet.width,sheet.height);
+        if(ends){ctx.save();ctx.setLineDash([8/scale,5/scale]);drawEntity(ctx,{...e,kind:'line',points:ends},1/scale,options.selected===e.id);ctx.restore();}
+        continue;
+      }
+      drawEntity(ctx,options.selected===e.id&&options.drag?{...e,points:e.points.map(p=>add(p,options.drag!)),center:e.center?add(e.center,options.drag!):undefined}:e,1.4/scale,options.selected===e.id);
+    }
       if(options.draft?.length&&!options.roi){ctx.strokeStyle='#facc15';drawEntity(ctx,{id:'preview',kind:'polyline',points:[...options.draft,...(options.cursor?[options.cursor]:[])],layer:'',origin:'manual',verified:false},1.2/scale);}
       if(options.roi){const {a,b}=options.roi;
         ctx.save();ctx.strokeStyle='#38bdf8';ctx.setLineDash([6/scale,3/scale]);ctx.lineWidth=2/scale;

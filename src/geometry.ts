@@ -1,5 +1,6 @@
 import type {CadProject,Entity,Point,Sheet} from './model';
 import {auditNominalChains} from './dimensionAudit';
+import {visibleConstructionLine} from './cadPrimitives';
 const EPS=1e-8;
 export const add=(a:Point,b:Point):Point=>({x:a.x+b.x,y:a.y+b.y});
 export const sub=(a:Point,b:Point):Point=>({x:a.x-b.x,y:a.y-b.y});
@@ -27,6 +28,23 @@ export function shapeDistance(p:Point,e:Entity) {
     return best;
   }
   if(e.kind==='circle'||e.kind==='arc')return Math.abs(dist(p,e.center||e.points[0])- (e.radius||0));
+  if(e.kind==='construction'&&e.points.length>=2){
+    const v=sub(e.points[1],e.points[0]),len=Math.hypot(v.x,v.y);
+    return len>EPS?Math.abs((p.x-e.points[0].x)*v.y-(p.y-e.points[0].y)*v.x)/len:Infinity;
+  }
+  if(e.kind==='ellipse'&&e.center&&e.radius&&e.axisRatio&&e.points.length>=2){
+    const major=sub(e.points[1],e.center),angle=Math.atan2(major.y,major.x);
+    let previous:Point={x:e.center.x+e.radius*Math.cos(angle),y:e.center.y+e.radius*Math.sin(angle)};
+    let best=Infinity;
+    for(let k=1;k<=96;k++){
+      const t=2*Math.PI*k/96;
+      const a=e.radius*Math.cos(t),b=e.radius*e.axisRatio*Math.sin(t);
+      const current={x:e.center.x+a*Math.cos(angle)-b*Math.sin(angle),
+        y:e.center.y+a*Math.sin(angle)+b*Math.cos(angle)};
+      best=Math.min(best,pointSegmentDistance(p,previous,current));previous=current;
+    }
+    return best;
+  }
   if(e.kind==='text'||e.kind==='table'||e.kind==='stamp'||e.kind==='eskd')return dist(p,e.points[0]);
   const pts=e.points;
   if(!pts.length)return Infinity;
@@ -64,6 +82,8 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   if(missingLayer.length)issues.push({severity:'warning',message:'Объектов с отсутствующим слоем: '+missingLayer.length});
   const zero=sheet.entities.filter(e=>['line','dimension','axis','leader'].includes(e.kind) && dimensionLength(e)<EPS);
   if(zero.length)issues.push({severity:'warning',message:'Нулевых отрезков: '+zero.length});
+  const auxiliary=sheet.entities.filter(e=>e.kind==='construction');
+  if(auxiliary.length)issues.push({severity:'info',message:'Вспомогательных прямых: '+auxiliary.length+'. Они не включаются в DXF/печать.'});
   const contours=sheet.entities.filter(e=>e.kind==='polyline' && !e.closed);
   if(contours.length)issues.push({severity:'info',message:'Незамкнутых полилиний: '+contours.length});
   const untrusted=sheet.entities.filter(e=>!e.verified&&(e.kind==='dimension'||e.kind==='eskd')&&e.origin!=='manual');
