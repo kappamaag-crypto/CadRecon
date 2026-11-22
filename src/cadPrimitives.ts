@@ -64,6 +64,25 @@ export function circleByThreePoints(a:Point,b:Point,c:Point):Entity|null{
   e.center=center;e.radius=radius;
   return manual(e,'Окружность точно по трём неколлинеарным точкам');
 }
+/** Arc through start, intermediate and end points; the drawn sweep always
+ * passes through the intermediate point (canvas Y-down radians).
+ */
+export function arcThroughThreePoints(a:Point,middle:Point,b:Point):Entity|null{
+  const circle=circleByThreePoints(a,middle,b);
+  if(!circle?.center||!circle.radius)return null;
+  const center=circle.center;
+  const sa=Math.atan2(a.y-center.y,a.x-center.x),
+    ma=Math.atan2(middle.y-center.y,middle.x-center.x),
+    ba=Math.atan2(b.y-center.y,b.x-center.x);
+  const twopi=2*Math.PI,wrap=(value:number)=>((value%twopi)+twopi)%twopi;
+  const delta=wrap(ba-sa),through=wrap(ma-sa);
+  if(delta<1e-8||through<1e-8||Math.abs(through-delta)<1e-8)return null;
+  const e=entity('arc',[a,middle,b]);
+  e.center={...center};e.radius=circle.radius;
+  if(through<delta){e.startAngle=sa;e.endAngle=sa+delta;}
+  else{e.startAngle=ba;e.endAngle=ba+twopi-delta;}
+  return manual(e,'Дуга построена по трём неколлинеарным точкам с сохранением промежуточной точки на дуге');
+}
 export function regularPolygon(
   center:Point,reference:Point,sides:number,mode:'inscribed'|'circumscribed'='inscribed'
 ):Entity|null{
