@@ -22,9 +22,11 @@ describe('W3 pixel-evidence Hough vote consolidation',()=>{
     expect(out.lines[0].confidence).toBe(.8);
   });
   it('preserves TWO parallel strokes separated by WHITE paper',()=>{
-    const m=white();m.paint(10,19,180,20);m.paint(10,26,180,27);
+    const m=white();m.paint(10,19,180,20);m.paint(10,24,180,25);
+    // Gap 3px, separation 4px: inside deduplicator's 5.25px search
+    // radius, so ONLY the underlying white ink evidence may reject a merge.
     const out=deduplicateInkStrokeVotes([
-      line(10,20,180,20),line(10,26,180,26),
+      line(10,20,180,20),line(10,24,180,24),
     ],m.rgba,m.width,m.height);
     expect(out.removed).toBe(0);
   });
