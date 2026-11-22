@@ -6,7 +6,8 @@ import {rankLineByInkEvidence} from './lineEvidence';
 import {refineStrokeCenters} from './inkCenterline';
 import {classifyLinePattern} from './linePattern';
 import {otsuInkThreshold} from './scanInkThreshold';
-type P={x:number;y:number};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
+import {inferStrokeNormal,normalAgrees,type InkNormal} from './edgeOrientation';
+type P={x:number;y:number};type EdgeP=P&{normal:InkNormal};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];threshold:number}{
   const gray=new Uint8Array(width*height);const histogram=new Uint32Array(256);
@@ -26,21 +27,28 @@ function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];thresho
       edgeMask[i]=1;edgeCount++;
     }
   }
-  const sampled:P[]=[];
+  const sampled:EdgeP[]=[];
   // Bound Hough/fit time while sampling from the complete edge population,
   // never from a periodic pixel grid that can alias away whole thin strokes.
+  // Most edge pixels have ONE local normal. Voting at every angle invents
+  // tangent/chord candidates from circles, printed text and random noise.
   const edgeStride=Math.max(1,Math.ceil(edgeCount/45000));
   let observed=0;
   for(let i=0;i<n;i++){
     if(!edgeMask[i])continue;
-    if(observed++%edgeStride===0)sampled.push({x:i%width,y:Math.floor(i/width)});
+    if(observed++%edgeStride!==0)continue;
+    const x=i%width,y=Math.floor(i/width);
+    const normal=inferStrokeNormal(gray,width,height,x,y,th);
+    if(normal)sampled.push({x,y,normal});
   }
   const stride=Math.max(1,Math.ceil(sampled.length/15000));
   const pts=sampled.filter((_,i)=>i%stride===0);
   const acc=new Map<number,number>();const angles:Array<{c:number;s:number}>=[];for(let t=0;t<180;t+=2)angles.push({c:Math.cos(t*Math.PI/180),s:Math.sin(t*Math.PI/180)});
   const rhoMax=Math.ceil(Math.hypot(width,height)/2)+1; const rhoStride=rhoMax*4+20;
   for(const p of pts)for(let t=0;t<angles.length;t++){
-    const a=angles[t],r=Math.round((p.x*a.c+p.y*a.s)/2)+rhoMax;
+    const a=angles[t];
+    if(!normalAgrees(p.normal,a.c,a.s))continue;
+    const r=Math.round((p.x*a.c+p.y*a.s)/2)+rhoMax;
     const key=t*rhoStride+r;acc.set(key,(acc.get(key)||0)+1);
   }
   const peak=[...acc].filter(([,votes])=>votes>=Math.max(7,Math.floor(minLength/5))).sort((a,b)=>b[1]-a[1]).slice(0,340);
@@ -48,7 +56,8 @@ function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];thresho
   for(const [key,votes] of peak){
     const strideR=rhoStride,t=Math.floor(key/strideR),r=(key-t*strideR-rhoMax)*2;
     const {c,s}=angles[t],along={x:-s,y:c},matches:number[]=[];
-    for(const p of sampled)if(Math.abs(p.x*c+p.y*s-r)<1.7)matches.push(p.x*along.x+p.y*along.y);
+    for(const p of sampled)if(normalAgrees(p.normal,c,s)&&Math.abs(p.x*c+p.y*s-r)<1.7)
+      matches.push(p.x*along.x+p.y*along.y);
     matches.sort((a,b)=>a-b);
     // Test the full Hough axis before splitting at white spaces. Repeated
     // dashed/centre marks can form one editable STYLED LINE proposal without
