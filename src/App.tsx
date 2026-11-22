@@ -654,7 +654,8 @@ export default function App(){
         onReview={()=>{setPanel('recognition');setReviewPage(0);}}
         onCompare={()=>{setCompare(true);setSource(true);}}
         onExport={exportDxf} onCalibrate={()=>setTool('calibrate')}
-        onEdit={()=>setPanel('tools')} onStop={()=>localController.current?.abort()}/>}
+        onEdit={()=>setPanel('tools')} onStop={()=>localController.current?.abort()}
+        onPrepareOcr={()=>void prepareBrowserOcr()}/>}
       {panel==='tools'&&<>
       <CadPalette tools={TOOLS} active={tool} onSelect={next=>{setTool(next);
         setStatus('Инструмент: '+(TOOLS.find(x=>x.id===next)?.title||next)+'. Укажите точки на чертеже.');}}
