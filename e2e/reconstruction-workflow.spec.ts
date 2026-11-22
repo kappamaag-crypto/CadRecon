@@ -5,6 +5,11 @@ test('PDF/scan recognition is first, CAD is secondary and export requires a sour
   await page.goto('/CadRecon/');
   await expect(page.locator('.panel-tabs button[title="PDF → DXF"]')).toHaveClass(/active/);
   await expect(page.getByText('PDF / скан → редактируемый 2D DXF')).toBeVisible();
+  const vertical=page.getByRole('checkbox',{name:/Искать вертикальные надписи/});
+  await expect(vertical).not.toBeChecked();
+  await vertical.check();
+  await expect(vertical).toBeChecked();
+  await expect(page.getByText(/огромного A0 возможен неполный охват/)).toBeVisible();
   await expect(page.getByRole('button',{name:/Точное распознавание в браузере/})).toBeDisabled();
   await expect(page.getByText(/Лист не загружен/)).toBeVisible();
   await page.locator('.panel-tabs button[title="Инструменты"]').click();

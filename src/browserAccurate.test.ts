@@ -67,6 +67,17 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(traceImage).toHaveBeenCalledOnce();
     expect(recognizeText).toHaveBeenCalledOnce();
   });
+  it('honors opt-in vertical OCR from the main recognition workflow without a separate server',async()=>{
+    const sheet=newProject().sheets[0];
+    sheet.sourceType='image';sheet.image='data:image/png;base64,fixture';
+    vi.mocked(traceImage).mockResolvedValue({entities:[],note:'trace'});
+    vi.mocked(recognizeText).mockResolvedValue({entities:[],text:''});
+    await recognizeBrowserAccurate(sheet,undefined,undefined,'auto','rus',true);
+    expect(recognizeText).toHaveBeenCalledOnce();
+    expect(vi.mocked(recognizeText).mock.calls[0][3]).toEqual({
+      mode:'enhanced',languages:'rus',detectVertical:true,maxRetries:35,
+    });
+  });
   it('keeps browser geometry when OCR models are unavailable or offline',async ()=>{
     const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,fixture';
     vi.mocked(traceImage).mockResolvedValue({entities:[line(0,0,100,0)],note:'scan'});
