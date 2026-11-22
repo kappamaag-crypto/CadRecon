@@ -17,7 +17,7 @@ test('browser review lists unverified scan geometry in bounded pages, not just O
     name:'review-project.cadrecon.json',mimeType:'application/json',
     buffer:Buffer.from(JSON.stringify(p)),
   });
-  await page.getByRole('button',{name:'Распознавание',exact:true}).click();
+  await page.locator('.panel-tabs button[title="Распознавание"]').click();
   await expect(page.getByRole('heading',{name:'Проверка распознавания'})).toBeVisible();
   await page.getByRole('button',{name:/Геометрия · 121 непроверенных/}).click();
   await expect(page.locator('.recognition-item')).toHaveCount(60);
