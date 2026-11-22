@@ -5,7 +5,7 @@ interface OcrLine {text:string;confidence:number;box:[number,number,number,numbe
 interface ScanLine {a:Coord;b:Coord;confidence:number;}
 interface ScanCircle {center:Coord;radius:number;confidence:number;}
 interface ScanPoly {points:Coord[];confidence:number;}
-interface AdvancedResponse {width:number;height:number;engine:string;texts:OcrLine[];lines:ScanLine[];circles:ScanCircle[];polygons?:ScanPoly[];warnings?:string[];}
+export interface AdvancedResponse {width:number;height:number;engine:string;texts:OcrLine[];lines:ScanLine[];circles:ScanCircle[];polygons?:ScanPoly[];warnings?:string[];}
 export interface AdvancedResult {entities:Entity[];note:string;}
 export function validateAdvancedEndpoint(value:string):string {
   const url=new URL(value.trim());
