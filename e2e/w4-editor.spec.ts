@@ -277,3 +277,52 @@ test('W4 searchable command palette, hotkey and adjustable/collapsible sidebar',
   await page.getByRole('button',{name:'Развернуть боковую панель'}).click();
   await expect(search).toBeVisible();
 });
+
+
+test('W4 manual 3-point circle, native ellipse and non-printing construction line survive JSON/DXF',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];sheet.width=300;sheet.height=200;
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Окружность по 3 точкам'}).click();
+  await worldClick(page,{x:150,y:60});
+  await worldClick(page,{x:110,y:100});
+  await worldClick(page,{x:150,y:140});
+  await page.getByRole('button',{name:'Эллипс: центр и две оси'}).click();
+  await worldClick(page,{x:220,y:100});
+  await worldClick(page,{x:260,y:100});
+  await worldClick(page,{x:220,y:120});
+  await page.getByRole('button',{name:/Вспомогательная горизонталь/}).click();
+  await worldClick(page,{x:75,y:110});
+  const data=await exportProject(page),entities=data.sheets[0].entities;
+  expect(entities.filter(e=>e.kind==='circle')).toHaveLength(1);
+  expect(entities.filter(e=>e.kind==='ellipse')).toHaveLength(1);
+  expect(entities.filter(e=>e.kind==='construction')).toHaveLength(1);
+  const ellipse=entities.find(e=>e.kind==='ellipse')!;
+  expect(ellipse.axisRatio).toBeCloseTo(.5,1);
+  expect(entities.every(e=>!e.verified)).toBe(true);
+  page.once('dialog',d=>d.accept());
+  const [download]=await Promise.all([page.waitForEvent('download'),
+    page.getByRole('button',{name:'↓ DXF',exact:true}).click()]);
+  const dxf=await readFile((await download.path())!,'utf8');
+  expect(dxf).toContain('\n0\nELLIPSE\n');
+  expect(dxf).toContain('\n0\nCIRCLE\n');
+  expect(dxf).not.toContain('\n0\nXLINE\n');
+});
+test('W4 horizontal dimension computes projected distance and remains unverified without mm calibration',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];sheet.width=300;sheet.height=200;
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Горизонтальный размер'}).click();
+  await worldClick(page,{x:40,y:70});
+  await worldClick(page,{x:140,y:110});
+  const data=await exportProject(page);
+  const dim=data.sheets[0].entities[0];
+  expect(dim.kind).toBe('dimension');
+  expect(dim.dimMode).toBe('horizontal');
+  expect(dim.text).toBe('?');
+  expect(dim.verified).toBe(false);
+  page.once('dialog',d=>d.accept());
+  const [dl]=await Promise.all([page.waitForEvent('download'),
+    page.getByRole('button',{name:'↓ DXF',exact:true}).click()]);
+  const dxf=await readFile((await dl.path())!,'utf8');
+  expect(dxf).toContain('AcDbRotatedDimension');
+  expect(dxf).toContain('\n42\n100\n');
+});
