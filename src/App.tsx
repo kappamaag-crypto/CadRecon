@@ -25,7 +25,8 @@ import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'select',title:'Выделение / перенос',icon:'↖',hotkey:'V'},{id:'pan',title:'Перемещение полотна',icon:'✋',hotkey:'H'},
-  {id:'point',title:'Точка',icon:'·',hotkey:'P'},{id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},{id:'polyline',title:'Полилиния',icon:'〽'},
+  {id:'point',title:'Точка',icon:'·',hotkey:'P'},{id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},
+  {id:'line-dashed',title:'Штриховая линия (DASHED)',icon:'┄'},{id:'polyline',title:'Полилиния',icon:'〽'},
   {id:'rectangle',title:'Прямоугольник',icon:'▭',hotkey:'R'},
   {id:'trim',title:'Подрезать линию по границе',icon:'✂'},{id:'extend',title:'Продлить линию до границы',icon:'↗'},
   {id:'offset',title:'Параллельный отрезок (OFFSET)',icon:'⇢'},
@@ -482,6 +483,15 @@ export default function App(){
         <div className="property-type"><span>Тип</span><strong>{selection.kind}</strong></div>
         <label>Слой<select value={selection.layer} onChange={e=>modifyEntity({...selection,layer:e.target.value})}>{project.layers.map(l=><option key={l.name}>{l.name}</option>)}</select></label>
         <label>Источник <input value={selection.origin} disabled/></label>
+        {selection.kind==='line'&&<label>Тип линии (DXF)
+          <select aria-label="Тип линии (DXF)" value={selection.lineStyle||'solid'}
+            onChange={e=>modifyEntity({...selection,
+              lineStyle:e.target.value==='solid'?undefined:e.target.value as 'dashed'|'center'})}>
+            <option value="solid">Сплошная (CONTINUOUS)</option>
+            <option value="dashed">Штриховая (DASHED)</option>
+            <option value="center">Осевая / штрихпунктирная (CENTER)</option>
+          </select>
+        </label>
         <label className="check"><input type="checkbox" checked={selection.verified} onChange={e=>modifyEntity({...selection,verified:e.target.checked},true)}/> Проверен по оригиналу</label>
         {['text','leader','dimension','table','stamp','eskd'].includes(selection.kind)&&<label>Текст <textarea value={selection.text||''} onChange={e=>modifyEntity({...selection,text:e.target.value})} rows={3}/></label>}
         {selection.kind==='eskd'&&<label>Тип обозначения

@@ -235,3 +235,25 @@ test('W4 ARRAY creates editable copies of selected line in a single Undo',async 
   await page.getByRole('button',{name:/Отмена/}).click();
   expect((await exportProject(page)).sheets[0].entities).toHaveLength(1);
 });
+
+test('W4 selected LINE linetype is editable and persists to JSON and DXF',async ({page})=>{
+  const project=newProject(),s=project.sheets[0];s.width=300;s.height=200;
+  const line=entity('line',[{x:40,y:100},{x:160,y:100}]);s.entities=[line];
+  await putProject(page,project);
+  await worldClick(page,{x:85,y:100});
+  await page.locator('.panel-tabs button[title="Свойства"]').click();
+  const style=page.getByLabel('Тип линии (DXF)');
+  await expect(style).toBeVisible();
+  await style.selectOption('dashed');
+  let updated=await exportProject(page);
+  expect(updated.sheets[0].entities[0].lineStyle).toBe('dashed');
+  expect(updated.sheets[0].entities[0].verified).toBe(false);
+  await style.selectOption('center');
+  updated=await exportProject(page);
+  expect(updated.sheets[0].entities[0].lineStyle).toBe('center');
+  page.once('dialog',d=>d.accept());
+  const [download]=await Promise.all([
+    page.waitForEvent('download'),page.getByRole('button',{name:'↓ DXF',exact:true}).click(),
+  ]);
+  expect(await readFile((await download.path())!,'utf8')).toContain('\n6\nCENTER\n');
+});

@@ -203,8 +203,9 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(dist(a,b)<1e-5)return;
     if(tool==='measure'){onMessage('Расстояние: '+measure(a,b,sheet.calibrated));return;}
     if(tool==='calibrate'){const s=window.prompt('Укажите фактическое расстояние между точками в миллиметрах',String(Math.round(dist(a,b))));if(s===null)return;const mm=Number(s.replace(',','.'));if(!Number.isFinite(mm)||mm<=0){onMessage('Ошибка: требуется положительное число в мм');return;}onCalibrate(mm/dist(a,b));return;}
-    const kind=tool as Entity['kind'],layer=kind==='dimension'?'Размеры':kind==='axis'?'Оси':kind==='leader'?'Текст':'Контуры';
+    const kind=(tool==='line-dashed'?'line':tool) as Entity['kind'],layer=kind==='dimension'?'Размеры':kind==='axis'?'Оси':kind==='leader'?'Текст':'Контуры';
     const e=entity(kind,[a,b],layer);
+    if(tool==='line-dashed')e.lineStyle='dashed';
     if(kind==='circle'){e.center=a;e.radius=dist(a,b);}
     if(kind==='dimension'){e.offset=Math.max(10,dist(a,b)*.12);e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);e.text=sheet.calibrated?Number(dist(a,b).toFixed(2)).toString():'?';}
     if(kind==='leader'){e.text=window.prompt('Текст выноски','')||'';e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);}
