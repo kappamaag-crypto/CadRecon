@@ -2,6 +2,7 @@ import {describe,it,expect} from 'vitest';
 import {extractPdfPaths} from './pdfPaths';
 import {newProject} from './model';
 import {createDxf} from './dxf';
+import {pdfCubicAt,type PdfCubic} from './pdfBezierClip';
 
 const OPS={constructPath:91,save:10,restore:11,transform:12,
   moveTo:13,lineTo:14,curveTo:15,curveTo2:16,curveTo3:17,
@@ -145,7 +146,7 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(out.rectangularClipLines).toBe(2);
     expect(out.clippedGeometry).toBe(0);
   });
-  it('culls entirely invisible native circles/Bezier but never trims a partly clipped curve',()=>{
+  it('culls invisible native circles/Bezier and exactly clips partially visible curves',()=>{
     const clip=[29,[Float32Array.from([0,20,20,1,100,20,1,100,100,1,20,100,4])],null];
     const circle=(cx:number,cy:number,r:number)=>{
       const d=k*r;
@@ -162,10 +163,55 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
       [clip,circle(50,50,12),circle(200,180,10),outside,inside,crossing]);
     expect(out.entities.filter(e=>e.kind==='circle')).toHaveLength(1);
     expect(out.entities.some(e=>e.kind==='bezier'&&e.reason?.includes('полностью внутри'))).toBe(true);
-    expect(out.entities.some(e=>e.kind==='bezier'&&e.reason?.includes('частичное отсечение'))).toBe(true);
+    expect(out.entities.some(e=>e.kind==='bezier'&&e.reason?.includes('прямоугольное отсечение рассчитано'))).toBe(true);
     expect(out.fullyClippedObjects).toBe(2);
-    expect(out.clippedGeometry).toBe(1);
+    expect(out.clippedGeometry).toBe(0);
+    expect(out.rectangularClipCurves).toBe(1);
     expect(out.entities.every(e=>!e.verified)).toBe(true);
+  });
+
+  it('splits partly clipped cubic PDF circle into exact SPLINE quarters, never exports invisible full CIRCLE',()=>{
+    const clip=[29,[Float32Array.from([0,20,20,1,100,20,1,100,100,1,20,100,4])],null];
+    const cx=80,cy=60,r=35,d=k*r;
+    const circle=[20,[Float32Array.from([
+      0,cx+r,cy,
+      2,cx+r,cy+d,cx+d,cy+r,cx,cy+r,
+      2,cx-d,cy+r,cx-r,cy+d,cx-r,cy,
+      2,cx-r,cy-d,cx-d,cy-r,cx,cy-r,
+      2,cx+d,cy-r,cx+r,cy-d,cx+r,cy,4,
+    ])],null];
+    const out=extract([91,91],[clip,circle]);
+    expect(out.entities.some(e=>e.kind==='circle'||e.kind==='ellipse')).toBe(false);
+    const curves=out.entities.filter(e=>e.kind==='bezier');
+    expect(curves.length).toBeGreaterThan(0);
+    expect(out.rectangularClipCurves).toBeGreaterThan(0);
+    for(const curve of curves){
+      const points=curve.points as PdfCubic;
+      for(let i=0;i<=40;i++){
+        const p=pdfCubicAt(points,i/40);
+        expect(p.x).toBeGreaterThanOrEqual(20-1e-6);
+        expect(p.x).toBeLessThanOrEqual(100+1e-6);
+        expect(p.y).toBeGreaterThanOrEqual(250-1e-6);
+        expect(p.y).toBeLessThanOrEqual(330+1e-6);
+      }
+    }
+    const project=newProject();project.sheets[0].entities=curves;
+    const dxf=createDxf(project.sheets[0],project);
+    expect((dxf.match(/\n0\nSPLINE\n/g)||[]).length).toBe(curves.length);
+    expect(dxf).not.toContain('\n0\nCIRCLE\n');
+  });
+  it('keeps only visible STROKED rectangle edges, never inserts a false clipping-boundary closure',()=>{
+    const clip=[29,[Float32Array.from([0,20,20,1,100,20,1,100,100,1,20,100,4])],null];
+    const outsideRectangle=[20,[Float32Array.from([
+      0,-30,30,1,150,30,1,150,95,1,-30,95,4,
+    ])],null];
+    const out=extract([91,91],[clip,outsideRectangle]);
+    expect(out.entities).toHaveLength(2);
+    expect(out.entities.every(e=>e.kind==='line'&&e.points.length===2)).toBe(true);
+    expect(out.entities.every(e=>Math.abs(e.points[0].y-e.points[1].y)<1e-6)).toBe(true);
+    expect(out.entities.every(e=>e.points[0].x>=20-1e-8&&e.points[1].x<=100+1e-8)).toBe(true);
+    expect(out.rectangularClipLines).toBe(4);
+    expect(out.entities.some(e=>e.kind==='polyline')).toBe(false);
   });
   it('refuses to falsely clip vectors through a rotated/nonrectangular path',()=>{
     const irregular=[29,[Float32Array.from([
