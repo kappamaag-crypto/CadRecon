@@ -39,6 +39,8 @@ export default function App(){
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
  const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
  const [modelsReady,setModelsReady]=useState(false);
+ const [reviewType,setReviewType]=useState<'geometry'|'text'|'semantic'>('semantic');
+ const [reviewPage,setReviewPage]=useState(0);
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
@@ -104,6 +106,7 @@ export default function App(){
      if(ctrl.signal.aborted)return;
      addToOriginalSheet(sheetId,result.entities);
      if(result.ocrText)setOcrText(result.ocrText);
+     setReviewType(result.scanned?'geometry':'semantic');setReviewPage(0);
      setPanel('recognition');
      setStatus(result.note+(result.warnings.length?' Предупреждения: '+result.warnings.slice(0,2).join('; '):''));
    }catch(e){setStatus(ctrl.signal.aborted?'Распознавание отменено.':'Браузерное распознавание: '+String(e)+'. Попробуйте обводку и OCR по отдельности.');}
@@ -166,6 +169,7 @@ export default function App(){
      const newSymbols=symbols.filter(e=>!existing.has(e.sourceId+'|'+e.kind));
      const fresh=[...extracted,...newDims,...newSymbols];
      if(fresh.length)addEntities(fresh);
+     setReviewType('semantic');setReviewPage(0);
      setPanel('recognition');
      setStatus('Автоанализ: '+newDims.length+' размерных объектов, '+newSymbols.length+' обозначений ЕСКД, '+recognized.chains.length+' цепочек. Все требуют проверки.');
    } catch(err){setStatus('Ошибка семантического распознавания: '+String(err));}
@@ -209,6 +213,16 @@ export default function App(){
  const selection=sheet.entities.find(e=>e.id===selected);
  const issues=useMemo(()=>auditSheet(sheet,project),[sheet,project]);
  const counts=useMemo(()=>sheet.entities.reduce((acc,e)=>(acc[e.kind]=(acc[e.kind]||0)+1,acc),{} as Record<string,number>),[sheet]);
+ const reviewGroups=useMemo(()=>{
+   const fresh=sheet.entities.filter(e=>!e.verified&&e.origin!=='manual');
+   const geometry=fresh.filter(e=>['line','polyline','circle','arc','bezier','axis'].includes(e.kind));
+   const text=fresh.filter(e=>e.kind==='text');
+   const semantic=fresh.filter(e=>e.kind==='dimension'||e.kind==='eskd');
+   for(const group of [geometry,text,semantic])group.sort((a,b)=>(a.confidence??1)-(b.confidence??1));
+   return {geometry,text,semantic};
+ },[sheet.entities]);
+ const reviewed=reviewGroups[reviewType];
+ const reviewStart=reviewPage*60,reviewPageCount=Math.max(1,Math.ceil(reviewed.length/60));
  return <div className="app">
   <header className="topbar">
     <div className="brand"><span className="brandicon">⌗</span><div><strong>CadRecon</strong><small>PDF → CAD · ВАШ БРАУЗЕР</small></div></div>
@@ -289,17 +303,27 @@ export default function App(){
       <h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
-        <p className="muted">Значения в оранжевом слое не меняют геометрию и не подтверждены. Проверяйте каждый объект по подложке и независимым размерам.</p>
+        <p className="muted">Новые объекты CAD не подтверждаются автоматически. Балл алгоритма — эвристика, а не статистическая вероятность правильности. Сравните с оригиналом, при необходимости исправьте или удалите.</p>
         <div className="stack">
           <button className="action" disabled={!!busy} onClick={runSemanticRecognition}>↻ Повторить автоанализ</button>
-          {sheet.entities.filter(e=>['dimension','eskd'].includes(e.kind)&&e.origin!=='manual'&&!e.verified).slice(0,160).map(e=>
+          <div className="stack">
+            <button className="action" aria-pressed={reviewType==='geometry'} onClick={()=>{setReviewType('geometry');setReviewPage(0);}}>Геометрия · {reviewGroups.geometry.length} непроверенных</button>
+            <button className="action" aria-pressed={reviewType==='text'} onClick={()=>{setReviewType('text');setReviewPage(0);}}>OCR-надписи · {reviewGroups.text.length} непроверенных</button>
+            <button className="action" aria-pressed={reviewType==='semantic'} onClick={()=>{setReviewType('semantic');setReviewPage(0);}}>Размеры и ЕСКД · {reviewGroups.semantic.length} непроверенных</button>
+          </div>
+          <p className="muted">Показаны объекты с минимальным алгоритмическим баллом (первым делом проверьте их). Страница {Math.min(reviewPage+1,reviewPageCount)} из {reviewPageCount}; кандидатов в категории: {reviewed.length}.</p>
+          {reviewed.slice(reviewStart,reviewStart+60).map(e=>
             <button key={e.id} className={'recognition-item '+(selected===e.id?'active':'')} onClick={()=>{setSelected(e.id);setPanel('properties');}}>
-              <strong>{e.kind==='dimension'?'Размер':'ЕСКД / '+e.symbol}: {e.text||'—'}</strong>
-              <small>Уверенность: {Math.round((e.confidence||0)*100)}% · {e.reason||'Нет дополнительного подтверждения'}</small>
-              <span>Открыть свойства для проверки</span>
+              <strong>{e.kind==='dimension'?'Размер':e.kind==='eskd'?'ЕСКД / '+e.symbol:e.kind==='text'?'Текст':e.kind}: {e.text||((e.points[0]?.x??0).toFixed(1)+', '+(e.points[0]?.y??0).toFixed(1))}</strong>
+              <small>Балл: {e.confidence===undefined?'не задан':Math.round(e.confidence*100)+'%'} · {e.reason||'Нужна проверка по подложке'}</small>
+              <span>Открыть свойства · принять, скорректировать или удалить</span>
             </button>
           )}
-          {sheet.entities.filter(e=>['dimension','eskd'].includes(e.kind)&&e.origin!=='manual'&&!e.verified).length===0&&<p className="muted">Непроверенных кандидатов нет.</p>}
+          {reviewed.length===0&&<p className="muted">В выбранной категории непроверенных кандидатов нет. Другие категории могут содержать непроверенные объекты.</p>}
+          {reviewPageCount>1&&<div className="stack">
+            <button className="action" disabled={reviewPage<=0} onClick={()=>setReviewPage(n=>Math.max(0,n-1))}>← Предыдущие 60</button>
+            <button className="action" disabled={reviewPage>=reviewPageCount-1} onClick={()=>setReviewPage(n=>Math.min(reviewPageCount-1,n+1))}>Следующие 60 →</button>
+          </div>}
         </div>
       </>}
       {panel==='layers'&&<><h3>Слои</h3><p className="muted">Цвет, видимость и блокировка каждого типа CAD-объектов.</p><div className="layerlist">{project.layers.map(l=><div className="layer" key={l.name}><span className="swatch" style={{background:l.color}}/><span className="layername">{l.name}</span><button title="Видимость" onClick={()=>apply(p=>({...p,layers:p.layers.map(x=>x.name===l.name?{...x,visible:!x.visible}:x)}))}>{l.visible?'◉':'○'}</button><button title="Блокировка" onClick={()=>apply(p=>({...p,layers:p.layers.map(x=>x.name===l.name?{...x,locked:!x.locked}:x)}))}>{l.locked?'🔒':'▢'}</button></div>)}</div><button className="action" onClick={()=>{const name=window.prompt('Название нового слоя');if(!name?.trim()||project.layers.some(l=>l.name===name.trim()))return;apply(p=>({...p,layers:[...p.layers,{name:name.trim(),color:'#60a5fa',visible:true,locked:false}]}));}}>＋ Добавить слой</button></>}
@@ -314,7 +338,7 @@ export default function App(){
             {ESKD_SYMBOLS.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
           </select>
         </label>}
-        {selection.confidence!==undefined&&<div className="issue warning">Уверенность алгоритма: <b>{Math.round(selection.confidence*100)}%</b>. Проверка по оригиналу обязательна.</div>}
+        {selection.confidence!==undefined&&<div className="issue warning">Эвристический балл алгоритма: <b>{Math.round(selection.confidence*100)}%</b> (не вероятность). Проверка по оригиналу обязательна.</div>}
         {selection.reason&&<p className="notice">{selection.reason}</p>}
         {selection.size!==undefined&&<label>Высота текста <input type="number" step=".1" value={selection.size} onChange={e=>modifyEntity({...selection,size:Number(e.target.value)||1})}/></label>}
         {selection.offset!==undefined&&<label>Отступ размерной линии <input type="number" value={selection.offset} onChange={e=>modifyEntity({...selection,offset:Number(e.target.value)||0})}/></label>}
