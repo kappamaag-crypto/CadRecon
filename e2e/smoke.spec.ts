@@ -3,8 +3,8 @@ import {readFile} from 'node:fs/promises';
 test('CAD editor opens, creates a line, exports editable DXF',async ({page})=>{
   await page.goto('/CadRecon/');
   await expect(page.getByText('CadRecon').first()).toBeVisible();
-  await expect(page.getByRole('button',{name:'Отрезок'})).toBeVisible();
-  await page.getByRole('button',{name:'Отрезок'}).click();
+  await expect(page.getByRole('button',{name:'Отрезок',exact:true})).toBeVisible();
+  await page.getByRole('button',{name:'Отрезок',exact:true}).click();
   const cv=page.locator('canvas[aria-label="Редактор CAD"]');
   const rect=await cv.boundingBox();expect(rect).toBeTruthy();
   await cv.click({position:{x:rect!.width*.25,y:rect!.height*.4}});
