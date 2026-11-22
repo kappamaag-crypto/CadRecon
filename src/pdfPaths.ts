@@ -10,7 +10,7 @@
 import {entity,type Entity,type Point} from './model';
 
 type Matrix=[number,number,number,number,number,number];
-type Viewport={convertToViewportPoint:(x:number,y:number)=>[number,number]};
+type Viewport={convertToViewportPoint:(x:number,y:number)=>number[]};
 type Ops={constructPath:number;save:number;restore:number;transform:number;
   moveTo:number;lineTo:number;curveTo:number;curveTo2:number;curveTo3:number;
   rectangle:number;closePath:number;endPath?:number;clip?:number;eoClip?:number};
@@ -165,8 +165,9 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
           else if(op===2)cubic(transform(vals[0],vals[1]),transform(vals[2],vals[3]),transform(vals[4],vals[5]));
           else if(op===3){
             const q=transform(vals[0],vals[1]),end=transform(vals[2],vals[3]);
-            if(current){
-              const c1={x:current.x+2*(q.x-current.x)/3,y:current.y+2*(q.y-current.y)/3};
+            const anchor=current as Point|null;
+            if(anchor){
+              const c1={x:anchor.x+2*(q.x-anchor.x)/3,y:anchor.y+2*(q.y-anchor.y)/3};
               const c2={x:end.x+2*(q.x-end.x)/3,y:end.y+2*(q.y-end.y)/3};
               cubic(c1,c2,end);
             }
