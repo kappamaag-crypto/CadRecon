@@ -56,6 +56,8 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'arc',title:'Дуга: центр, начало и конец',icon:'⌒'},
   {id:'arc-3pt',title:'Дуга по 3 точкам на кривой',icon:'◠'},
   {id:'dimension',title:'Размер по двум точкам',icon:'↔',hotkey:'D'},
+  {id:'dimension-h',title:'Горизонтальный размер',icon:'↔'},
+  {id:'dimension-v',title:'Вертикальный размер',icon:'↕'},
   {id:'dimension-3pt',title:'Размер с размещением (3 точки)',icon:'⇤'},
   {id:'axis',title:'Осевая линия',icon:'┈'},
   {id:'leader',title:'Выноска',icon:'➤'},{id:'hatch',title:'Замкнутый контур / заливка',icon:'▨'},

@@ -37,8 +37,15 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
   else if(e.kind==='arc'&&e.center&&e.radius){ctx.beginPath();ctx.arc(e.center.x,e.center.y,e.radius,e.startAngle||0,e.endAngle||0);ctx.stroke();}
   else if(e.kind==='text')text(ctx,pts[0],e.text||'Текст',e.size||4);
   else if(e.kind==='dimension'&&pts.length>=2){
-    const [a,b]=pts,v=sub(b,a),len=Math.max(1e-9,dist(a,b)),u=mul(v,1/len),n={x:-u.y,y:u.x};
-    const off=mul(n,e.offset??20),aa=add(a,off),bb=add(b,off);
+    const [a,b]=pts,v=sub(b,a),len=Math.max(1e-9,dist(a,b)),normal={x:-v.y/len,y:v.x/len};
+    const offset=e.offset??20;
+    const baseline=e.dimMode==='horizontal'?(a.y+b.y)/2+offset:
+      e.dimMode==='vertical'?(a.x+b.x)/2+offset:0;
+    const aa=e.dimMode==='horizontal'?{x:a.x,y:baseline}:
+      e.dimMode==='vertical'?{x:baseline,y:a.y}:add(a,mul(normal,offset));
+    const bb=e.dimMode==='horizontal'?{x:b.x,y:baseline}:
+      e.dimMode==='vertical'?{x:baseline,y:b.y}:add(b,mul(normal,offset));
+    const dim=sub(bb,aa),dlen=Math.max(1e-9,dist(aa,bb)),u=mul(dim,1/dlen),n={x:-u.y,y:u.x};
     poly(ctx,[a,aa]);ctx.stroke();poly(ctx,[b,bb]);ctx.stroke();poly(ctx,[aa,bb]);ctx.stroke();
     arrow(ctx,aa,u,Math.max(lineWidth*6,Math.min(6,Math.abs(e.offset??20)/3)));
     arrow(ctx,bb,mul(u,-1),Math.max(lineWidth*6,Math.min(6,Math.abs(e.offset??20)/3)));

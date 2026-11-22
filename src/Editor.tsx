@@ -276,6 +276,21 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       e.closed=true;e.verified=false;e.reason='Прямоугольник создан вручную: проверьте размеры';
       onCreate(e);return;
     }
+    if(tool==='dimension-h'||tool==='dimension-v'){
+      if(pts.length<2){setDraft(pts);return;}
+      setDraft([]);
+      const [a,b]=pts,horizontal=tool==='dimension-h';
+      const value=horizontal?Math.abs(b.x-a.x):Math.abs(b.y-a.y);
+      if(value<1e-6){onMessage('Размер: выбранные точки имеют нулевую проекцию по заданной оси.');return;}
+      const dim=entity('dimension',[a,b],'Размеры');
+      dim.dimMode=horizontal?'horizontal':'vertical';
+      dim.offset=Math.max(12,Math.min(dist(a,b)*.17,90));
+      dim.size=sheet.calibrated?3.5:Math.max(9,sheet.width/180);
+      dim.text=sheet.calibrated?Number(value.toFixed(2)).toString():'?';
+      dim.reason='Размер по '+(horizontal?'горизонтальной':'вертикальной')+
+        ' проекции; не ассоциативный, требуется контроль размера и калибровки';
+      onCreate(dim);return;
+    }
     if(tool==='dimension-3pt'){
       if(pts.length<3){setDraft(pts);return;}
       setDraft([]);

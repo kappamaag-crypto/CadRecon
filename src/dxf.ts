@@ -73,12 +73,34 @@ function entityDxf(e:Entity){
 interface DimBlock {name:string;data:string;entity:string;}
 function dimensionBlock(e:Entity,i:number):DimBlock {
   const [a,b]=e.points,layer=e.layer,name='*D'+String(i+1);
-  const d=sub(b,a),len=Math.max(1e-9,Math.hypot(d.x,d.y)),n={x:-d.y/len,y:d.x/len},shift=mul(n,e.offset??20),aa=add(a,shift),bb=add(b,shift),m=mid(aa,bb),height=Math.max(2,e.size||3.5);
-  const u=mul(d,1/len),arrow=5,arr=(p:Point,dir:number)=>polygon([p,add(p,add(mul(u,dir*arrow),mul(n,arrow/4))),add(p,add(mul(u,dir*arrow),mul(n,-arrow/4)))],layer,true);
+  const d=sub(b,a),len=Math.max(1e-9,Math.hypot(d.x,d.y)),n={x:-d.y/len,y:d.x/len};
+  const offset=e.offset??20;
+  const baseline=e.dimMode==='horizontal'?(a.y+b.y)/2+offset:
+    e.dimMode==='vertical'?(a.x+b.x)/2+offset:0;
+  const aa=e.dimMode==='horizontal'?{x:a.x,y:baseline}:
+    e.dimMode==='vertical'?{x:baseline,y:a.y}:add(a,mul(n,offset));
+  const bb=e.dimMode==='horizontal'?{x:b.x,y:baseline}:
+    e.dimMode==='vertical'?{x:baseline,y:b.y}:add(b,mul(n,offset));
+  const direction=sub(bb,aa),dl=Math.max(1e-9,Math.hypot(direction.x,direction.y));
+  const u=mul(direction,1/dl),normal={x:-u.y,y:u.x};
+  const m=mid(aa,bb),height=Math.max(2,e.size||3.5);
+  const arrow=5,arr=(p:Point,dir:number)=>polygon([p,
+    add(p,add(mul(u,dir*arrow),mul(normal,arrow/4))),
+    add(p,add(mul(u,dir*arrow),mul(normal,-arrow/4)))],layer,true);
   const label=e.text||Number(dimensionLength(e).toFixed(2)).toString();
-  const parts=dxfLine(a,aa,layer)+dxfLine(b,bb,layer)+dxfLine(aa,bb,layer)+arr(aa,1)+arr(bb,-1)+dxfText(add(m,mul(n,-height*.7)),label,height,layer);
-  const block=emit(0,'BLOCK',100,'AcDbEntity',8,layer,100,'AcDbBlockBegin',2,name,70,1,10,0,20,0,30,0,3,name,1,'')+parts+emit(0,'ENDBLK',100,'AcDbEntity',8,layer,100,'AcDbBlockEnd');
-  const obj=emit(0,'DIMENSION',100,'AcDbEntity',8,layer,100,'AcDbDimension',2,name,3,'Standard',70,32,1,escapeText(e.text||''),42,clamp(dimensionLength(e)),10,clamp(m.x),20,clamp(-m.y),30,0,11,clamp(m.x),21,clamp(-m.y),31,0)+emit(100,'AcDbAlignedDimension')+p2(13,a)+p2(14,b);
+  const parts=dxfLine(a,aa,layer)+dxfLine(b,bb,layer)+dxfLine(aa,bb,layer)+
+    arr(aa,1)+arr(bb,-1)+dxfText(add(m,mul(normal,-height*.7)),label,height,layer);
+  const block=emit(0,'BLOCK',100,'AcDbEntity',8,layer,100,'AcDbBlockBegin',
+    2,name,70,1,10,0,20,0,30,0,3,name,1,'')+
+    parts+emit(0,'ENDBLK',100,'AcDbEntity',8,layer,100,'AcDbBlockEnd');
+  const rotated=e.dimMode==='horizontal'||e.dimMode==='vertical';
+  const obj=emit(0,'DIMENSION',100,'AcDbEntity',8,layer,100,'AcDbDimension',
+    2,name,3,'Standard',70,rotated?32:33,1,escapeText(e.text||''),
+    42,clamp(dimensionLength(e)),10,clamp(m.x),20,clamp(-m.y),
+    30,0,11,clamp(m.x),21,clamp(-m.y),31,0)+
+    (rotated?emit(100,'AcDbAlignedDimension')+p2(13,a)+p2(14,b)+
+      emit(100,'AcDbRotatedDimension',50,e.dimMode==='horizontal'?0:90):
+      emit(100,'AcDbAlignedDimension')+p2(13,a)+p2(14,b));
   return {name,data:block,entity:obj};
 }
 function eskdBlock(e:Entity,i:number):DimBlock{

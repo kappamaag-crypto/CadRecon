@@ -5,7 +5,7 @@ export type EskdType = 'weld'|'roughness'|'datum'|'geotol'|'section'|'detail'|'e
 export interface Entity {
   id:string; kind:Kind; layer:string; origin:Origin; verified:boolean;
   points:Point[]; center?:Point; radius?:number; axisRatio?:number; startAngle?:number; endAngle?:number;
-  closed?:boolean; text?:string; size?:number; offset?:number;
+  closed?:boolean; text?:string; size?:number; offset?:number; dimMode?:'aligned'|'horizontal'|'vertical';
   rows?:number; cols?:number; width?:number; height?:number;
   confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
   reason?:string; sourceId?:string; chainId?:string;
@@ -14,7 +14,7 @@ export interface Entity {
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
 export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; importWarnings?:string[]; sourceType:'pdf'|'image'|'blank'; }
 export interface CadProject { version:1; id:string; name:string; sheets:Sheet[]; layers:Layer[]; created:string; updated:string; specification?:Array<{position:string;designation:string;name:string;quantity:string;material?:string;mass?:string;note?:string}>; }
-export type Tool = 'select'|'pan'|'point'|'construction-h'|'construction-v'|'construction-line'|'construction-bisector'|'rectangle'|'rect-center'|'stretch'|'mirror'|'trim'|'extend'|'offset'|'break'|'join'|'chamfer'|'fillet'|'line'|'line-dashed'|'polyline'|'bezier'|'circle'|'circle-3pt'|'ellipse'|'polygon-inscribed'|'polygon-circumscribed'|'arc'|'arc-3pt'|'dimension'|'dimension-3pt'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'measure-angle'|'calibrate'|'eskd'|'ocr-region';
+export type Tool = 'select'|'pan'|'point'|'construction-h'|'construction-v'|'construction-line'|'construction-bisector'|'rectangle'|'rect-center'|'stretch'|'mirror'|'trim'|'extend'|'offset'|'break'|'join'|'chamfer'|'fillet'|'line'|'line-dashed'|'polyline'|'bezier'|'circle'|'circle-3pt'|'ellipse'|'polygon-inscribed'|'polygon-circumscribed'|'arc'|'arc-3pt'|'dimension'|'dimension-h'|'dimension-v'|'dimension-3pt'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'measure-angle'|'calibrate'|'eskd'|'ocr-region';
 export const COLORS = ['#e4ebf4','#38bdf8','#4ade80','#f9bd5a','#e879f9','#fb7185','#94a3b8','#22d3ee'];
 export const DEFAULT_LAYERS:Layer[] = [
   {name:'Контуры',color:'#4ade80',visible:true,locked:false},
@@ -93,6 +93,7 @@ export function validateProject(value:unknown):CadProject {
         (e.width!==undefined&&(!Number.isFinite(e.width)||e.width<0||e.width>1e8))||
         (e.height!==undefined&&(!Number.isFinite(e.height)||e.height<0||e.height>1e8))||
         (e.offset!==undefined&&!Number.isFinite(e.offset))||
+        (e.dimMode!==undefined&&(e.kind!=='dimension'||!['aligned','horizontal','vertical'].includes(e.dimMode)))||
         (e.startAngle!==undefined&&!Number.isFinite(e.startAngle))||
         (e.endAngle!==undefined&&!Number.isFinite(e.endAngle))||
         (e.bbox!==undefined&&![e.bbox.x0,e.bbox.y0,e.bbox.x1,e.bbox.y1].every(Number.isFinite)))

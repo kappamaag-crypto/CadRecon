@@ -14,6 +14,10 @@ export function autoDimensionCandidate(source:Entity,sheet:Sheet):Entity|null{
     const dim=entity('dimension',[{...a},{...b}],'Авторазмеры','manual');
     const measured=dist(a,b);
     dim.offset=Math.max(8,Math.min(measured*.12,60));
+    if(Math.abs(b.y-a.y)<=Math.abs(b.x-a.x)*.02&&Math.abs(b.x-a.x)>1e-6)
+      dim.dimMode='horizontal';
+    else if(Math.abs(b.x-a.x)<=Math.abs(b.y-a.y)*.02&&Math.abs(b.y-a.y)>1e-6)
+      dim.dimMode='vertical';
     dim.size=sheet.calibrated?3.5:Math.max(9,sheet.width/180);
     dim.text=sheet.calibrated?Number(measured.toFixed(2)).toString():'?';
     dim.sourceId=source.id;dim.verified=false;dim.confidence=undefined;
