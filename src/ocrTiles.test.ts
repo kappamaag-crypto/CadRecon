@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {planOcrTiles,sameOcrLine} from './ocrTiles';
+import {planOcrTiles,sameOcrLine,unrotateOcrBox} from './ocrTiles';
 
 describe('browser-only large OCR tiling',()=>{
   it('keeps ordinary small drawings as one exact full-resolution tile',()=>{
@@ -17,6 +17,14 @@ describe('browser-only large OCR tiling',()=>{
     }
     expect(tiles.some(t=>t.x===0&&t.y===0)).toBe(true);
     expect(tiles.some(t=>t.x+t.width===width&&t.y+t.height===height)).toBe(true);
+  });
+  it('maps both vertical OCR rotations back to the original pixel rectangle',()=>{
+    const original={text:'Позиция 6',x0:40,y0:15,x1:55,y1:80};
+    // Original W=200 H=100. +90: X=H-y,Y=x.
+    const plus={...original,x0:20,x1:85,y0:40,y1:55};
+    const minus={...original,x0:15,x1:80,y0:145,y1:160};
+    expect(unrotateOcrBox(plus,200,100,90)).toEqual(original);
+    expect(unrotateOcrBox(minus,200,100,-90)).toEqual(original);
   });
   it('rejects unreasonable decompression sizes instead of freezing a phone',()=>{
     expect(()=>planOcrTiles(50000,50000)).toThrow(/100/);

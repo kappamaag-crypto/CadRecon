@@ -1,6 +1,6 @@
 import {createWorker,PSM} from 'tesseract.js';
 import {entity,type Entity,type Sheet} from './model';
-import {planOcrTiles,type OcrBox} from './ocrTiles';
+import {planOcrTiles,unrotateOcrBox,type OcrBox} from './ocrTiles';
 import {reconcileOcrReadings,type OcrReading} from './ocrConsensus';
 /** Optional explicit download of public RU/EN OCR language packs.
  * Models and worker binaries are fetched to the user's browser. Tesseract.js
@@ -177,9 +177,7 @@ export async function recognizeText(
           progress?.('OCR: вертикальные надписи, поворот '+angle+'°');
           const result=await worker.recognize(cv!,{}, {blocks:true,text:true});
           assertActive();rotations++;
-          const transform=(b:OcrBox):OcrBox=>angle===90?
-            {text:b.text,x0:b.y0,y0:height-b.x1,x1:b.y1,y1:height-b.x0}:
-            {text:b.text,x0:width-b.y1,y0:b.x0,x1:width-b.y0,y1:b.x1};
+          const transform=(b:OcrBox):OcrBox=>unrotateOcrBox(b,width,height,angle);
           addLines(result.data as unknown as TesseractText,
             {x:0,y:0,width:height,height:width},'rotated',transform);
         }

@@ -44,3 +44,18 @@ export function sameOcrLine(a:OcrBox,b:OcrBox):boolean{
   const areaB=Math.max(0,(b.x1-b.x0)*(b.y1-b.y0));
   return Math.min(areaA,areaB)>0&&common/Math.min(areaA,areaB)>=.7;
 }
+
+/** Map OCR from a 90-degree canvas back to the ORIGINAL source pixels.
+ * Canvas +90: (X,Y)=(H-y,x); Canvas -90: (X,Y)=(y,W-x).
+ * Returned boxes are not dimension measurements.
+ */
+export function unrotateOcrBox(
+  box:OcrBox,originalWidth:number,originalHeight:number,angle:90|-90
+):OcrBox {
+  if(angle===90)return {...box,
+    x0:box.y0,x1:box.y1,
+    y0:originalHeight-box.x1,y1:originalHeight-box.x0};
+  return {...box,
+    x0:originalWidth-box.y1,x1:originalWidth-box.y0,
+    y0:box.x0,y1:box.x1};
+}

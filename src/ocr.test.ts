@@ -137,6 +137,69 @@ describe('browser OCR language pack preparation',()=>{
       Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
+  it('optional vertical OCR rotates both ways and restores original source bbox',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const noText={data:{text:'',blocks:[]}};
+    const plus={data:{text:'ПОЗ 6',blocks:[{paragraphs:[{lines:[{
+      text:'ПОЗ 6',confidence:89,bbox:{x0:20,y0:40,x1:85,y1:55},
+    }]}]}]}};
+    const recognize=vi.fn().mockResolvedValueOnce(noText).mockResolvedValueOnce(plus)
+      .mockResolvedValueOnce(noText);
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];
+      sheet.image='data:image/png;base64,fixture';sheet.width=200;sheet.height=100;
+      const result=await recognizeText(sheet,undefined,undefined,
+        {mode:'enhanced',detectVertical:true,maxRetries:0});
+      expect(result.diagnostics?.rotations).toBe(2);
+      expect(recognize).toHaveBeenCalledTimes(3);
+      expect(result.entities).toHaveLength(1);
+      expect(result.entities[0].bbox).toEqual({x0:40,y0:15,x1:55,y1:80});
+      expect(result.entities[0].reason).toContain('поворот');
+      expect(result.entities[0].verified).toBe(false);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
+  it('aborts during expensive retry without returning partially recognized CAD text',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const ctrl=new AbortController();
+    const main={data:{text:'A',blocks:[{paragraphs:[{lines:[{
+      text:'A',confidence:20,bbox:{x0:20,y0:10,x1:50,y1:22},
+    }]}]}]}};
+    const recognize=vi.fn().mockResolvedValueOnce(main).mockImplementationOnce(async()=>{
+      ctrl.abort();
+      return main;
+    });
+    const terminate=vi.fn().mockResolvedValue(undefined);
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate,setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      await expect(recognizeText(sheet,undefined,ctrl.signal,{mode:'enhanced'})).rejects.toThrow();
+      expect(terminate).toHaveBeenCalled();
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
   it('does not create a worker or emit candidates when already cancelled',async ()=>{
     const controller=new AbortController();controller.abort();
     vi.mocked(createWorker).mockClear();
