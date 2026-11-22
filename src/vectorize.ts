@@ -1,4 +1,5 @@
 import {entity,type Entity,type Sheet} from './model';
+import {consolidateScanLines} from './scanTopology';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
 type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
@@ -88,9 +89,16 @@ export async function traceImage(
         const e=entity('circle',[center],'Автообводка','trace');e.center=center;e.radius=radius;e.confidence=c.confidence;circles.push(e);
       }
     }
-    if(lines.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
-    return {entities:[...lines,...circles].slice(0,30000),warnings,sampledScale:factor,
-      note:'Детальная обводка: '+lines.length+' отрезков и '+circles.length+
+    // Suppress true overlap duplicates; never bridge missing scan evidence.
+    const scalePx=Math.max(sx,sy);
+    const reconciled=quality==='detailed'
+      ?consolidateScanLines(lines,.85*scalePx,.75*scalePx)
+      :{entities:lines,removed:0,candidates:lines.length};
+    if(reconciled.warning)warnings.push(reconciled.warning);
+    if(reconciled.entities.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
+    return {entities:[...reconciled.entities,...circles].slice(0,30000),warnings,sampledScale:factor,
+      note:'Детальная обводка: '+reconciled.entities.length+' отрезков ('+
+      reconciled.removed+' повторов объединено) и '+circles.length+
       ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'+
       (warnings.length?' ВНИМАНИЕ: '+warnings.join('; '):'')};
   }finally{worker.terminate();}
