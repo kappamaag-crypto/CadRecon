@@ -85,35 +85,77 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
 }
 export function measure(p:Point,q:Point,calibrated=false) {return dist(p,q).toFixed(2)+(calibrated?' мм':' усл. ед. (масштаб не подтверждён)');}
 
-/** Merge only automatically imported, nearly collinear and contiguous LINE objects.
- * This is deliberately conservative and preserves all manual CAD geometry. */
+/** Safely de-duplicate overlapping imported LINE hypotheses.
+ * Never create geometry across ANY positive white/unknown gap. Unlike the
+ * former implementation, merely sharing an angle/offset hash is insufficient.
+ * For PDF vectors, preserve sub-millimetric parallel paths even if close.
+ */
 export function mergeAutoLines(entities:Entity[],tolerance=2):{entities:Entity[];removed:number} {
-  const buckets=new Map<string,Array<{e:Entity;start:number;end:number;ux:number;uy:number;off:number}>>();
-  const keep:Entity[]=[];
-  const angStep=Math.PI/360;
+  type Candidate={e:Entity;a:Point;u:Point;n:Point;start:number;end:number;angle:number;offset:number;length:number};
+  type Group=Candidate&{joinCount:number;worstConfidence:number};
+  const bins=new Map<string,Candidate[]>();
+  const result:Entity[]=[];
+  const dot=(p:Point,q:Point)=>p.x*q.x+p.y*q.y;
+  const diff=(p:Point,q:Point):Point=>({x:p.x-q.x,y:p.y-q.y});
   for(const e of entities){
-    if(e.kind!=='line'||e.points.length!==2||e.verified||e.origin==='manual'){keep.push(e);continue;}
-    let a=e.points[0],b=e.points[1],dx=b.x-a.x,dy=b.y-a.y,len=Math.hypot(dx,dy);
-    if(len<1e-6){keep.push(e);continue;}
-    if(dx<0 || (Math.abs(dx)<1e-10&&dy<0)){[a,b]=[b,a];dx=-dx;dy=-dy;}
-    const ux=dx/len,uy=dy/len,angle=Math.atan2(uy,ux),off=-uy*a.x+ux*a.y;
-    const key=e.layer+':'+Math.round(angle/angStep)+':'+Math.round(off/Math.max(.01,tolerance));
-    const t1=ux*a.x+uy*a.y,t2=ux*b.x+uy*b.y;
-    const list=buckets.get(key)||[];list.push({e,start:Math.min(t1,t2),end:Math.max(t1,t2),ux,uy,off});buckets.set(key,list);
+    if(e.kind!=='line'||e.points.length!==2||e.verified||
+      (e.origin!=='pdf'&&e.origin!=='trace')){
+      result.push(e);continue;
+    }
+    let [a,b]=e.points;
+    if(![a.x,a.y,b.x,b.y].every(Number.isFinite)){result.push(e);continue;}
+    const len=Math.hypot(b.x-a.x,b.y-a.y);
+    if(!Number.isFinite(len)||len<1){result.push(e);continue;}
+    let dx=b.x-a.x,dy=b.y-a.y;
+    if(dx<0||(Math.abs(dx)<1e-12&&dy<0)){[a,b]=[b,a];dx=-dx;dy=-dy;}
+    const u={x:dx/len,y:dy/len},n={x:-u.y,y:u.x};
+    const angle=Math.atan2(u.y,u.x),offset=dot(a,n);
+    const candidate:Candidate={e,a,u,n,start:dot(a,u),end:dot(b,u),angle,offset,length:len};
+    const crossTol=e.origin==='pdf'?1e-4:Math.min(.12,Math.max(1e-5,tolerance));
+    const step=Math.max(1e-4,2*crossTol);
+    const key=[e.layer,e.origin,Math.round(angle/(Math.PI/360)),Math.round(offset/step)].join('|');
+    const bucket=bins.get(key)||[];bucket.push(candidate);bins.set(key,bucket);
   }
   let removed=0;
-  for(const list of buckets.values()){
-    list.sort((a,b)=>a.start-b.start);
-    let cur=list[0];if(!cur)continue;
-    for(let i=1;i<list.length;i++){
-      const next=list[i];
-      if(next.start<=cur.end+Math.max(.01,tolerance)){
-        cur={...cur,end:Math.max(cur.end,next.end)};removed++;
+  for(const bucket of bins.values()){
+    bucket.sort((a,b)=>a.start-b.start||b.length-a.length);
+    let group:Group|null=null;
+    const flush=()=>{
+      if(!group)return;
+      const g=group;
+      if(g.joinCount===1){result.push(g.e);return;}
+      const {u,n,offset,start,end,e}=g;
+      result.push({...e,points:[
+        {x:u.x*start+n.x*offset,y:u.y*start+n.y*offset},
+        {x:u.x*end+n.x*offset,y:u.y*end+n.y*offset},
+      ],verified:false,confidence:g.worstConfidence,
+        reason:'Убраны только геометрически перекрывающиеся автоматические LINE; проверка по оригиналу обязательна'});
+    };
+    for(const p of bucket){
+      if(!group){group={...p,joinCount:1,worstConfidence:p.e.confidence??1};continue;}
+      const g=group;
+      const cos=dot(g.u,p.u);
+      const crossA=Math.abs(dot(diff(p.a,g.a),g.n));
+      const crossB=Math.abs(dot(diff(p.e.points[1],g.a),g.n));
+      const tol=p.e.origin==='pdf'?1e-4:Math.min(.12,Math.max(1e-5,tolerance));
+      const projected=p.e.points.map(x=>dot(x,g.u));
+      const lo=Math.min(...projected),hi=Math.max(...projected);
+      const overlap=Math.min(g.end,hi)-Math.max(g.start,lo);
+      // Actual positive overlap: touching endpoints or separated strokes are
+      // not sufficient. No extrapolation, invented CAD line, or bridge.
+      if(cos>=Math.cos(Math.PI/720)&&crossA<=tol&&crossB<=tol&&
+        overlap>=Math.min(.05,Math.min(g.length,p.length)*.01)){
+        group.end=Math.max(group.end,hi);
+        group.start=Math.min(group.start,lo);
+        group.joinCount++;
+        group.worstConfidence=Math.min(group.worstConfidence,p.e.confidence??1);
+        removed++;
       }else{
-        const e={...cur.e,verified:false,points:[{x:cur.ux*cur.start-cur.uy*cur.off,y:cur.uy*cur.start+cur.ux*cur.off},{x:cur.ux*cur.end-cur.uy*cur.off,y:cur.uy*cur.end+cur.ux*cur.off}]};keep.push(e);cur=next;
+        flush();
+        group={...p,joinCount:1,worstConfidence:p.e.confidence??1};
       }
     }
-    keep.push({...cur.e,verified:false,points:[{x:cur.ux*cur.start-cur.uy*cur.off,y:cur.uy*cur.start+cur.ux*cur.off},{x:cur.ux*cur.end-cur.uy*cur.off,y:cur.uy*cur.end+cur.ux*cur.off}]});
+    flush();
   }
-  return {entities:keep,removed};
+  return {entities:result,removed};
 }

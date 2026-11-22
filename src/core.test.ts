@@ -12,10 +12,36 @@ describe('CadRecon model and export',()=>{
  });
  it('merges imported collinear fragments but preserves manually drawn lines',()=>{
   const a=entity('line',[{x:0,y:0},{x:10,y:0}],'PDF векторы','pdf');
-  const b=entity('line',[{x:10.4,y:0},{x:20,y:0}],'PDF векторы','pdf');
+  const b=entity('line',[{x:9.5,y:0},{x:20,y:0}],'PDF векторы','pdf');
   const manual=entity('line',[{x:20,y:0},{x:30,y:0}]);
   const out=mergeAutoLines([a,b,manual],1);expect(out.removed).toBe(1);
   expect(out.entities.length).toBe(2);expect(out.entities.some(e=>e.id===manual.id)).toBe(true);
+ });
+ it('never closes a visible gap even when the old merge tolerance would bridge it',()=>{
+  const a=entity('line',[{x:0,y:0},{x:10,y:0}],'PDF векторы','pdf');
+  const b=entity('line',[{x:10.4,y:0},{x:20,y:0}],'PDF векторы','pdf');
+  const result=mergeAutoLines([a,b],2);
+  expect(result.removed).toBe(0);
+  expect(result.entities).toHaveLength(2);
+  expect(result.entities[0].points).toEqual(a.points);
+  expect(result.entities[1].points).toEqual(b.points);
+ });
+ it('does not merge separate close PDF lines, crossing strokes or different provenance',()=>{
+  const a=entity('line',[{x:0,y:0},{x:100,y:0}],'PDF векторы','pdf');
+  const b=entity('line',[{x:0,y:.001},{x:100,y:.001}],'PDF векторы','pdf');
+  const c=entity('line',[{x:60,y:-40},{x:60,y:40}],'PDF векторы','pdf');
+  const d=entity('line',[{x:10,y:0},{x:80,y:0}],'PDF векторы','trace');
+  expect(mergeAutoLines([a,b,c,d],2).removed).toBe(0);
+ });
+ it('deduplicates matching scan hypotheses but keeps distinct nearby scan contours',()=>{
+  const a=entity('line',[{x:0,y:10},{x:100,y:10}],'Автообводка','trace');
+  const b=entity('line',[{x:20,y:10.05},{x:90,y:10.05}],'Автообводка','trace');
+  const c=entity('line',[{x:0,y:10.6},{x:100,y:10.6}],'Автообводка','trace');
+  const output=mergeAutoLines([a,b,c],2);
+  expect(output.removed).toBe(1);
+  expect(output.entities).toHaveLength(2);
+  expect(output.entities.every(x=>!x.verified)).toBe(true);
+  expect(output.entities.some(x=>x.id===c.id)).toBe(true);
  });
  it('does not falsely approve manual objects or report pixel lengths as millimetres',()=>{
   const p=newProject(),manual=entity('line',[{x:0,y:0},{x:30,y:40}]);

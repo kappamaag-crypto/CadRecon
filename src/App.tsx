@@ -147,10 +147,10 @@ export default function App(){
     '. Проверьте текст по оригиналу.');
  }
  async function mergeLines(){
-  if(!window.confirm('Объединить короткие отрезки только в автоматически распознанных слоях? При сомнениях используйте «Отмена».'))return;
+  if(!window.confirm('Удалить только перекрывающиеся автоматические LINE? Разрывы не соединяются, ручные и проверенные объекты сохраняются. Перед применением сделайте резервную копию.'))return;
   try{await createBackup(project);const result=mergeAutoLines(sheet.entities,Math.max(.7,Math.min(sheet.width,sheet.height)/3000));
     if(result.removed)changeSheet(s=>({...s,entities:result.entities}));
-    setStatus('Объединено близких коллинеарных фрагментов: '+result.removed+'. Проверьте результат.');
+    setStatus('Убрано геометрически перекрывающихся автоотрезков: '+result.removed+'. Разрывы не соединялись; проверьте результат.');
   }catch(e){setStatus('Объединение линий: '+e);}
  }
  async function runSemanticRecognition(){
@@ -353,7 +353,7 @@ export default function App(){
         <button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
         <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button>
         <button className="action" onClick={repairImportedPdfText} disabled={!!busy}>АЯ Исправить кодировку PDF-текста</button>
-        <button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Объединить короткие линии</button>
+        <button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Убрать дубли автоотрезков</button>
         <button className="action" onClick={()=>setTool('calibrate')}>⊞ Калибровать по размеру</button>
         <button className="action" onClick={()=>setTool('measure')}>↔ Измерить расстояние</button>
       </div>
