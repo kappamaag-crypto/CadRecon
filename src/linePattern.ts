@@ -10,7 +10,7 @@ const median=(a:number[])=>{const s=[...a].sort((x,y)=>x-y);return s[Math.floor(
 const stable=(a:number[],fraction:number)=>a.length>0&&Math.max(...a)<=Math.max(1,median(a))*fraction&&Math.min(...a)>=Math.max(1,median(a)) / fraction;
 
 export function classifyLinePattern(
-  line:StrokeSegment,rgba:Uint8ClampedArray,width:number,height:number
+  line:StrokeSegment,rgba:Uint8ClampedArray,width:number,height:number,inkThreshold=165
 ):LinePattern|null{
   if(width<40||height<20||rgba.length<width*height*4)return null;
   const {a,b}=line,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
@@ -25,7 +25,7 @@ export function classifyLinePattern(
       const xx=Math.round(x+nx*offset),yy=Math.round(y+ny*offset);
       if(xx<0||yy<0||xx>=width||yy>=height)continue;
       const j=(yy*width+xx)*4;
-      if(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]<165){ink=true;break;}
+      if(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]<=inkThreshold){ink=true;break;}
     }
     marks.push(ink);
   }

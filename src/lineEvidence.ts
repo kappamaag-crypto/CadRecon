@@ -10,7 +10,7 @@ export type Evidence={support:number;samples:number;adjustedScore:number;longest
 
 export function rankLineByInkEvidence(
   line:InkLineCandidate,rgba:Uint8ClampedArray,width:number,height:number,
-  maxSamples=80
+  maxSamples=80,inkThreshold=175
 ):Evidence{
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||
      rgba.length<width*height*4)
@@ -29,7 +29,7 @@ export function rankLineByInkEvidence(
       if(xx<0||yy<0||xx>=width||yy>=height)continue;
       const at=(yy*width+xx)*4;
       const brightness=.299*rgba[at]+.587*rgba[at+1]+.114*rgba[at+2];
-      if(brightness<175){onInk=true;break;}
+      if(brightness<=inkThreshold){onInk=true;break;}
     }
     if(onInk){hits++;currentBlank=0;}
     else{currentBlank++;longestBlankRun=Math.max(longestBlankRun,currentBlank);}

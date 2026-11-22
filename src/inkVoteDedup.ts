@@ -23,7 +23,7 @@ export function sameFiniteLine(a:StrokeSegment,b:StrokeSegment,tolerance=2.5):bo
     (dist(a.a,b.b)<=tolerance&&dist(a.b,b.a)<=tolerance);
 }
 export function deduplicateInkStrokeVotes(
-  strokes:StrokeSegment[],rgba:Uint8ClampedArray,width:number,height:number
+  strokes:StrokeSegment[],rgba:Uint8ClampedArray,width:number,height:number,inkThreshold=175
 ):InkDedupResult{
   if(!Number.isInteger(width)||!Number.isInteger(height)||
     width<2||height<2||rgba.length<width*height*4||strokes.length<2)
@@ -37,7 +37,7 @@ export function deduplicateInkStrokeVotes(
     const x=Math.round(p.x),y=Math.round(p.y);
     if(x<0||y<0||x>=width||y>=height)return false;
     const i=(y*width+x)*4;
-    return .299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2]<175;
+    return .299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2]<=inkThreshold;
   };
   function coveredBy(candidate:StrokeSegment,reference:StrokeSegment):boolean{
     // A marked DASHED/CENTER line is a distinct hypothesis from a SOLID

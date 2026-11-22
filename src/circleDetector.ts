@@ -11,7 +11,7 @@ export interface CircleDebug {edges?:number;samples?:number;maxCenterVotes?:numb
 
 export function detectOverlappedCircles(
   rgba:Uint8ClampedArray,width:number,height:number,
-  maxCandidates=25,debug?:CircleDebug
+  maxCandidates=25,debug?:CircleDebug,inkThreshold=165
 ):CircleProposal[] {
   if(width<48||height<48||rgba.length<width*height*4)return [];
   const gray=new Uint8Array(width*height);
@@ -26,7 +26,7 @@ export function detectOverlappedCircles(
   for(let y=2;y<height-2;y+=step){
     for(let x=2;x<width-2;x+=step){
       const i=y*width+x;
-      if(gray[i]>165)continue;
+      if(gray[i]>inkThreshold)continue;
       // Sobel gradient: dark-to-light normal to the printed stroke.
       const gx=(-gray[i-width-1]+gray[i-width+1]-2*gray[i-1]+2*gray[i+1]
           -gray[i+width-1]+gray[i+width+1]);
@@ -95,7 +95,7 @@ export function detectOverlappedCircles(
         const x=Math.round(cx+(r+dr)*cos);
         const y=Math.round(cy+(r+dr)*sin);
         if(x<0||y<0||x>=width||y>=height)continue;
-        if(gray[y*width+x]<165){found=true;break;}
+        if(gray[y*width+x]<=inkThreshold){found=true;break;}
       }
       if(found)hits++;
     }
