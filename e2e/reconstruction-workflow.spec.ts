@@ -40,3 +40,36 @@ test('recognition summary flags a mixed PDF, intentional dashed line and unknown
   await page.getByRole('button',{name:'✓ Проверить сомнительные объекты'}).click();
   await expect(page.getByRole('heading',{name:'Проверка распознавания'})).toBeVisible();
 });
+
+
+test('W3 opt-in noise cleanup never removes styled/native/manual lines and Undo restores candidates',async ({page})=>{
+  const {readFile}=await import('node:fs/promises');
+  const p=newProject(),s=p.sheets[0];s.sourceType='image';
+  s.image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9SAAAAABJRU5ErkJggg==';
+  const bad=entity('line',[{x:0,y:0},{x:100,y:0}],'Автообводка','trace');
+  bad.confidence=.11;bad.scanEvidence={inkSupport:.07,blankRunRatio:.7};
+  const good=entity('line',[{x:0,y:10},{x:100,y:10}],'Автообводка','trace');
+  good.confidence=.5;good.scanEvidence={inkSupport:.9,blankRunRatio:0};
+  const dash=entity('line',[{x:0,y:20},{x:100,y:20}],'Автообводка','trace');
+  dash.confidence=.11;dash.lineStyle='dashed';
+  dash.scanEvidence={inkSupport:.07,blankRunRatio:.7};
+  s.entities=[bad,good,dash];
+  await page.goto('/CadRecon/');
+  await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
+    name:'noisy.cadrecon.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(p)),
+  });
+  await expect(page.getByText(/Проект открыт/)).toBeVisible();
+  page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:/Найти и удалить явно слабые линии/}).click();
+  await expect(page.getByText(/Удалено явно слабых автоотрезков: 1/)).toBeVisible();
+  const save=async()=>{
+    const [dl]=await Promise.all([page.waitForEvent('download'),
+      page.getByRole('button',{name:'↓ JSON'}).click()]);
+    return JSON.parse(await readFile((await dl.path())!,'utf8')) as typeof p;
+  };
+  const after=await save();
+  expect(after.sheets[0].entities.map(e=>e.id)).toEqual([good.id,dash.id]);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  const restored=await save();
+  expect(restored.sheets[0].entities).toHaveLength(3);
+});
