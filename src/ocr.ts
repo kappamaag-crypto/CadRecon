@@ -1,6 +1,6 @@
 import {createWorker,PSM} from 'tesseract.js';
 import {entity,type Entity,type Sheet} from './model';
-import {planOcrTiles,unrotateOcrBox,type OcrBox} from './ocrTiles';
+import {planOcrTiles,planVerticalOcrTiles,unrotateOcrBox,type OcrBox} from './ocrTiles';
 import {reconcileOcrReadings,type OcrReading} from './ocrConsensus';
 /** Optional explicit download of public RU/EN OCR language packs.
  * Models and worker binaries are fetched to the user's browser. Tesseract.js
@@ -19,7 +19,7 @@ export type OcrLanguages='rus+eng'|'rus'|'eng';
 export interface OcrOptions {
   mode?:OcrMode;
   languages?:OcrLanguages;
-  /** Opt-in: two whole-page 90° rotations; only when sheet <=3 million pixels. */
+  /** Opt-in: ±90° tile-local passes; max 8 selected tiles on very large pages. */
   detectVertical?:boolean;
   /** Bound expensive local re-reading of short/uncertain engineering text. */
   maxRetries?:number;
@@ -163,26 +163,43 @@ export async function recognizeText(
       if(readings.length>initialReadings&&readings.length>15000)
         warnings.push('OCR: слишком много кандидатов, проверьте качество скана.');
     }
-    // Optional vertical labels are expensive: no 90° whole-page pass on huge
-    // A0 scans, where this could freeze the browser or overflow Canvas memory.
+    // Rotate each source-resolution TILE, not the entire A0/A1 sheet.
+    // Each canvas stays <= 1600x1600 and results map back to original source
+    // pixels before the conservative OCR conflict/dedup review pass.
     if(enhanced&&options.detectVertical){
-      if(tiles.length!==1||width*height>3_000_000||!ctx){
-        warnings.push('Поворот OCR ±90° пропущен из-за большого размера скана.');
+      const selection=planVerticalOcrTiles(tiles,8);
+      if(!ctx){
+        warnings.push('Вертикальный OCR не выполнен: Canvas недоступен.');
       }else{
-        for(const angle of [90,-90] as const){
-          assertActive();
-          cv!.width=height;cv!.height=width;
-          ctx.save();
-          if(angle===90){ctx.translate(height,0);ctx.rotate(Math.PI/2);}
-          else{ctx.translate(0,width);ctx.rotate(-Math.PI/2);}
-          ctx.drawImage(img,0,0,width,height);
-          ctx.restore();
-          progress?.('OCR: вертикальные надписи, поворот '+angle+'°');
-          const result=await worker.recognize(cv!,{}, {blocks:true,text:true});
-          assertActive();rotations++;
-          const transform=(b:OcrBox):OcrBox=>unrotateOcrBox(b,width,height,angle);
-          addLines(result.data as unknown as TesseractText,
-            {x:0,y:0,width:height,height:width},'rotated',transform);
+        if(!selection.complete)warnings.push('Вертикальный OCR проверил '+
+          selection.tiles.length+' из '+tiles.length+
+          ' участков большого листа из-за ограничения времени/памяти. '+
+          'В остальных областях используйте OCR выделенной рамкой, чтобы не пропустить подписи.');
+        for(let i=0;i<selection.tiles.length;i++){
+          const tile=selection.tiles[i];
+          // All tile dimensions are bounded by planOcrTiles; fail explicitly
+          // instead of allocating an unchecked rotated full-page buffer.
+          if(tile.width*tile.height>3_000_000){
+            warnings.push('OCR: поворот участка '+(i+1)+' пропущен (>3 Мп).');
+            continue;
+          }
+          for(const angle of [90,-90] as const){
+            assertActive();
+            cv!.width=tile.height;cv!.height=tile.width;
+            ctx.save();
+            if(angle===90){ctx.translate(tile.height,0);ctx.rotate(Math.PI/2);}
+            else{ctx.translate(0,tile.width);ctx.rotate(-Math.PI/2);}
+            ctx.drawImage(img,tile.x,tile.y,tile.width,tile.height,
+              0,0,tile.width,tile.height);
+            ctx.restore();
+            progress?.('OCR: вертикальные надписи, участок '+(i+1)+' / '+
+              selection.tiles.length+', поворот '+angle+'°');
+            const result=await worker.recognize(cv!,{}, {blocks:true,text:true});
+            assertActive();rotations++;
+            addLines(result.data as unknown as TesseractText,
+              {x:tile.x,y:tile.y,width:tile.height,height:tile.width},
+              'rotated',b=>unrotateOcrBox(b,tile.width,tile.height,angle));
+          }
         }
       }
     }
