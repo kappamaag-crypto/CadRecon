@@ -96,7 +96,6 @@ function Setup {
     & $python -c "import fastapi, uvicorn, cv2, numpy; print('Runtime imports: OK')"
     if ($LASTEXITCODE -ne 0) { Stop-Setup "Runtime self-test failed." }
 
-    $token = [Convert]::ToBase64String(([byte[]](1..48|ForEach-Object {0})))
     # Always generate cryptographically secure bytes, never use pseudo random or a fixed token.
     $bytes = New-Object byte[] 48
     [System.Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
@@ -105,6 +104,10 @@ function Setup {
     [System.IO.File]::WriteAllText($secretPath,$token,[System.Text.UTF8Encoding]::new($false))
     # Restrict to current account; do not place the token into app/browser localStorage.
     & icacls $secretPath /inheritance:r /grant:r "$($env:USERDOMAIN)\$($env:USERNAME):(R,W)" *> $null
+    if ($LASTEXITCODE -ne 0) {
+      Remove-Item -LiteralPath $secretPath -Force -ErrorAction SilentlyContinue
+      Stop-Setup "Failed to restrict token file access. Installation stopped."
+    }
 
     $startPath = Join-Path $folder "Start-CadRecon-Ultra.cmd"
     $launch = @'
