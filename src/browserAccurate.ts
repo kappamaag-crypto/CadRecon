@@ -140,7 +140,8 @@ export async function recognizeBrowserAccurate(
   if(!digitalText||mode==='hybrid'){
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
     try {
-      const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal);
+      const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal,
+        {mode:'enhanced',maxRetries:35});
       assertActive();
       ocrText=ocr.text;
       candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));

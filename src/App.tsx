@@ -12,7 +12,7 @@ import {createBackup,downloadFile,exportProject,importProject,loadProject,listBa
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
 import {recognizeText,preloadOcrModels} from './ocr';
-import {recognizeBrowserAccurate} from './browserAccurate';
+import {recognizeBrowserAccurate,uniqueCandidates} from './browserAccurate';
 import {validateAdvancedEndpoint} from './advanced';
 import {recognizeOnline} from './online';
 import type {OperationResult} from './cadOperations';
@@ -57,6 +57,8 @@ export default function App(){
  const [reviewPage,setReviewPage]=useState(0);
  const [focusTarget,setFocusTarget]=useState<{id:string;token:number}|undefined>();
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
+ const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
+ const [ocrVertical,setOcrVertical]=useState(false);
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
  const [localBusy,setLocalBusy]=useState(false);
@@ -247,10 +249,26 @@ export default function App(){
    const ctrl=new AbortController(),sheetId=sheet.id;localController.current=ctrl;setLocalBusy(true);
    setBusy('Распознавание текста…');
    try{
-     const r=await recognizeText(sheet,setBusy,ctrl.signal);
+     const r=await recognizeText(sheet,setBusy,ctrl.signal,
+       {mode:ocrMode,detectVertical:ocrVertical,maxRetries:60});
      if(ctrl.signal.aborted)return;
-     setOcrText(r.text);addToOriginalSheet(sheetId,r.entities);
-     setStatus('OCR: '+r.entities.length+' строк. Проверьте каждую надпись.');
+     setOcrText(r.text);
+     // On repeated runs never append the same recognized OCR text again.
+     // Keep existing manual/verified edits and only add genuinely new labels.
+     apply(p=>{
+       const original=p.sheets.find(s=>s.id===sheetId);
+       if(!original)return p;
+       const fresh=uniqueCandidates(original.entities,r.entities);
+       return fresh.length?{...p,sheets:p.sheets.map(s=>s.id===sheetId?
+         {...s,entities:[...s.entities,...fresh]}:s)}:p;
+     });
+     setReviewType('text');setReviewPage(0);setPanel('recognition');
+     const d=r.diagnostics;
+     setStatus('OCR: '+r.entities.length+' строк; '+
+       (d?d.retried+' повторных проверок, '+d.duplicates+' дублей убрано, '+
+         d.conflicts+' расхождений отмечено. ':'')+
+       (r.warnings?.length?r.warnings.join('; ')+' ':'')+
+       'Проверьте надписи и размеры по оригиналу.');
    }catch(e){setStatus(ctrl.signal.aborted?'OCR отменён.':'OCR: '+String(e));}
    finally{localController.current=null;setLocalBusy(false);setBusy('');}
  }
@@ -427,6 +445,20 @@ export default function App(){
       {localBusy&&<button className="action" onClick={()=>localController.current?.abort()}>× Остановить обработку на устройстве</button>}
       <p className="muted">Обычный PDF: исходные векторы без повторной обводки. Для PDF со встроенными изображениями и неполной векторизацией выберите гибридный режим — он дополнительно анализирует растр и может создать дубли. Скан: обводка + OCR RU/EN + проверка размеров и ЕСКД. Результат необходимо сверить с оригиналом.</p>
       <button className="action" onClick={prepareBrowserOcr} disabled={!!busy}>↓ Подготовить языковые модели OCR (RU/EN)</button>
+      <h3>Распознавание текста (OCR)</h3>
+      <label className="selector-label">Качество онлайн-OCR
+        <select aria-label="Качество онлайн-OCR" value={ocrMode}
+          onChange={e=>setOcrMode(e.target.value as 'standard'|'enhanced')} disabled={!!busy}>
+          <option value="enhanced">Усиленное: повторная проверка мелкого и нечёткого текста</option>
+          <option value="standard">Быстрое: один проход по исходному растру</option>
+        </select>
+      </label>
+      <label className="check"><input type="checkbox" checked={ocrVertical}
+        onChange={e=>setOcrVertical(e.target.checked)} disabled={!!busy||ocrMode!=='enhanced'}/>
+        Искать вертикальные надписи (+90° и −90°, для небольших листов)</label>
+      <p className="muted">Все вычисления на устройстве. Усиленный режим повторно увеличивает до 60 трудных строк;
+        несовпадающие варианты текста сохраняются как замечания, не заменяют чертёж молча.
+        На больших листах поворот пропускается, чтобы не перегрузить браузер.</p>
       <p className="muted">{modelsReady?'✓ Языковые модели подготовлены для текущего сеанса.':'Дополнительные пакеты скачиваются на устройство пользователя при необходимости; использование после очистки кэша потребует повторной загрузки.'}</p>
       <h3>Отдельные инструменты</h3>
       <div className="stack">

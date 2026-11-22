@@ -6,7 +6,7 @@ import {planOcrTiles} from './ocrTiles';
 
 vi.mock('tesseract.js',()=>({
   createWorker:vi.fn(),
-  PSM:{SPARSE_TEXT:11},
+  PSM:{SPARSE_TEXT:11,SINGLE_LINE:7},
 }));
 
 describe('browser OCR language pack preparation',()=>{
@@ -70,6 +70,71 @@ describe('browser OCR language pack preparation',()=>{
     }finally{
       Object.defineProperty(globalThis,'Image',{configurable:true,value:originalImage});
       Object.defineProperty(globalThis,'document',{configurable:true,value:originalDocument});
+    }
+  });
+  it('enhanced OCR re-reads a low confidence technical value on 2.5x canvas and preserves conflict',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      filter:'none',imageSmoothingEnabled:false,imageSmoothingQuality:'low',
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const main={data:{text:'8O0',blocks:[{paragraphs:[{lines:[{
+      text:'8O0',confidence:40,bbox:{x0:20,y0:10,x1:80,y1:22},
+    }]}]}]}};
+    const retry={data:{text:'800',confidence:93,blocks:[{paragraphs:[{lines:[{
+      text:'800',confidence:93,bbox:{x0:2,y0:4,x1:155,y1:35},
+    }]}]}]}};
+    const recognize=vi.fn().mockResolvedValueOnce(main).mockResolvedValueOnce(retry);
+    const parameters=vi.fn().mockResolvedValue(undefined),terminate=vi.fn().mockResolvedValue(undefined);
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate,recognize,setParameters:parameters,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      sheet.width=200;sheet.height=100;
+      const out=await recognizeText(sheet,undefined,undefined,{mode:'enhanced'});
+      expect(recognize).toHaveBeenCalledTimes(2);
+      expect(out.entities).toHaveLength(1);
+      expect(out.entities[0].text).toBe('800');
+      expect(out.entities[0].reason).toContain('8O0');
+      expect(out.entities[0].bbox).toEqual({x0:20,y0:10,x1:80,y1:22});
+      expect(out.entities[0].verified).toBe(false);
+      expect(out.diagnostics?.promoted).toBe(1);
+      expect(terminate).toHaveBeenCalledOnce();
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
+  it('enhanced OCR keeps 6000 when close-confidence retry says 8000',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const data=(text:string,confidence:number)=>({data:{text,blocks:[{paragraphs:[{lines:[{
+      text,confidence,bbox:{x0:20,y0:10,x1:70,y1:22},
+    }]}]}]}});
+    const recognize=vi.fn().mockResolvedValueOnce(data('6000',80)).mockResolvedValueOnce(data('8000',87));
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      sheet.width=200;sheet.height=100;
+      const out=await recognizeText(sheet,undefined,undefined,{mode:'enhanced'});
+      expect(out.entities[0].text).toBe('6000');
+      expect(out.entities[0].reason).toContain('8000');
+      expect(out.diagnostics?.conflicts).toBe(1);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
   it('does not create a worker or emit candidates when already cancelled',async ()=>{
