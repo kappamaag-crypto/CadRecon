@@ -31,6 +31,7 @@ export default function ReconstructionPanel({
     <h3>PDF / скан → редактируемый 2D DXF</h3>
     <p className="muted">Приоритет — точность распознавания линий, штриховых и осевых, размеров,
       текста и контуров. Без 3D, облачного распознавания и собственного сервера.</p>
+    <p className="muted">GitHub Pages — единственный хостинг. Файл чертежа не загружается на сервер CadRecon.</p>
     <section className="recognition-step">
       <div className="recognition-step-title"><span>1</span><strong>Исходный чертёж</strong></div>
       <p aria-label="Тип исходника">{names[quality.source]}</p>

@@ -6,6 +6,7 @@ test('GitHub Pages uses browser-only recognition by default and hides optional l
   await expect(page.getByText('GitHub Pages — единственный хостинг.',{exact:false})).toBeVisible();
   await expect(page.getByLabel('Адрес Online Accurate')).toHaveCount(0);
   await expect(page.getByRole('button',{name:/Распознать через PaddleOCR/})).toHaveCount(0);
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
   const settings=page.locator('details.local-ultra');
   await expect(settings).not.toHaveAttribute('open',/.+/);
   await settings.locator('summary').click();

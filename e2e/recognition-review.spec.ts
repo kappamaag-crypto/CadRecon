@@ -78,6 +78,7 @@ test('OCR benchmark compares source-pixel annotated labels locally without netwo
 
 test('OCR language and enhanced quality profiles can be changed in the browser without downloading models',async ({page})=>{
   await page.goto('/CadRecon/');
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
   const language=page.getByLabel('Языки OCR');
   const quality=page.getByLabel('Качество онлайн-OCR');
   await expect(language).toHaveValue('rus+eng');
