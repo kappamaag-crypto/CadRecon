@@ -37,9 +37,26 @@ export function validateProject(value:unknown):CadProject {
   if(!value || typeof value!=='object') throw new Error('Неверный формат проекта');
   const p=value as CadProject;
   if(p.version!==1 || !Array.isArray(p.sheets) || !Array.isArray(p.layers) || p.sheets.length>100) throw new Error('Несовместимая версия проекта');
+  // Uploaded project JSON must not make a static GitHub Pages app fetch
+  // arbitrary remote image URLs (tracking, privacy or CORS bypass).
+  const imageData=/^data:image\/(?:png|jpe?g|webp|gif|bmp|avif);base64,[A-Za-z0-9+/]*={0,2}$/i;
+  const safeName=(v:unknown):v is string=>typeof v==='string'&&v.length>0&&v.length<=180&&!/[\x00-\x1f\x7f]/.test(v);
+  const kinds:Kind[]=['point','line','polyline','bezier','circle','arc','text','dimension','axis','leader','hatch','table','stamp','eskd'];
+  if(p.layers.length>250||p.layers.some(l=>!safeName(l.name)||typeof l.color!=='string'||!/^#[0-9A-Fa-f]{6}$/.test(l.color)||
+    typeof l.visible!=='boolean'||typeof l.locked!=='boolean'))throw new Error('Повреждённое описание слоёв');
   for(const s of p.sheets){
     if(!Number.isFinite(s.width)||!Number.isFinite(s.height)||s.width<=0||s.height<=0||s.width>1e8||s.height>1e8||!Array.isArray(s.entities)||s.entities.length>200000) throw new Error('Неверная геометрия листа');
-    for(const e of s.entities) if(!Array.isArray(e.points)||e.points.length>30000||!e.points.every(isPoint)) throw new Error('Повреждённая геометрия объекта');
+    if(s.image!==undefined && (typeof s.image!=='string'||s.image.length>180_000_000||!imageData.test(s.image)))
+      throw new Error('Неподдерживаемая подложка: файл проекта может содержать только встроенное растровое изображение, без внешних URL');
+    for(const e of s.entities){
+      if(!kinds.includes(e.kind)||!safeName(e.layer)||!['manual','pdf','trace','ocr'].includes(e.origin)||
+        !Array.isArray(e.points)||e.points.length>30000||!e.points.every(isPoint)||
+        (e.center!==undefined&&!isPoint(e.center))||
+        (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
+        (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
+        (e.confidence!==undefined&&!Number.isFinite(e.confidence)))
+        throw new Error('Повреждённая геометрия или свойства объекта');
+    }
   }
   return p;
 }
