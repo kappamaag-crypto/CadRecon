@@ -330,3 +330,22 @@ test('W4 horizontal dimension computes projected distance and remains unverified
   const projected=Math.abs(dim.points[1].x-dim.points[0].x);
   expect(Number(measured![1])).toBeCloseTo(projected,4);
 });
+
+
+test('W4 precise coordinate LINE is created through the searchable CAD sidebar without mouse approximations',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;
+  await putProject(page,project);
+  await page.locator('.cad-precision summary').click();
+  page.once('dialog',d=>d.accept('10;20;100;70'));
+  await page.getByRole('button',{name:'Отрезок X1/Y1 → X2/Y2'}).click();
+  await expect(page.getByText(/CAD: создано точное геометрическое построение/)).toBeVisible();
+  const data=await exportProject(page);
+  expect(data.sheets[0].entities).toHaveLength(1);
+  const line=data.sheets[0].entities[0];
+  expect(line.kind).toBe('line');
+  expect(line.points).toEqual([{x:10,y:20},{x:100,y:70}]);
+  expect(line.verified).toBe(false);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(0);
+});
