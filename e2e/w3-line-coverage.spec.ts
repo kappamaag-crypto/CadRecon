@@ -5,7 +5,7 @@ import {join} from 'node:path';
 import {isRedundantCircleStroke} from '../src/circleStrokeFilter';
 
 type P={x:number;y:number};
-type Ent={kind:string;points:P[];center?:P;radius?:number;verified:boolean};
+type Ent={kind:string;points:P[];center?:P;radius?:number;verified:boolean;reason?:string;confidence?:number};
 const truth:[P,P][]=[
   [{x:55,y:70},{x:830,y:70}],
   [{x:55,y:70},{x:55,y:510}],
@@ -89,6 +89,8 @@ for(const [kind,filename] of [
     await writeFile('test-results/w3-'+kind+'-quality.json',JSON.stringify(observed,null,2));
     console.log('W3_QUALITY '+JSON.stringify(observed));
     expect(observed.autoApproved).toBe(0);
+    expect(lines.every(e=>(e.reason||'').includes('исходный штрих')&&
+      (e.confidence===undefined||(e.confidence>=0&&e.confidence<=1)))).toBe(true);
     expect(lineCoverage).toHaveLength(3);
     // Synthetic regression GATE: catch catastrophic axis-aligned loss.
     // This is a line-sample coverage metric, NOT global CAD recall/F1.
