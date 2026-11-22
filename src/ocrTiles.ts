@@ -59,3 +59,29 @@ export function unrotateOcrBox(
     x0:originalWidth-box.y1,x1:originalWidth-box.y0,
     y0:box.x0,y1:box.x1};
 }
+
+
+/** Bounded ±90° pass for A0/A1 scanned drawings.
+ * Large pages are already tiled at original pixel resolution. Do not rotate
+ * the entire 6800x4700 canvas: use selected original tiles, maintain tile
+ * offsets and explicitly report incomplete coverage to the operator.
+ * Selection samples the whole sheet, including the right-bottom title-block.
+ */
+export interface VerticalOcrSelection {
+  tiles:OcrTile[];skipped:number;complete:boolean;
+}
+export function planVerticalOcrTiles(tiles:OcrTile[],maxTiles=8):VerticalOcrSelection{
+  if(!Number.isInteger(maxTiles)||maxTiles<1||maxTiles>100)
+    throw new Error('OCR: неверный предел повёрнутых фрагментов');
+  if(tiles.length<=maxTiles)return {tiles:[...tiles],skipped:0,complete:true};
+  // Include first and last fragments (the final is usually the title block).
+  const positions=new Set<number>([0,tiles.length-1]);
+  for(let i=0;i<maxTiles&&positions.size<maxTiles;i++){
+    const at=Math.round(i*(tiles.length-1)/(maxTiles-1));
+    positions.add(at);
+  }
+  // Adjacent rounded samples may collide; fill deterministically.
+  for(let i=tiles.length-1;i>=0&&positions.size<maxTiles;i--)positions.add(i);
+  const selected=[...positions].sort((a,b)=>a-b).map(i=>tiles[i]);
+  return {tiles:selected,skipped:tiles.length-selected.length,complete:false};
+}
