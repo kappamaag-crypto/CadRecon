@@ -66,6 +66,35 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     project.sheets[0].calibrated=true;
     expect(createDxf(project.sheets[0],project)).toContain('\n$INSUNITS\n70\n4\n');
   });
+  it('skips clip-only and endPath without fabricating visible editable CAD geometry',()=>{
+    const line=[20,[Float32Array.from([0,0,0,1,80,0])],null];
+    const hidden=[28,[Float32Array.from([0,0,0,1,80,0])],null];
+    const clipping=[29,[Float32Array.from([0,0,0,1,80,0])],null];
+    const out=extract([91,91,91],[hidden,clipping,line]);
+    expect(out.entities).toHaveLength(1);
+    expect(out.entities[0].kind).toBe('line');
+    expect(out.nonPaintedPaths).toBe(2);
+    expect(out.clippedGeometry).toBe(1);
+    expect(out.entities[0].reason).toContain('ОТСЕЧЕНИЯ');
+    expect(out.warnings.join(' ')).toContain('clipping');
+  });
+  it('restores clipping scope at Q and rejects unknown paint ops',()=>{
+    const ops={...OPS,clip:29,eoClip:30,endPath:28,setGState:9,
+      paintFormXObjectBegin:74,paintFormXObjectEnd:75};
+    const path=[20,[Float32Array.from([0,10,20,1,90,20])],null];
+    const wrong=[0,[Float32Array.from([0,10,20,1,90,20])],null];
+    const clip=[29,[Float32Array.from([0,0,0,1,100,0])],null];
+    const out=extractPdfPaths({
+      fnArray:[10,91,91,11,91,91,9,74],
+      argsArray:[[],clip,path,[],path,wrong,[],[]],
+    },viewport,ops);
+    expect(out.entities).toHaveLength(2);
+    expect(out.clippedGeometry).toBe(1);
+    expect(out.rejectedPaths).toBe(1);
+    expect(out.entities[1].reason).not.toContain('ОТСЕЧЕНИЯ');
+    expect(out.warnings.join(' ')).toContain('Form XObject');
+    expect(out.warnings.join(' ')).toContain('прозрачность');
+  });
   it('rejects empty/corrupt paths with explicit warning, never silent success',()=>{
     const out=extract([91,91],[[20,[null],null],[20,[],null]]);
     expect(out.entities).toHaveLength(0);
