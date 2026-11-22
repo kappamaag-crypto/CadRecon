@@ -91,6 +91,9 @@ export function inspectCadTopology(entities:Entity[],tolerance=.01):TopologyRepo
     if(fingerprints.has(key)){
       duplicates++;
       push({kind:'duplicate',entityId:e.id,description:'Совпадающий отрезок: проверить перед удалением'});
+      // The duplicated segment is not a second real edge and must not
+      // falsely mark both endpoints as connected in closure diagnostics.
+      continue;
     }else fingerprints.add(key);
     ends.push({entity:e,point:a,other:b,connected:false},
       {entity:e,point:b,other:a,connected:false});
