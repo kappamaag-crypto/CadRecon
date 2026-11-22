@@ -837,13 +837,13 @@ export default function App(){
         {topology&&<div className="issue" aria-label="Диагностика контуров">
           <p><strong>Проверено LINE: {topology.checked}</strong> ·
             свободных концов: {topology.openEnds} · близких зазоров: {topology.nearGaps} ·
-            дублей: {topology.duplicates} · замкнутых полилиний: {topology.closedPolylines}</p>
+            дублей: {topology.duplicates} · самопересечений: {topology.selfCrossings} · замкнутых полилиний: {topology.closedPolylines}</p>
           {topology.truncated&&<p>⚠ Проверка ограничена первыми 800 линиями и 80 замечаниями.
             Остальные нужно исследовать отдельно.</p>}
           <div className="topology-findings">
             {topology.findings.slice(0,25).map((f,i)=><button className="cad-finding" key={i}
               title="Выделить объект для проверки" onClick={()=>{setSelected(f.entityId);setPanel('properties');}}>
-              {f.kind==='duplicate'?'Дубль':f.kind==='gap'?'Разрыв':'Свободный конец'}:
+              {f.kind==='duplicate'?'Дубль':f.kind==='gap'?'Разрыв':f.kind==='self-crossing'?'Пересечение':'Свободный конец'}:
               {' '+f.description}
             </button>)}
           </div>

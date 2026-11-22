@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {entity} from './model';
-import {angleBetweenCadLines,inspectCadTopology,measureCadEntity} from './cadMeasurements';
+import {angleBetweenCadLines,inspectCadTopology,measureCadEntity,isSimplePolygon} from './cadMeasurements';
 const p=(x:number,y:number)=>({x,y});
 const line=(a:{x:number;y:number},b:{x:number;y:number})=>entity('line',[a,b]);
 describe('W4 read-only measurements and topological diagnostics',()=>{
@@ -11,6 +11,17 @@ describe('W4 read-only measurements and topological diagnostics',()=>{
    expect(out.perimeter).toBe(100);
    expect(out.area).toBe(600);
    expect(out.closed).toBe(true);
+ });
+ it('rejects the signed-area trap of a bow-tie self-crossing contour',()=>{
+   const e=entity('polyline',[p(0,0),p(20,20),p(0,20),p(20,0)]);
+   e.closed=true;
+   expect(isSimplePolygon(e.points)).toBe(false);
+   const m=measureCadEntity(e)!;
+   expect(m.area).toBeUndefined();
+   expect(m.note).toContain('самопересечение');
+   const report=inspectCadTopology([e]);
+   expect(report.selfCrossings).toBe(1);
+   expect(report.findings.some(f=>f.kind==='self-crossing'&&f.entityId===e.id)).toBe(true);
  });
  it('refuses to call an open polyline area',()=>{
    const e=entity('polyline',[p(0,0),p(30,0),p(30,20)]);
