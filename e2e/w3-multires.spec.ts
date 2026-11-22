@@ -51,4 +51,8 @@ test('W3 2x synthetic raster resolution: local tiled trace retains all axis dire
   console.log('W3_RESOLUTION '+JSON.stringify(diagnostic));
   expect(diagnostic.autoApproved).toBe(0);
   expect(coverage).toHaveLength(3);
+  // Strict loss regression on deterministic 2x-upsampled synthetic strokes.
+  // Does not measure any real scanner's DPI, geometric precision or F1.
+  for(const c of coverage)expect(c).toBeGreaterThanOrEqual(.97);
+  expect(lines.length).toBeLessThan(1200);
 });
