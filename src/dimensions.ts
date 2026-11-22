@@ -116,7 +116,7 @@ export function reconstructDimensionChains(sheet:Sheet,allEntities:Entity[]=shee
   const dimensions:Entity[]=[];
   const used=new Set<string>();
   for(const label of texts){
-    if((label.confidence??100)<35)continue;
+    if(sourceConfidence(label)<.35)continue; // Support both legacy 0..100 and normalized 0..1 OCR
     const fit=candidatesForText(label,lines,sheet);
     if(!fit||used.has(fit.line.source.id))continue;
     used.add(fit.line.source.id);
