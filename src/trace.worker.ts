@@ -1,7 +1,7 @@
 /// <reference lib="webworker" />
 import {detectOverlappedCircles} from './circleDetector';
 import {suppressRedundantCircleStrokes} from './circleStrokeFilter';
-import {deduplicateInkStrokeVotes} from './inkVoteDedup';
+import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 type P={x:number;y:number};type Segment={a:P;b:P;confidence:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
@@ -46,7 +46,7 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
     const {c,s}=angles[t],along={x:-s,y:c},matches:number[]=[];
     for(const p of sampled)if(Math.abs(p.x*c+p.y*s-r)<1.7)matches.push(p.x*along.x+p.y*along.y);
     matches.sort((a,b)=>a-b);let first=matches[0],last=matches[0];
-    const push=()=>{if(last-first<minLength)return;const a={x:(r*c+first*along.x)*scale,y:(r*s+first*along.y)*scale},b={x:(r*c+last*along.x)*scale,y:(r*s+last*along.y)*scale}; const confidence=Math.min(.95,.35+votes/150);if(!found.some(s=>Math.abs(s.a.x-a.x)<7*scale&&Math.abs(s.b.y-b.y)<7*scale&&Math.abs(Math.atan2(s.b.y-s.a.y,s.b.x-s.a.x)-Math.atan2(b.y-a.y,b.x-a.x))<.06))found.push({a,b,confidence});};
+    const push=()=>{if(last-first<minLength)return;const a={x:(r*c+first*along.x)*scale,y:(r*s+first*along.y)*scale},b={x:(r*c+last*along.x)*scale,y:(r*s+last*along.y)*scale}; const confidence=Math.min(.95,.35+votes/150);if(!found.some(s=>sameFiniteLine(s,{a,b,confidence},2.5*scale)))found.push({a,b,confidence});};
     for(let i=1;i<matches.length;i++){if(matches[i]-last>Math.max(7,minLength/3)){push();first=matches[i];}last=matches[i];}
     if(matches.length)push();
   }
