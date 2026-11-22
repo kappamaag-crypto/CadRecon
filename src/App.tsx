@@ -21,6 +21,7 @@ import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
+import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {arrayEntity} from './geometryTransform';
 import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
@@ -61,6 +62,7 @@ export default function App(){
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
  const [ocrVertical,setOcrVertical]=useState(false);
+ const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;result:OcrMeasurement}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
  const [localBusy,setLocalBusy]=useState(false);
@@ -245,6 +247,32 @@ export default function App(){
      setStatus('Автоанализ: '+newDims.length+' размерных объектов, '+newSymbols.length+' обозначений ЕСКД, '+recognized.chains.length+' цепочек. Все требуют проверки.');
    } catch(err){setStatus('Ошибка семантического распознавания: '+String(err));}
    finally{setBusy('');}
+ }
+ async function measureOcrAccuracy(file:File|null){
+   if(!file)return;
+   if(!sheet.image){setStatus('OCR эталон: откройте лист со сканом.');return;}
+   if(file.size>500000){setStatus('OCR эталон: файл больше 500 КБ. Используйте отдельные листы.');return;}
+   const source=sheet;
+   try{
+     const raw=JSON.parse(await file.text()) as unknown;
+     if(!Array.isArray(raw)||raw.length>2000||raw.some(row=>{
+       if(!row||typeof row!=='object')return true;
+       const e=row as Record<string,unknown>;
+       return typeof e.id!=='string'||typeof e.text!=='string'||e.text.length>1000||
+         !['x0','y0','x1','y1'].every(k=>typeof e[k]==='number'&&Number.isFinite(e[k]));
+     }))throw new Error('ожидается массив не более 2000 строк {id,text,x0,y0,x1,y1}');
+     const img=new Image();img.src=source.image!;await img.decode();
+     if(!img.naturalWidth||!img.naturalHeight)throw new Error('подложка не загружена');
+     const sx=img.naturalWidth/source.width,sy=img.naturalHeight/source.height;
+     const recognized=source.entities
+       .filter(e=>e.kind==='text'&&e.origin==='ocr'&&e.bbox)
+       .map(e=>({text:e.text||'',x0:e.bbox!.x0*sx,x1:e.bbox!.x1*sx,
+         y0:e.bbox!.y0*sy,y1:e.bbox!.y1*sy}));
+     const result=evaluateOcrAccuracy(raw as OcrGolden[],recognized);
+     setOcrBenchmark({sheetId:source.id,result});
+     setStatus('OCR эталон: выполнено сравнение '+raw.length+' размеченных надписей с '+
+       recognized.length+' OCR-кандидатами. Это локальная оценка, не инженерное подтверждение.');
+   }catch(error){setStatus('OCR эталон: '+String(error));}
  }
  async function recognizeArea(rect:SheetRect){
    if(localController.current){setStatus('OCR области: предыдущая обработка ещё выполняется.');return;}
@@ -523,6 +551,22 @@ export default function App(){
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
         <p className="muted">Новые объекты CAD не подтверждаются автоматически. Балл алгоритма — эвристика, а не статистическая вероятность правильности. Сравните с оригиналом, при необходимости исправьте или удалите.</p>
+        <details>
+          <summary>Измерить точность OCR по размеченному эталону JSON</summary>
+          <p className="muted">Эталон — массив объектов id, text, x0, y0, x1, y1 в пикселях исходной подложки. Все данные сравниваются локально, без отправки файлов на сервер. Результат зависит от корректности разметки.</p>
+          <input type="file" aria-label="Загрузить OCR эталон JSON" accept=".json,application/json"
+            onChange={e=>{const file=e.target.files?.[0]||null;void measureOcrAccuracy(file);e.target.value='';}}/>
+          {ocrBenchmark?.sheetId===sheet.id&&<div className="issue">
+            <strong>Результат независимой разметки текущего листа</strong>
+            <p>Найдено {ocrBenchmark.result.matched} / {ocrBenchmark.result.expected} надписей.
+              Пропущено: {ocrBenchmark.result.missed}. Лишних: {ocrBenchmark.result.falsePositive}.</p>
+            <p>Detection precision: {(ocrBenchmark.result.precision*100).toFixed(1)}% ·
+              recall: {(ocrBenchmark.result.recall*100).toFixed(1)}%.</p>
+            <p>CER: {(ocrBenchmark.result.cer*100).toFixed(1)}% ·
+              WER: {(ocrBenchmark.result.wer*100).toFixed(1)}% ·
+              точных критичных текстов: {ocrBenchmark.result.criticalExact} / {ocrBenchmark.result.criticalTokens}.</p>
+          </div>}
+        </details>
         <div className="stack">
           <button className="action" disabled={!!busy} onClick={runSemanticRecognition}>↻ Повторить автоанализ</button>
           <div className="stack">
