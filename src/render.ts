@@ -21,6 +21,7 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
     ctx.restore();return;
   }
   if(e.kind==='axis'){ctx.setLineDash([12*lineWidth,5*lineWidth,2*lineWidth,5*lineWidth]);}
+  if(e.kind==='point'){const p=pts[0],r=Math.max(2*lineWidth,1.3);ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke();}
   if(e.kind==='line'||e.kind==='axis'||e.kind==='polyline'||e.kind==='hatch'){
     if(e.kind==='hatch'){poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;}
     poly(ctx,pts,!!e.closed||e.kind==='hatch');ctx.stroke();
