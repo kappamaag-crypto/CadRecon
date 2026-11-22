@@ -14,11 +14,19 @@ async function imagePages(file:File,onProgress?:(s:string)=>void):Promise<Sheet[
     const limit=20,sheets:Sheet[]=[];
     for(let i=0;i<Math.min(pages.length,limit);i++){
       onProgress?.('Импорт TIFF: страница '+(i+1)+' / '+pages.length);
-      const page=pages[i],width=page.width,height=page.height;
+      const page=pages[i];
+      const header=page as typeof page & {t256?:number[];t257?:number[]};
+      const rawWidth=header.t256?.[0],rawHeight=header.t257?.[0];
+      if(rawWidth!==undefined&&rawHeight!==undefined&&
+        (!Number.isInteger(rawWidth)||!Number.isInteger(rawHeight)||rawWidth<2||rawHeight<2||
+        rawWidth*rawHeight>24_000_000))
+        throw new Error('Страница TIFF '+(i+1)+' превышает безопасный предел 24 Мп. Разбейте скан или уменьшите разрешение.');
+      // UTIF only materializes page.width/.height after decodeImage().
+      UTIF.decodeImage(buf,page);
+      const width=page.width,height=page.height;
       if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2||
          width*height>24_000_000)
-        throw new Error('Страница TIFF '+(i+1)+' превышает безопасный предел 24 Мп. Разбейте скан или уменьшите разрешение.');
-      UTIF.decodeImage(buf,page);
+        throw new Error('Некорректные размеры страницы TIFF '+(i+1));
       const rgba=UTIF.toRGBA8(page);
       const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
       const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');
