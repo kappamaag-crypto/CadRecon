@@ -49,3 +49,29 @@ test('OCR region tool shows rectangle guidance and can be cancelled without fetc
   await page.keyboard.press('Escape');
   await expect(page.getByText(/OCR: укажите второй угол прямоугольной области/)).toHaveCount(0);
 });
+
+
+test('OCR benchmark compares source-pixel annotated labels locally without network OCR',async ({page})=>{
+  const p=newProject(),sheet=p.sheets[0];
+  sheet.width=100;sheet.height=100;
+  sheet.image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9SAAAAABJRU5ErkJggg==';
+  const t=entity('text',[{x:10,y:20}],'OCR','ocr');
+  t.text='6000';t.bbox={x0:10,y0:10,x1:30,y1:20};t.confidence=.82;
+  sheet.entities=[t];
+  await page.goto('/CadRecon/');
+  await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
+    name:'benchmark-project.cadrecon.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify(p)),
+  });
+  await expect(page.getByText(/Проект открыт:/)).toBeVisible();
+  await page.locator('.panel-tabs button[title="Распознавание"]').click();
+  await page.getByText('Измерить точность OCR по размеченному эталону JSON').click();
+  await page.getByLabel('Загрузить OCR эталон JSON').setInputFiles({
+    name:'ocr-ground-truth.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify([{id:'label-1',text:'6000',
+      x0:.1,y0:.1,x1:.3,y1:.2}])),
+  });
+  await expect(page.getByText(/Найдено 1 \/ 1 надписей/)).toBeVisible();
+  await expect(page.getByText(/CER: 0.0%/)).toBeVisible();
+  await expect(page.getByText(/точных критичных текстов: 1 \/ 1/)).toBeVisible();
+});
