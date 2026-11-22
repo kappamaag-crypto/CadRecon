@@ -1,0 +1,46 @@
+/** Browser-only bounded tiling of large engineering scans for Tesseract.
+ * Transparent geometry: all result boxes remain in original image pixels,
+ * then convert once into sheet coordinates.
+ */
+export interface OcrTile {x:number;y:number;width:number;height:number;}
+export function planOcrTiles(
+  width:number,height:number,
+  tileSize=1600,overlap=160,
+):OcrTile[]{
+  if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2)
+    throw new Error('OCR: некорректные размеры растра');
+  if(tileSize<256||overlap<0||overlap>=tileSize/2)
+    throw new Error('OCR: некорректные параметры фрагментации');
+  if(width*height<=4_000_000&&width<=3000&&height<=3000)
+    return [{x:0,y:0,width,height}];
+  const step=tileSize-overlap;
+  const xPositions:number[]=[],yPositions:number[]=[];
+  for(let x=0;;x+=step){
+    const at=Math.max(0,Math.min(x,width-tileSize));
+    if(xPositions.length&&at===xPositions[xPositions.length-1])break;
+    xPositions.push(at);
+    if(at+tileSize>=width)break;
+  }
+  for(let y=0;;y+=step){
+    const at=Math.max(0,Math.min(y,height-tileSize));
+    if(yPositions.length&&at===yPositions[yPositions.length-1])break;
+    yPositions.push(at);
+    if(at+tileSize>=height)break;
+  }
+  if(xPositions.length*yPositions.length>100)
+    throw new Error('OCR: более 100 фрагментов. Разбейте большой чертёж на отдельные листы.');
+  return yPositions.flatMap(y=>xPositions.map(x=>({
+    x,y,width:Math.min(tileSize,width-x),height:Math.min(tileSize,height-y),
+  })));
+}
+export interface OcrBox {x0:number;y0:number;x1:number;y1:number;text:string;}
+/** Deduplicate the SAME text line in overlapping tiles, never neighboring
+ * distinct notes. A substantial bounding-box intersection is required. */
+export function sameOcrLine(a:OcrBox,b:OcrBox):boolean{
+  if(a.text.trim()!==b.text.trim())return false;
+  const ix=Math.max(0,Math.min(a.x1,b.x1)-Math.max(a.x0,b.x0));
+  const iy=Math.max(0,Math.min(a.y1,b.y1)-Math.max(a.y0,b.y0));
+  const common=ix*iy,areaA=Math.max(0,(a.x1-a.x0)*(a.y1-a.y0));
+  const areaB=Math.max(0,(b.x1-b.x0)*(b.y1-b.y0));
+  return Math.min(areaA,areaB)>0&&common/Math.min(areaA,areaB)>=.7;
+}
