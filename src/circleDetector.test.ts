@@ -1,5 +1,8 @@
 import {describe,it,expect} from 'vitest';
 import {detectOverlappedCircles} from './circleDetector';
+import {execFileSync} from 'node:child_process';
+import {readFileSync} from 'node:fs';
+import {inflateSync} from 'node:zlib';
 
 function canvas(width:number,height:number) {
   const rgba=new Uint8ClampedArray(width*height*4);
@@ -52,5 +55,31 @@ describe('W3 browser contour+gradient circle proposals',()=>{
     const b=detectOverlappedCircles(rgba,330,330,3);
     expect(a).toEqual(b);
     expect(a.length).toBeLessThanOrEqual(3);
+  });
+
+  it('also detects the real W0 synthetic scan circle crossed by a diagonal',()=>{
+    execFileSync('python3',['benchmarks/w0/generate_fixtures.py','--out','/tmp/cadrecon-w3-fixture']);
+    const png=readFileSync('/tmp/cadrecon-w3-fixture/scan_clean_300dpi.png');
+    const compressed:Buffer[]=[];
+    let offset=8;
+    while(offset<png.length-12){
+      const len=png.readUInt32BE(offset),tag=png.toString('ascii',offset+4,offset+8);
+      if(tag==='IDAT')compressed.push(png.subarray(offset+8,offset+8+len));
+      offset+=12+len;
+      if(tag==='IEND')break;
+    }
+    const raw=inflateSync(Buffer.concat(compressed));
+    const width=900,height=600,rgba=new Uint8ClampedArray(width*height*4);
+    for(let y=0;y<height;y++){
+      expect(raw[y*(width+1)]).toBe(0);
+      for(let x=0;x<width;x++){
+        const value=raw[y*(width+1)+1+x],i=(y*width+x)*4;
+        rgba[i]=rgba[i+1]=rgba[i+2]=value;rgba[i+3]=255;
+      }
+    }
+    const found=detectOverlappedCircles(rgba,width,height);
+    console.log('W3_SCAN_FIXTURE_CIRCLES',JSON.stringify(found.slice(0,8)));
+    const match=found.find(c=>Math.hypot(c.x-550,c.y-320)<12&&Math.abs(c.radius-80)<9);
+    expect(match).toBeDefined();
   });
 });
