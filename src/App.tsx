@@ -237,7 +237,7 @@ export default function App(){
  function exportPackage(){
    const safe=(text:string)=>slug(text).slice(0,75)||'CadRecon';
    const warn=project.sheets.reduce((n,s)=>n+s.entities.filter(e=>!e.verified).length,0);
-   const files=project.sheets.map((s,i)=>({
+   const files:Array<{name:string;data:string|Uint8Array}>=project.sheets.map((s,i)=>({
      name:'DXF/'+String(i+1).padStart(2,'0')+'_'+safe(s.name)+'.dxf',
      data:createDxf(s,project),
    }));
