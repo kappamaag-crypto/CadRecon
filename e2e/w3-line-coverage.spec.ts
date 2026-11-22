@@ -95,7 +95,11 @@ for(const [kind,filename] of [
     const floor=kind==='clean'?.97:.85;
     for(const c of lineCoverage)expect(c).toBeGreaterThanOrEqual(floor);
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    expect(lines.length).toBeLessThan(700);
+    // W3 false-positive / fragmentation regression GATE established after
+    // independent pixel-backed near-duplicate suppression, on these two
+    // synthetic fixtures ONLY. We still do not claim real-world precision.
+    expect(lines.length).toBeLessThan(260);
+    expect(outsideKnownStraight).toBeLessThanOrEqual(kind==='clean'?60:80);
     if(kind==='clean'){
       expect(nearest).not.toBeNull();
       expect(nearest!.centerErrorPx).toBeLessThanOrEqual(6);
