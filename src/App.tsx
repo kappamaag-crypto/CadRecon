@@ -24,6 +24,7 @@ import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {arrayEntity} from './geometryTransform';
+import {measureCadEntity,inspectCadTopology} from './cadMeasurements';
 import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
   polarArrayCad,alignCadLine} from './affineCad';
 import type {EskdType} from './model';
@@ -500,6 +501,8 @@ export default function App(){
  }
  const selection=sheet.entities.find(e=>e.id===selected);
  const issues=useMemo(()=>auditSheet(sheet,project),[sheet,project]);
+ const measured=useMemo(()=>selection?measureCadEntity(selection):null,[selection]);
+ const topology=useMemo(()=>panel==='audit'?inspectCadTopology(sheet.entities):null,[panel,sheet.entities]);
  const counts=useMemo(()=>sheet.entities.reduce((acc,e)=>(acc[e.kind]=(acc[e.kind]||0)+1,acc),{} as Record<string,number>),[sheet]);
  const reviewGroups=useMemo(()=>{
    const fresh=sheet.entities.filter(e=>!e.verified&&e.origin!=='manual');
@@ -710,6 +713,15 @@ export default function App(){
       {panel==='layers'&&<><h3>Слои</h3><p className="muted">Цвет, видимость и блокировка каждого типа CAD-объектов.</p><div className="layerlist">{project.layers.map(l=><div className="layer" key={l.name}><span className="swatch" style={{background:l.color}}/><span className="layername">{l.name}</span><button title="Видимость" onClick={()=>apply(p=>({...p,layers:p.layers.map(x=>x.name===l.name?{...x,visible:!x.visible}:x)}))}>{l.visible?'◉':'○'}</button><button title="Блокировка" onClick={()=>apply(p=>({...p,layers:p.layers.map(x=>x.name===l.name?{...x,locked:!x.locked}:x)}))}>{l.locked?'🔒':'▢'}</button></div>)}</div><button className="action" onClick={()=>{const name=window.prompt('Название нового слоя');if(!name?.trim()||project.layers.some(l=>l.name===name.trim()))return;apply(p=>({...p,layers:[...p.layers,{name:name.trim(),color:'#60a5fa',visible:true,locked:false}]}));}}>＋ Добавить слой</button></>}
       {panel==='properties'&&<><h3>Свойства объекта</h3>{selection?<div className="stack">
         <div className="property-type"><span>Тип</span><strong>{selection.kind}</strong></div>
+        {measured&&<div className="issue" aria-label="Геометрический калькулятор">
+          <strong>Геометрический калькулятор</strong>
+          {measured.length!==undefined&&<p>Длина: {measured.length.toFixed(3)} {sheet.calibrated?'мм':'ед. листа'}</p>}
+          {measured.perimeter!==undefined&&<p>Периметр: {measured.perimeter.toFixed(3)} {sheet.calibrated?'мм':'ед. листа'}</p>}
+          {measured.area!==undefined&&<p>Площадь: {measured.area.toFixed(3)} {sheet.calibrated?'мм²':'ед. листа²'}</p>}
+          {measured.radius!==undefined&&<p>Радиус: {measured.radius.toFixed(3)} {sheet.calibrated?'мм':'ед. листа'}</p>}
+          <p>{measured.note}</p>
+          {!sheet.calibrated&&<p>⚠ Масштаб не подтверждён: это не миллиметры.</p>}
+        </div>
         <label>Слой<select value={selection.layer} onChange={e=>modifyEntity({...selection,layer:e.target.value})}>{project.layers.map(l=><option key={l.name}>{l.name}</option>)}</select></label>
         <label>Источник <input value={selection.origin} disabled/></label>
         {selection.kind==='line'&&<label>Тип линии (DXF)
@@ -736,7 +748,25 @@ export default function App(){
         {(selection.kind==='table'||selection.kind==='stamp')&&<><label>Строки <input type="number" min="1" max="50" value={selection.rows||3} onChange={e=>modifyEntity({...selection,rows:Math.max(1,Math.round(Number(e.target.value)||1))})}/></label><label>Столбцы <input type="number" min="1" max="50" value={selection.cols||3} onChange={e=>modifyEntity({...selection,cols:Math.max(1,Math.round(Number(e.target.value)||1))})}/></label><label>Ширина <input type="number" value={selection.width||120} onChange={e=>modifyEntity({...selection,width:Number(e.target.value)||1})}/></label><label>Высота <input type="number" value={selection.height||60} onChange={e=>modifyEntity({...selection,height:Number(e.target.value)||1})}/></label></>}
         {selection.points.slice(0,12).map((pt,i)=><div className="xy" key={i}><span>P{i+1}</span><label>X<input type="number" step=".01" value={Number(pt.x.toFixed(3))} onChange={ev=>modifyEntity({...selection,points:selection.points.map((p,j)=>j===i?{...p,x:Number(ev.target.value)||0}:p)})}/></label><label>Y<input type="number" step=".01" value={Number(pt.y.toFixed(3))} onChange={ev=>modifyEntity({...selection,points:selection.points.map((p,j)=>j===i?{...p,y:Number(ev.target.value)||0}:p)})}/></label></div>)}
         <button className="danger" onClick={deleteSelected}>Удалить объект</button></div>:<p className="muted">Выберите объект инструментом ↖. Можно изменить координаты, текст, размер, слой и статус проверки.</p>}</>}
-      {panel==='audit'&&<><h3>Контроль чертежа</h3><div className="stack">{issues.map((i,n)=><div key={n} className={'issue '+i.severity}><strong>{i.severity==='warning'?'⚠ Предупреждение':'ℹ Сведения'}</strong><p>{i.message}</p></div>)}</div><h3>Проверка исходника</h3><p className="muted">Включите «До / после» для сравнения. Подтвердите масштаб минимум по двум независимым размерам. Отметьте проверенные элементы в их свойствах.</p><button className="action" onClick={()=>setCompare(true)}>◫ Открыть сравнение</button><p className="notice">Аудит не заменяет нормоконтроль и инженерную проверку чертежей КМ/КМД.</p></>}
+      {panel==='audit'&&<>
+        <h3>Замкнутость контуров и возможные разрывы</h3>
+        <p className="muted">Диагностика только отмечает возможные ошибки LINE.
+          Она не соединяет разрывы и не подтверждает пригодность для 3D-выдавливания.</p>
+        {topology&&<div className="issue" aria-label="Диагностика контуров">
+          <p><strong>Проверено LINE: {topology.checked}</strong> ·
+            свободных концов: {topology.openEnds} · близких зазоров: {topology.nearGaps} ·
+            дублей: {topology.duplicates} · замкнутых полилиний: {topology.closedPolylines}</p>
+          {topology.truncated&&<p>⚠ Проверка ограничена первыми 800 линиями и 80 замечаниями.
+            Остальные нужно исследовать отдельно.</p>}
+          <div className="topology-findings">
+            {topology.findings.slice(0,25).map((f,i)=><button className="cad-finding" key={i}
+              title="Выделить объект для проверки" onClick={()=>{setSelected(f.entityId);setPanel('properties');}}>
+              {f.kind==='duplicate'?'Дубль':f.kind==='gap'?'Разрыв':'Свободный конец'}:
+              {' '+f.description}
+            </button>)}
+          </div>
+        </div>}
+        <h3>Контроль чертежа</h3><div className="stack">{issues.map((i,n)=><div key={n} className={'issue '+i.severity}><strong>{i.severity==='warning'?'⚠ Предупреждение':'ℹ Сведения'}</strong><p>{i.message}</p></div>)}</div><h3>Проверка исходника</h3><p className="muted">Включите «До / после» для сравнения. Подтвердите масштаб минимум по двум независимым размерам. Отметьте проверенные элементы в их свойствах.</p><button className="action" onClick={()=>setCompare(true)}>◫ Открыть сравнение</button><p className="notice">Аудит не заменяет нормоконтроль и инженерную проверку чертежей КМ/КМД.</p></>}
       {panel==='backups'&&<><h3>Резервные копии</h3><p className="muted">До восьми версий сохраняются в браузере. Экспорт JSON необходим для защиты от очистки данных сайта.</p><button className="action" onClick={async()=>{await createBackup(project);setBackups(await listBackups());setStatus('Резервная копия сохранена');}}>＋ Создать копию</button>{backups.map(b=><div className="backup" key={b.key}><strong>{b.name}</strong><small>{new Date(b.time).toLocaleString('ru-RU')}</small><button onClick={()=>restore(b.key)}>Восстановить</button></div>)}<button onClick={()=>exportProject(project)}>Скачать JSON на диск</button></>}
       </div>
     </aside>
