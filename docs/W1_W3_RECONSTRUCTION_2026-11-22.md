@@ -8,7 +8,7 @@ CadRecon обрабатывает только плоские PDF/PNG/JPEG/TIFF-
 
 - Обязательно извлекать исходные PDF paths, не переводя настоящие векторы в шумную raster Hough-трассировку без просьбы пользователя.
 - Распознаются окружности по четырём кубическим четвертям и **истинные эллипсы** с проверкой ортогональности полуосей и значения нормированного квадратичного уравнения. Кривые с высоким остатком остаются редактируемыми SPLINE, а не выдаются за точную окружность.
-- Прямоугольный PDF clipping отсекает LINE, а для кривых безошибочно исключает геометрию полностью за пределами границы. Частично отсечённые кривые пока требуют ручной проверки; произвольные clipping и вложенные Form XObject остаются нерешёнными.
+- Прямоугольный PDF clipping отсекает LINE и **кубические кривые Безье** по точным параметрическим интервалам алгоритмом de Casteljau. Выход остаётся DXF SPLINE без аппроксимации прямыми; частично видимые окружности и замкнутые контуры не экспортируются как полностью замкнутые. Исправлена реальная последовательность PDF.js `constructPath / clip / endPath`; настоящая синтетическая PDF→DXF проверка пройдена. Произвольные clipping, вложенные Form XObject и альфа всё ещё не реализованы.
 - Растеризация PDF сохраняется прежде всего как **PNG без потерь**, чтобы не ухудшать тонкие линии и OCR. Лишь при ограничении памяти — JPEG с явным предупреждением. Для смешанного векторного PDF со встроенными изображениями программа предлагает гибридный режим.
 
 ## Сканы, W3
@@ -25,8 +25,8 @@ CadRecon обрабатывает только плоские PDF/PNG/JPEG/TIFF-
 
 ## Приёмка
 
-- Unit-тесты: `src/pdfPaths.test.ts`, `src/pdfRasterPolicy.test.ts`, `src/scanInkThreshold.test.ts`, `src/traceCleanup.test.ts`, `src/recognitionQuality.test.ts`.
-- Browser E2E: `e2e/w1-lossless.spec.ts`, `e2e/w3-faded-ink.spec.ts`, `e2e/reconstruction-workflow.spec.ts`, старые W0/W1/W3 golden regression.
+- Unit-тесты: `src/pdfBezierClip.test.ts`, `src/edgeOrientation.test.ts`, `src/ocrRisk.test.ts`, `src/pdfPaths.test.ts`, `src/pdfRasterPolicy.test.ts`, `src/scanInkThreshold.test.ts`, `src/traceCleanup.test.ts`, `src/recognitionQuality.test.ts`.
+- Browser E2E: `e2e/w1-clipped-curves.spec.ts` (настоящий PDF.js), `e2e/w1-lossless.spec.ts`, `e2e/w3-faded-ink.spec.ts`, `e2e/reconstruction-workflow.spec.ts`, старые W0/W1/W3 golden regression.
 - Synthetic gray185-on-paper250 подтверждает воспроизведение бледных SOLID и DASHED; числа автоматически найденных кандидатов **не равны точным корректным геометрическим объектам**.
 - Необходимо отдельно замерять precision/recall для линий/окружностей/штрихов/размеров и CER/WER для OCR на лицензированном наборе реальных чертежей с эталонным DXF и координатами. Отсутствие таких данных запрещает заявлять высокие проценты точности.
 
