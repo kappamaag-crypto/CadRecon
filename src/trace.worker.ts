@@ -8,12 +8,29 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   let n=width*height,total=0;for(let i=0;i<256;i++)total+=i*histogram[i];
   let wb=0,best=-1,th=128,cnt=0;for(let i=0;i<256;i++){cnt+=histogram[i];if(!cnt)continue;const cf=n-cnt;if(!cf)break;wb+=i*histogram[i];const v=(total/cf-wb*(1/cf+1/cnt));const variance=cnt*cf*v*v;if(variance>best){best=variance;th=i;}}
   th=Math.max(45,Math.min(210,th));
-  const sampled:P[]=[];const step=Math.max(1,Math.ceil(Math.sqrt(n/60000)));
-  for(let y=1;y<height-1;y+=step)for(let x=1;x<width-1;x+=step){
-    const i=y*width+x;if(gray[i]>=th)continue;
-    if(gray[i-1]>=th||gray[i+1]>=th||gray[i-width]>=th||gray[i+width]>=th)sampled.push({x,y});
+  // Evaluate EVERY pixel before sampling. The previous fixed (x,y) grid
+  // could hit only the interior of a 3px vertical/horizontal stroke, losing
+  // its entire boundary and fabricating a false "nothing detected" result.
+  const edgeMask=new Uint8Array(n);
+  let edgeCount=0;
+  for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
+    const i=y*width+x;
+    if(gray[i]>=th)continue;
+    if(gray[i-1]>=th||gray[i+1]>=th||gray[i-width]>=th||gray[i+width]>=th){
+      edgeMask[i]=1;edgeCount++;
+    }
   }
-  const stride=Math.max(1,Math.ceil(sampled.length/15000));const pts=sampled.filter((_,i)=>i%stride===0);
+  const sampled:P[]=[];
+  // Bound Hough/fit time while sampling from the complete edge population,
+  // never from a periodic pixel grid that can alias away whole thin strokes.
+  const edgeStride=Math.max(1,Math.ceil(edgeCount/45000));
+  let observed=0;
+  for(let i=0;i<n;i++){
+    if(!edgeMask[i])continue;
+    if(observed++%edgeStride===0)sampled.push({x:i%width,y:Math.floor(i/width)});
+  }
+  const stride=Math.max(1,Math.ceil(sampled.length/15000));
+  const pts=sampled.filter((_,i)=>i%stride===0);
   const acc=new Map<number,number>();const angles:Array<{c:number;s:number}>=[];for(let t=0;t<180;t+=2)angles.push({c:Math.cos(t*Math.PI/180),s:Math.sin(t*Math.PI/180)});
   const rhoMax=Math.ceil(Math.hypot(width,height)/2)+1; const rhoStride=rhoMax*4+20;
   for(const p of pts)for(let t=0;t<angles.length;t++){
