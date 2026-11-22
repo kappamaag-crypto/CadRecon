@@ -95,6 +95,38 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(out.warnings.join(' ')).toContain('Form XObject');
     expect(out.warnings.join(' ')).toContain('прозрачность');
   });
+
+  it('clips a straight vector LINE to a packed closed rectangular W path',()=>{
+    const clip=[29,[Float32Array.from([
+      0,20,20,1,100,20,1,100,100,1,20,100,4,
+    ])],null];
+    const crossing=[20,[Float32Array.from([0,-50,60,1,160,60])],null];
+    const outside=[20,[Float32Array.from([0,-50,120,1,160,120])],null];
+    const out=extract([10,91,91,91,11,91],[[],clip,crossing,outside,[],crossing]);
+    const lines=out.entities.filter(e=>e.kind==='line');
+    expect(lines).toHaveLength(2);
+    // viewport [x,350-y] => rectangle x 20..100, y 250..330
+    expect(lines[0].points[0].x).toBeCloseTo(20,5);
+    expect(lines[0].points[1].x).toBeCloseTo(100,5);
+    expect(lines[0].verified).toBe(false);
+    // q/Q restores original, unclipped geometry.
+    expect(lines[1].points[0].x).toBe(-50);
+    expect(lines[1].points[1].x).toBe(160);
+    expect(out.rectangularClipLines).toBe(2);
+    expect(out.clippedGeometry).toBe(0);
+  });
+  it('refuses to falsely clip vectors through a rotated/nonrectangular path',()=>{
+    const irregular=[29,[Float32Array.from([
+      0,20,20,1,100,20,1,60,100,1,20,100,4,
+    ])],null];
+    const line=[20,[Float32Array.from([0,0,60,1,160,60])],null];
+    const out=extract([91,91],[irregular,line]);
+    expect(out.entities).toHaveLength(1);
+    expect(out.entities[0].points[0].x).toBe(0);
+    expect(out.clippedGeometry).toBe(1);
+    expect(out.rectangularClipLines).toBe(0);
+    expect(out.warnings.join(' ')).toContain('clipping');
+  });
   it('rejects empty/corrupt paths with explicit warning, never silent success',()=>{
     const out=extract([91,91],[[20,[null],null],[20,[],null]]);
     expect(out.entities).toHaveLength(0);

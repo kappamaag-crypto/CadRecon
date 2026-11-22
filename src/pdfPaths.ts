@@ -23,6 +23,7 @@ export interface PdfVectorReport {
   rejectedPaths:number;
   nonPaintedPaths:number;
   clippedGeometry:number;
+  rectangularClipLines:number;
   truncated:boolean;
   warnings:string[];
 }
@@ -73,20 +74,50 @@ function circleFromQuarterCurves(parts:Segment[]):{center:Point;radius:number}|n
   return {center,radius};
 }
 
+type ClipRect={x0:number;y0:number;x1:number;y1:number};
+function clipStraightLine(a:Point,b:Point,clip:ClipRect):Point[]|null{
+  const dx=b.x-a.x,dy=b.y-a.y;
+  let lo=0,hi=1;
+  for(const [p,q] of [[-dx,a.x-clip.x0],[dx,clip.x1-a.x],
+    [-dy,a.y-clip.y0],[dy,clip.y1-a.y]]){
+    if(Math.abs(p)<1e-12){if(q<0)return null;continue;}
+    const t=q/p;
+    if(p<0)lo=Math.max(lo,t);else hi=Math.min(hi,t);
+    if(lo>hi)return null;
+  }
+  if(hi-lo<1e-9)return null;
+  return [{x:a.x+lo*dx,y:a.y+lo*dy},{x:a.x+hi*dx,y:a.y+hi*dy}];
+}
+function intersectRect(a:ClipRect,b:ClipRect):ClipRect{
+  return {x0:Math.max(a.x0,b.x0),y0:Math.max(a.y0,b.y0),
+    x1:Math.min(a.x1,b.x1),y1:Math.min(a.y1,b.y1)};
+}
+
 export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):PdfVectorReport {
   const entities:Entity[]=[],warnings:string[]=[];
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
-  let nonPaintedPaths=0,clippedGeometry=0,clipActive=false,unknownAlpha=false,formScope=false;
-  const stack:Array<{ctm:Matrix;clipActive:boolean}>=[];
+  let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,clipActive=false,unknownAlpha=false,formScope=false;
+  let clipRect:ClipRect|null=null;
+  const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null}>=[];
   // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
   // 28 endPath, 29 clip, 30 eoClip do NOT paint any geometry.
   const paintable=new Set([20,21,22,23,24,25,26,27,ops.rawFillPath??94]);
   const push=(e:Entity,opIndex:number)=>{
     if(entities.length>=limit){truncated=true;return;}
+    // Only exact LINE vs axis-aligned rectangular clipping is implemented.
+    // Unknown clip shapes and curved paths remain explicit unresolved evidence.
+    if(clipActive&&clipRect&&e.kind==='line'&&e.points.length===2){
+      rectangularClipLines++;
+      const visible=clipStraightLine(e.points[0],e.points[1],clipRect);
+      if(!visible)return;
+      e.points=visible;
+      e.reason='Нативный PDF LINE: прямоугольное отсечение рассчитано; требуется проверка';
+    }else{
+      if(clipActive)clippedGeometry++;
+      e.reason='Нативный PDF path; проверьте тип объекта, масштаб и контекст'+
+        (clipActive?'; ОБЛАСТЬ ОТСЕЧЕНИЯ PDF не рассчитана, часть линии может быть скрыта':'');
+    }
     e.verified=false;e.sourceId='pdf-path-op-'+opIndex;
-    e.reason='Нативный PDF path; проверьте тип объекта, масштаб и контекст'+
-      (clipActive?'; ОБЛАСТЬ ОТСЕЧЕНИЯ PDF не рассчитана, часть линии может быть скрыта':'');
-    if(clipActive)clippedGeometry++;
     entities.push(e);
   };
   const transform=(x:number,y:number):Point=>{
@@ -94,11 +125,40 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       ctm[1]*x+ctm[3]*y+ctm[5]);
     return {x:pt[0],y:pt[1]};
   };
+  /** PDF W n / eoClip: accept ONLY four-corner axis-aligned closed
+   * rectangles, in viewport coordinates, with no curve or multiple subpaths.
+   * Anything else remains an unknown clip; never fabricate shape semantics.
+   */
+  const rectangularClip=(raw:unknown):ClipRect|null=>{
+    if(!Array.isArray(raw)||raw.length<2)return null;
+    const src=raw[1],chunks=Array.isArray(src)?src:[src];
+    const corners:Point[]=[];let closed=false;
+    for(const chunk of chunks){
+      if(!numeric(chunk)||!allFinite(chunk))return null;
+      for(let i=0;i<chunk.length;){
+        const op=chunk[i++];
+        if(op===4){closed=true;continue;}
+        if(op!==0&&op!==1||i+1>=chunk.length)return null;
+        corners.push(transform(chunk[i++],chunk[i++]));
+      }
+    }
+    if(corners.length===5&&near(corners[0],corners[4]))corners.pop();
+    if(!closed||corners.length!==4||!corners.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))return null;
+    const x0=Math.min(...corners.map(p=>p.x)),x1=Math.max(...corners.map(p=>p.x));
+    const y0=Math.min(...corners.map(p=>p.y)),y1=Math.max(...corners.map(p=>p.y));
+    if(x1-x0<1e-6||y1-y0<1e-6)return null;
+    const set=new Set(corners.map(p=>
+      Math.abs(p.x-x0)<1e-5?'L':Math.abs(p.x-x1)<1e-5?'R':'?')
+      .map((x,i)=>x+(Math.abs(corners[i].y-y0)<1e-5?'T':
+        Math.abs(corners[i].y-y1)<1e-5?'B':'?')));
+    if(set.size!==4||[...set].some(x=>x.includes('?')))return null;
+    return {x0,y0,x1,y1};
+  };
   for(let i=0;i<list.fnArray.length;i++){
     const fn=list.fnArray[i];
-    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive});continue;}
-    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;continue;}
-    if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){clipActive=true;continue;}
+    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive,clipRect:clipRect?{...clipRect}:null});continue;}
+    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;clipRect=prior?.clipRect??null;continue;}
+    if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){clipActive=true;clipRect=null;continue;}
     if(ops.setGState!==undefined&&fn===ops.setGState){unknownAlpha=true;continue;}
     if(ops.paintFormXObjectBegin!==undefined&&fn===ops.paintFormXObjectBegin){formScope=true;continue;}
     if(fn===ops.transform){
@@ -118,7 +178,11 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       const paintOp=raw[0] as number;
       if(paintOp===28||paintOp===29||paintOp===30){
         nonPaintedPaths++;
-        if(paintOp===29||paintOp===30)clipActive=true;
+        if(paintOp===29||paintOp===30){
+          const rectangle=paintOp===29?rectangularClip(raw):null;
+          clipRect=rectangle?(clipRect?intersectRect(clipRect,rectangle):rectangle):null;
+          clipActive=true;
+        }
         continue;
       }
       if(!paintable.has(paintOp)){
@@ -231,9 +295,10 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   if(pathOperations&&entities.length===0)warnings.push('PDF содержит команды пути, но редактируемая геометрия не извлечена.');
   if(nonPaintedPaths)warnings.push('Пропущено '+nonPaintedPaths+' невидимых или ограничивающих PDF path: это не CAD-линии.');
   if(clippedGeometry)warnings.push('PDF содержит clipping: у '+clippedGeometry+' CAD-объектов отсечение НЕ рассчитано; видимость и контуры могут отличаться от оригинала.');
+  if(rectangularClipLines)warnings.push('Прямоугольный PDF clipping применён к '+rectangularClipLines+' LINE; сложные кривые и маски всё ещё требуют проверки.');
   if(unknownAlpha)warnings.push('PDF использует графические состояния: прозрачность/альфа пока не учитываются при извлечении векторов.');
   if(formScope)warnings.push('PDF использует Form XObject: требуется проверить вложенные координаты и clipping по оригиналу.');
   if(rejectedPaths)warnings.push('Часть команд PDF не распознана: '+rejectedPaths+'. Результат неполный.');
   if(truncated)warnings.push('Превышен лимит CAD-объектов PDF: фрагменты не импортированы. Разделите документ.');
-  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,truncated,warnings};
+  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,rectangularClipLines,truncated,warnings};
 }
