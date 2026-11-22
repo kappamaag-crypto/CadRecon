@@ -73,3 +73,28 @@ test('W4 trim changes only clicked half and keeps boundary, uses one Undo',async
   const back=await exportProject(page);
   expect(back.sheets[0].entities[1].points[0].x).toBe(40);
 });
+
+
+test('W4 OFFSET adds a separate parallel line and one Undo restores original',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;sheet.calibrated=true;
+  const original=entity('line',[{x:40,y:100},{x:200,y:100}]);
+  sheet.entities=[original];
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Параллельный отрезок (OFFSET)'}).click();
+  page.once('dialog',d=>d.accept('15'));
+  await worldClick(page,{x:100,y:102});
+  await expect(page.getByText(/CAD: изменено 0 объектов, добавлено 1/)).toBeVisible();
+  const result=await exportProject(page);
+  expect(result.sheets[0].entities).toHaveLength(2);
+  const added=result.sheets[0].entities.find(e=>e.id!==original.id);
+  expect(added?.kind).toBe('line');
+  expect(added?.points[0].y).toBeCloseTo(115,1);
+  expect(added?.points[1].y).toBeCloseTo(115,1);
+  expect(added?.verified).toBe(false);
+  expect(result.sheets[0].entities.find(e=>e.id===original.id)?.points).toEqual(original.points);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  const undone=await exportProject(page);
+  expect(undone.sheets[0].entities).toHaveLength(1);
+  expect(undone.sheets[0].entities[0].id).toBe(original.id);
+});
