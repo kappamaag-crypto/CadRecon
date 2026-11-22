@@ -76,3 +76,9 @@
  .sidebar-header{height:35px}
  .sidebar .panelcontent{padding:10px}
 }
+
+.cad-action-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:7px;margin-bottom:12px}
+.cad-action-grid .action{font-size:11px;padding:9px;line-height:1.45}
+.topology-findings{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow:auto;margin-top:8px}
+.cad-finding{font-size:11px;text-align:left;padding:7px;border:1px solid #34536d;background:#11263a;white-space:normal}
+@media(max-width:560px){.cad-action-grid{grid-template-columns:1fr}}

@@ -63,6 +63,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'stamp',title:'Основная надпись',icon:'▤'},
   {id:'eskd',title:'Обозначения ЕСКД',icon:'⌗'},
   {id:'measure',title:'Измерить расстояние',icon:'📏',hotkey:'M'},
+  {id:'measure-angle',title:'Измерить угол между двумя LINE',icon:'∠'},
   {id:'ocr-region',title:'OCR выделенной области (2 угла)',icon:'▧'},
   {id:'calibrate',title:'Калибровка по известному размеру',icon:'⊞'}
 ];
