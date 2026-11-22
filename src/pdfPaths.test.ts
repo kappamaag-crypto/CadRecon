@@ -127,6 +127,36 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(out.warnings.join(' ')).toContain('прозрачность');
   });
 
+
+  it('accepts real PDF.js split OPS: constructPath(END_PATH) → clip → painted path',()=>{
+    const ops={...OPS,clip:29,endPath:28};
+    const rectangle=[28,[Float32Array.from([
+      0,20,20,1,100,20,1,100,100,1,20,100,4,
+    ])],null];
+    const cross=[20,[Float32Array.from([0,-50,60,1,160,60])],null];
+    const result=extractPdfPaths({
+      fnArray:[91,29,91],argsArray:[rectangle,[],cross],
+    },viewport,ops);
+    expect(result.entities).toHaveLength(1);
+    expect(result.nonPaintedPaths).toBe(1);
+    expect(result.rectangularClipLines).toBe(1);
+    expect(result.clippedGeometry).toBe(0);
+    expect(result.entities[0].points[0].x).toBeCloseTo(20,5);
+    expect(result.entities[0].points[1].x).toBeCloseTo(100,5);
+  });
+  it('also accepts separate PDF.js clip operator BEFORE its endPath construction',()=>{
+    const ops={...OPS,clip:29,endPath:28};
+    const rectangle=[28,[Float32Array.from([
+      0,20,20,1,100,20,1,100,100,1,20,100,4,
+    ])],null];
+    const cross=[20,[Float32Array.from([0,-50,60,1,160,60])],null];
+    const result=extractPdfPaths({
+      fnArray:[29,91,91],argsArray:[[],rectangle,cross],
+    },viewport,ops);
+    expect(result.entities).toHaveLength(1);
+    expect(result.rectangularClipLines).toBe(1);
+    expect(result.entities[0].points.map(p=>p.x)).toEqual([20,100]);
+  });
   it('clips a straight vector LINE to a packed closed rectangular W path',()=>{
     const clip=[29,[Float32Array.from([
       0,20,20,1,100,20,1,100,100,1,20,100,4,
