@@ -59,14 +59,15 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
       onProgress?.('Обработка страницы '+pageIndex+' из '+pdf.numPages);
       const page=await pdf.getPage(pageIndex);
       const initial=page.getViewport({scale:1});
+      if(!Number.isFinite(initial.width)||!Number.isFinite(initial.height)||initial.width<=0||initial.height<=0)throw new Error('Недопустимые размеры страницы PDF');
       const list=await page.getOperatorList();
       const paths=list.fnArray.filter(fn=>fn===pdfjs.OPS.constructPath).length;
       const longest=paths>25?3200:4800;
       const pixelLimit=22000000;
       // A huge PDF MediaBox must be allowed to render below 1x; forcing
       // scale>=1 can allocate hundreds of megapixels and crash mobile Chrome.
-      const scale=Math.max(.02,Math.min(5,longest/Math.max(initial.width,initial.height),
-        Math.sqrt(pixelLimit/(initial.width*initial.height))));
+      const scale=Math.min(5,longest/Math.max(initial.width,initial.height),
+        Math.sqrt(pixelLimit/(initial.width*initial.height)));
       const vp=page.getViewport({scale});
       const pixels=Math.ceil(vp.width)*Math.ceil(vp.height);
       if(sheets.length&&renderedPixels+pixels>maxTotalPixels){
