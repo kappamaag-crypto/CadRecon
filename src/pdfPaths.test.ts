@@ -157,6 +157,40 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(result.rectangularClipLines).toBe(1);
     expect(result.entities[0].points.map(p=>p.x)).toEqual([20,100]);
   });
+  it('preserves printed PDF DASHED/CENTER line pattern and q/Q state in editable DXF',()=>{
+    const ops={...OPS,setDash:15};
+    const line=[20,[Float32Array.from([0,20,60,1,100,60])],null];
+    const result=extractPdfPaths({
+      fnArray:[10,15,91,15,91,15,91,11,91],
+      argsArray:[[],
+        [[12,7],0],line,
+        [[25,5,3,5],0],line,
+        [[2,1,2,1,2,1],0],line,
+        [],line],
+    },viewport,ops);
+    expect(result.entities).toHaveLength(4);
+    expect(result.entities.map(e=>e.lineStyle)).toEqual([
+      'dashed','center',undefined,undefined,
+    ]);
+    const project=newProject();project.sheets[0].entities=result.entities;
+    const dxf=createDxf(project.sheets[0],project);
+    expect(dxf).toContain('\n6\nDASHED\n');
+    expect(dxf).toContain('\n6\nCENTER\n');
+  });
+  it('never attributes a PDF dash pattern to a fill-only path or forms a fake continuous dashed polyline',()=>{
+    const ops={...OPS,setDash:15};
+    const filled=[22,[Float32Array.from([0,20,20,1,100,20])],null];
+    const closed=[20,[Float32Array.from([
+      0,20,20,1,100,20,1,100,100,1,20,100,4,
+    ])],null];
+    const result=extractPdfPaths({fnArray:[15,91,91],
+      argsArray:[[[9,5],0],filled,closed]},viewport,ops);
+    expect(result.entities.filter(e=>e.kind==='line')).toHaveLength(5);
+    const lines=result.entities.filter(e=>e.kind==='line');
+    expect(lines[0].lineStyle).toBeUndefined();
+    expect(lines.slice(1).every(e=>e.lineStyle==='dashed')).toBe(true);
+    expect(result.entities.some(e=>e.kind==='polyline')).toBe(false);
+  });
   it('clips a straight vector LINE to a packed closed rectangular W path',()=>{
     const clip=[29,[Float32Array.from([
       0,20,20,1,100,20,1,100,100,1,20,100,4,
