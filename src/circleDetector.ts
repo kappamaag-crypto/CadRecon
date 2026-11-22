@@ -7,10 +7,11 @@
  */
 export interface CircleProposal {x:number;y:number;radius:number;confidence:number;coverage:number}
 type Edge={x:number;y:number;dx:number;dy:number};
+export interface CircleDebug {edges?:number;samples?:number;maxCenterVotes?:number;centerPeaks?:number;topCenters?:Array<{x:number;y:number;votes:number}>;maxCoverage?:number;bestRadius?:number}
 
 export function detectOverlappedCircles(
   rgba:Uint8ClampedArray,width:number,height:number,
-  maxCandidates=25
+  maxCandidates=25,debug?:CircleDebug
 ):CircleProposal[] {
   if(width<48||height<48||rgba.length<width*height*4)return [];
   const gray=new Uint8Array(width*height);
@@ -36,9 +37,11 @@ export function detectOverlappedCircles(
       edges.push({x,y,dx:gx/norm,dy:gy/norm});
     }
   }
+  if(debug)debug.edges=edges.length;
   if(edges.length<30)return [];
   const stride=Math.max(1,Math.ceil(edges.length/11000));
   const samples=edges.filter((_,i)=>i%stride===0);
+  if(debug)debug.samples=samples.length;
   const cell=4,cw=Math.ceil(width/cell),ch=Math.ceil(height/cell);
   const counts=new Uint16Array(cw*ch);
   const maxR=Math.min(230,Math.floor(Math.min(width,height)*.47));
@@ -69,6 +72,7 @@ export function detectOverlappedCircles(
     if(maximum)peaks.push({x,y,votes});
   }
   peaks.sort((a,b)=>b.votes-a.votes);
+  if(debug){debug.centerPeaks=peaks.length;debug.maxCenterVotes=Math.max(...counts);debug.topCenters=peaks.slice(0,12).map(p=>({x:(p.x+.5)*cell,y:(p.y+.5)*cell,votes:p.votes}));debug.maxCoverage=0;}
   const output:CircleProposal[]=[];
   // Confirm candidate using 48 independent angular arcs. A coincident
   // straight line or a small disconnected arc cannot imitate a full circle.
@@ -107,6 +111,7 @@ export function detectOverlappedCircles(
       if(cx<radius*.75||cy<radius*.75||
          cx>width-radius*.75||cy>height-radius*.75)continue;
       const cov=coverage(cx,cy,radius);
+      if(debug&&cov>(debug.maxCoverage||0)){debug.maxCoverage=cov;debug.bestRadius=radius;}
       if(cov<.72)continue;
       // A full circumference has edge support proportional to its length.
       if(radial.votes<Math.max(20,radius*.18))continue;
