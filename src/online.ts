@@ -1,8 +1,7 @@
-/** Opt-in Online Accurate transport. The page is uploaded ONLY when the
- * user explicitly confirms in the UI. No credentials are persisted.
- *
- * Requires a separately hosted backend.online_server (single-tenant pilot).
- * This module does not turn static GitHub Pages into a cloud service.
+/** Opt-in LOCAL Ultra transport: only loopback on the user's own computer.
+ * No infrastructure owned or operated by CadRecon is needed.
+ * The browser asks for explicit confirmation and never persists credentials.
+ * Remote redirects are forbidden, including those originating from localhost.
  */
 import {decodeAdvancedResponse,validateAdvancedEndpoint,
   type AdvancedResponse,type AdvancedResult} from './advanced';
@@ -19,7 +18,7 @@ function requestHeaders(token:string,jobToken?:string) {
 }
 function request(url:string,token:string,method:'GET'|'POST'|'DELETE',
   signal:AbortSignal,jobToken?:string,body?:FormData):LoopbackRequest {
-  const req:LoopbackRequest={method,headers:requestHeaders(token,jobToken),body,signal};
+  const req:LoopbackRequest={method,headers:requestHeaders(token,jobToken),body,signal,redirect:'error'};
   const target=new URL(url);
   if(['127.0.0.1','localhost','[::1]'].includes(target.hostname)&&
     typeof location!=='undefined'&&location.protocol==='https:')
@@ -28,7 +27,7 @@ function request(url:string,token:string,method:'GET'|'POST'|'DELETE',
 }
 async function assertOk(res:Response):Promise<void>{
   if(res.ok)return;
-  throw new Error('Online Accurate: HTTP '+res.status);
+  throw new Error('Ultra локально: HTTP '+res.status);
 }
 export async function recognizeOnline(
   sheet:Sheet,endpoint:string,token:string,
@@ -36,7 +35,7 @@ export async function recognizeOnline(
   signal?:AbortSignal
 ):Promise<AdvancedResult> {
   if(!sheet.image)throw new Error('На листе отсутствует исходная подложка');
-  if(!token.trim())throw new Error('Укажите токен доступа Online Accurate');
+  if(!token.trim())throw new Error('Укажите токен доступа Ultra локально');
   const base=validateAdvancedEndpoint(endpoint);
   const controller=new AbortController();
   const timeout=setTimeout(()=>controller.abort(),240000);
@@ -45,7 +44,7 @@ export async function recognizeOnline(
   if(signal?.aborted)controller.abort();
   let job:JobCreated|undefined;
   try {
-    progress?.('Online Accurate: подготовка листа...');
+    progress?.('Ultra локально: подготовка листа...');
     const source=await fetch(sheet.image,{signal:controller.signal});
     const blob=await source.blob();
     const form=new FormData();
@@ -56,14 +55,14 @@ export async function recognizeOnline(
       request(base+'/v1/jobs',token,'POST',controller.signal,undefined,form));
     await assertOk(response);
     job=await response.json() as JobCreated;
-    if(!job.id||!job.job_token)throw new Error('Online Accurate: неправильный ответ сервера');
+    if(!job.id||!job.job_token)throw new Error('Ultra локально: неправильный ответ сервера');
     const url=base+'/v1/jobs/'+encodeURIComponent(job.id);
     for(let i=0;i<300;i++){
       const stateResponse=await fetch(url,request(url,token,'GET',controller.signal,job.job_token));
       await assertOk(stateResponse);
       const state=await stateResponse.json() as JobStatus;
       if(state.status==='succeeded'){
-        progress?.('Online Accurate: загрузка проверяемых кандидатов...');
+        progress?.('Ultra локально: загрузка проверяемых кандидатов...');
         const resultUrl=url+'/result';
         const output=await fetch(resultUrl,
           request(resultUrl,token,'GET',controller.signal,job.job_token));
@@ -71,13 +70,13 @@ export async function recognizeOnline(
         return decodeAdvancedResponse(sheet,await output.json() as AdvancedResponse);
       }
       if(state.status==='failed'||state.status==='cancelled')
-        throw new Error('Online Accurate: сервер не смог обработать лист. Проверьте журнал без передачи чертежа.');
-      progress?.(state.status==='running'?'Online Accurate: OCR и реконструкция...':
-        'Online Accurate: ожидание свободного вычислителя...');
+        throw new Error('Ultra локально: сервер не смог обработать лист. Проверьте журнал без передачи чертежа.');
+      progress?.(state.status==='running'?'Ultra локально: OCR и реконструкция...':
+        'Ultra локально: ожидание свободного вычислителя...');
       await new Promise<void>(resolve=>setTimeout(resolve,750));
-      if(controller.signal.aborted)throw new Error('Online Accurate: обработка отменена');
+      if(controller.signal.aborted)throw new Error('Ultra локально: обработка отменена');
     }
-    throw new Error('Online Accurate: превышено время ожидания результата');
+    throw new Error('Ultra локально: превышено время ожидания результата');
   } finally {
     // Delete ephemeral result even after successful import; best-effort only.
     if(job?.id&&job.job_token){
