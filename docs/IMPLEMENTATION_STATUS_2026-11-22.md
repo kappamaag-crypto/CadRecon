@@ -1,5 +1,7 @@
 # Сводка разработки CadRecon — W0–W8, 22 ноября 2026
 
+> **Обновление в тот же день, после архитектурного уточнения:** CadRecon теперь **GitHub Pages + браузерные вычисления, без собственного сервера**. Прежний W2-серверный прототип в таблице ниже — **историческая реализация**, которая не является активной архитектурой. [Новые правила](STATIC_PAGES_ARCHITECTURE.md), [обновлённый ROADMAP](../ROADMAP.md), [issue #5](https://github.com/kappamaag-crypto/CadRecon/issues/5). В `main` дополнительно появились `src/browserAccurate.ts`, кнопка подготовки моделей и локальный-only Ultra.
+
 **Репозиторий:** `kappamaag-crypto/CadRecon`, `main`. **Приоритет:** максимально точная онлайн-реконструкция; Ultra — дополнение. **Статус:** опытная система; не подтверждённая промышленная точность любого PDF/скана. Никаких «100% любого скана».
 
 ## Что реально внедрено и проверено
@@ -8,7 +10,7 @@
 |---|---|---|
 | **W0 — эталоны** | Четыре воспроизводимых синтетических PDF/PNG с SHA256 и размеченной геометрией, W0 диагностические E2E | CI и отчеты; **нет разрешенного независимого корпуса реальных CAD↔PDF/scan** |
 | **W1 — native vector PDF** | Совместимый с PDF.js 5.x packed/legacy path parser, 2D линии, замкнутые контуры, окружности с проверяемым fit, cubic Bézier→редактируемый SPLINE; source ID и предупреждения | [W1 9 браузерных тестов](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45012337486), независимый ezdxf; **не покрыты все clip/paint/mixed PDF и source scaling** |
-| **W2 — Online Accurate pilot** | Отдельный FastAPI single-tenant сервер с consent, per-job secret, token, очередь в памяти, GET/DELETE, ограничение размера; браузерный URL/token, progress, cancel | [27 unit + 10 browser](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45013151402); **не public SaaS, не encrypted multi-tenant production** |
+| **W2 — Accurate Browser (текущий)** | Единый браузерный конвейер native PDF / scan / OCR RU-EN / dimensions / ЕСКД, устранение явных повторов, предварительная загрузка моделей; только необязательный Ultra через localhost. Старый `backend/online_server.py` — локальное наследие, не облако. | [41 unit + 14 browser — GitHub Pages pipeline](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45015447436); испытания реальной OCR-точности/оффлайн-кэша ещё предстоят |
 | **W3 — raster** | Дополнительная Hough-gradient circle detection в браузере, при пересечении с линиями, сохраняет unverified статус | [W0 circle 0→1; 2px центр, 0px R](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45012872180), **93 line fragments, F1 неизвестен** |
 | **W4 — 2D commands** | POINT/DXF POINT, прямоугольник→closed polyline, line TRIM, EXTEND, равная CHAMFER, касательное FILLET, атомарный Undo/Redo | [6 unit geometric и 2 browser E2E, всего 33+12](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45013628722); **не вся номенклатура CAD** |
 | **W5 — размеры** | Номинальные цепи: closure, пропуски, перекрытия, нечитаемые надписи, информативные предупреждения; без догадок/изменения размеров | [4 unit и общий CI 37+12](https://github.com/kappamaag-crypto/CadRecon/actions/runs/45013857350), **нет формально подтвержденного ЕСКД ruleset** |
@@ -49,3 +51,9 @@
 - Issues: [#2 master](https://github.com/kappamaag-crypto/CadRecon/issues/2), [#3 W0](https://github.com/kappamaag-crypto/CadRecon/issues/3), [#4 W1](https://github.com/kappamaag-crypto/CadRecon/issues/4), [#5 W2](https://github.com/kappamaag-crypto/CadRecon/issues/5), [#6 W3](https://github.com/kappamaag-crypto/CadRecon/issues/6), [#7 W4](https://github.com/kappamaag-crypto/CadRecon/issues/7).
 
 **Примечание:** Скрипты Ultra на Windows проверены только на тестовом профиле без Paddle model download. Никакие коммерческие CAD SDK, закрытые пользовательские файлы, конфиденциальные данные, внешние сервисы для OCR и реальные производственные чертежи без согласия не задействовались.
+
+## Обязательная конфигурация после уточнения архитектуры
+
+**Публикация:** только GitHub Pages. **Вычисления:** браузер пользователя (PDF.js, Canvas, Web Worker, Tesseract.js). **Статические ML/worker пакеты:** GET-загрузка пользователем при необходимости, не отправка КД. **Память/хранилище:** локальный IndexedDB, экспортируемые JSON/DXF/ZIP. **Дополнение:** самостоятельно установленный Ultra на localhost, строго необязательно. Внешние HTTPS endpoints для OCR/отправки файлов запрещены. Полноценный офлайн-режим/ONNX/WebGPU-пакеты пока **не реализованы**.
+
+Действующий source of truth: [STATIC_PAGES_ARCHITECTURE.md](STATIC_PAGES_ARCHITECTURE.md), [ROADMAP.md](../ROADMAP.md). Тесты отсутствия POST к OCR-серверу и запрета внешнего Ultra URL: [e2e/browser-accurate.spec.ts](../e2e/browser-accurate.spec.ts), [src/advanced.test.ts](../src/advanced.test.ts).
