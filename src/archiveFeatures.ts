@@ -217,7 +217,7 @@ export function inventoryProject(project:CadProject):{rows:InventoryRow[];circle
   const rows:InventoryRow[]=[],circles:CircleGroup[]=[],counts:Record<string,number>={};let unverified=0;
   for(let si=0;si<project.sheets.length;si++){
     const sheet=project.sheets[si],tolerance=sheet.calibrated ? 0.02 : 0.6;
-    const groups:CircleGroup[]=[];
+    const groups:CircleGroup[]=[],circleById=new Map<string,Entity>();
     for(const e of sheet.entities){
       counts[e.kind]=(counts[e.kind]||0)+1;
       if(!e.verified)unverified++;
@@ -229,13 +229,14 @@ export function inventoryProject(project:CadProject):{rows:InventoryRow[];circle
       rows.push({sheetIndex:si,sheet:sheet.name,id:e.id,kind:e.kind,layer:e.layer,
         origin:e.origin,verified:e.verified,detail,location:num(point.x)+', '+num(point.y)});
       if(e.kind==='circle'&&e.radius&&e.radius>0){
+        circleById.set(e.id,e);
         const diameter=e.radius*2;
         let group=groups.find(g=>Math.abs(g.diameter-diameter)<=Math.max(tolerance,diameter*.001));
         if(!group){group={sheetIndex:si,diameter,count:0,entityIds:[],unit,verified:0};groups.push(group);}
         // Different centres mean different CAD CIRCLE objects; do not call
         // them real holes or double-count duplicated same-centre hypotheses.
         const duplicates=group.entityIds.some(id=>{
-          const old=sheet.entities.find(x=>x.id===id)!;
+          const old=circleById.get(id)!;
           const op=old.center||entityPoint(old);
           return Math.hypot(point.x-op.x,point.y-op.y)<=Math.max(tolerance,diameter*.005);
         });
