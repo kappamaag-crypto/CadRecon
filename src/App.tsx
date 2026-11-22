@@ -557,14 +557,10 @@ export default function App(){
    if(included)files.push({name:'Проект/Исходные_данные.cadrecon.json',data:json});
    else files.push({name:'Проект/ВАЖНО_размер_проекта.txt',data:
      'JSON с растровыми подложками не включён: размер больше 30 МБ. Скачайте резервную копию JSON отдельно в верхней панели.'});
-   // GALS-inspired archive structure: placeholders only. Browser ZIP never
-   // claims native CAD/STEP files have been generated from a PDF.
+   // 2D PDF->DXF only: no empty 3D/STEP/SolidWorks folders.
    for(const [folder,description] of [
-     ['Исходники/КОМПАС','Для исходных A3D/M3D/CDW/SPW, если они у вас есть.'],
-     ['Исходники/SOLIDWORKS','Для исходных SLDPRT/SLDASM пользователя.'],
-     ['Обмен/STEP','Для отдельно полученных STEP/STP файлов.'],
-     ['Печать/PDF','Для проверенных PDF, экспортированных в CAD вручную.'],
-     ['Архив','Папка для проверенных версий и истории проекта.'],
+     ['Печать/PDF','Для исходных 2D PDF, вложенных вручную.'],
+     ['Архив','Для проверенных версий и истории 2D проекта.'],
    ]){
      files.push({name:folder+'/ИНСТРУКЦИЯ.txt',data:description+
        '\nCadRecon не создавал эти нативные файлы автоматически.\n'});
@@ -577,7 +573,7 @@ export default function App(){
       'Отчёты об объектах, сварке и позициях не являются автоматическим нормоконтролем.',
       'Диагностика W3: потенциальные разрывы и слабые штрихи требуют проверки исходного изображения. Единицы зазоров условные.',
       'Отсутствие позиций не доказывает ошибку PDF: возможны пропуски распознавания.',
-      'Исходные КОМПАС/CDW, STEP и SOLIDWORKS не синтезируются из PDF.',
+      'CadRecon работает только с PDF/сканами и 2D DXF; 3D/STEP/SOLIDWORKS исключены.',
      ].join('\n')+'\n'});
    downloadZip(createZip(files),safe(project.name)+'_CadRecon_пакет.zip');
    setStatus('Экспортирован локальный ZIP: '+files.length+' файлов. Непроверенных объектов: '+warn);
