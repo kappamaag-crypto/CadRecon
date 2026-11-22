@@ -6,6 +6,7 @@ import {
   stampText,DEFAULT_STAMP,type SearchCategory,type SpecificationRow,type StampFields
 } from './archiveFeatures';
 import {downloadFile} from './storage';
+import {projectReportXlsx,downloadReportXlsx} from './xlsxExport';
 
 interface Props {
   project:CadProject;
@@ -74,6 +75,13 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
     }catch(e){onStatus('Ошибка импорта спецификации: '+String(e));}
     finally{setImporting(false);if(specInput.current)specInput.current.value='';}
   }
+  const downloadExcel=()=>{
+    try{
+      const safe=project.name.replace(/[^\p{L}\p{N}._-]+/gu,'_').slice(0,80)||'CadRecon';
+      downloadReportXlsx(projectReportXlsx(project),safe+'_инженерный_отчет.xlsx');
+      onStatus('Сводный Excel XLSX сформирован локально: объекты, окружности, сварка, спецификация, расхождения.');
+    }catch(e){onStatus('Экспорт XLSX: '+String(e));}
+  };
   const preview=stampText(stamp);
   const isEmpty=Object.values(stamp).every(v=>!v.trim());
   return <div className="archive-tools">
@@ -134,6 +142,7 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
         </select>
       </label>
       <button className="action" onClick={()=>exportCsv(inventoryCSV(project),'objects')}>↓ Инвентаризация CSV</button>
+      <button className="action" onClick={downloadExcel}>↓ Полный отчёт Excel XLSX</button>
       <h3>Группы одинаковых окружностей</h3>
       <p className="muted">Соседние контуры одного размера группируются для отчёта. Дубли одной окружности с одинаковым центром не считаются отдельными отверстиями.</p>
       {inventory.circles.slice(0,80).map((g,i)=><div className="archive-hit" key={i}>
@@ -205,6 +214,7 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
     </div>}
     {tab==='package'&&<div className="stack">
       <p className="muted">Локальный ZIP-пакет проекта: DXF по листам, результаты анализа, CSV-ведомости, данные спецификации и README с предупреждениями. Не отправляет чертежи на сервер.</p>
+      <button className="action" onClick={downloadExcel}>↓ Сводный отчёт Excel XLSX</button>
       <button className="action" onClick={onPackage}>↓ Скачать пакет проекта ZIP</button>
       <p className="muted">В архивах не создаются и не изменяются исходные файлы КОМПАС-3D, STEP и SOLIDWORKS. Их можно связать отдельно через локальный лицензионный SDK.</p>
     </div>}
