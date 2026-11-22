@@ -1,5 +1,5 @@
 import {entity,type Entity,type Sheet} from './model';
-export interface TraceResult {entities:Entity[];note:string;}
+export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
 type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
 type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];error?:string};
@@ -11,10 +11,12 @@ type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];error?:string};
  */
 export async function traceImage(
   sheet:Sheet,minLength=12,onProgress?:(message:string)=>void,
-  quality:'fast'|'detailed'='detailed'
+  quality:'fast'|'detailed'='detailed',signal?:AbortSignal
 ):Promise<TraceResult>{
   if(!sheet.image)throw new Error('На листе отсутствует растровая подложка');
-  const img=new Image();img.src=sheet.image;await img.decode();
+  const assertActive=()=>{if(signal?.aborted)throw new DOMException('Обработка отменена пользователем','AbortError');};
+  assertActive();
+  const img=new Image();img.src=sheet.image;await img.decode();assertActive();
   const maxPixels=quality==='detailed'?26000000:4000000;
   const maxSide=quality==='detailed'?8500:2300;
   const factor=Math.min(1,maxSide/Math.max(img.naturalWidth,img.naturalHeight),
@@ -33,6 +35,8 @@ export async function traceImage(
   const cv=document.createElement('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
   if(!ctx){worker.terminate();throw new Error('Canvas недоступен');}
   const lines:Entity[]=[],circles:Entity[]=[],seen=new Set<string>();
+  const warnings:string[]=[];
+  if(factor<.999)warnings.push('Исходный скан уменьшен для памяти: '+img.naturalWidth+'×'+img.naturalHeight+' → '+fullWidth+'×'+fullHeight+' пикселей. Мелкие элементы могут быть потеряны.');
   const sx=sheet.width/fullWidth,sy=sheet.height/fullHeight;
   function lineKey(a:{x:number;y:number},b:{x:number;y:number}){
     const first=a.x<b.x||(a.x===b.x&&a.y<b.y)?a:b,second=first===a?b:a;
@@ -45,11 +49,30 @@ export async function traceImage(
       cv.width=t.w;cv.height=t.h;
       ctx.drawImage(img,t.x/factor,t.y/factor,t.w/factor,t.h/factor,0,0,t.w,t.h);
       const rgba=ctx.getImageData(0,0,t.w,t.h).data;
+      assertActive();
       const data=await new Promise<WorkerResponse>((resolve,reject)=>{
-        worker.onmessage=(ev:MessageEvent<WorkerResponse>)=>resolve(ev.data);
-        worker.onerror=ev=>reject(new Error(ev.message));
-        worker.postMessage({rgba,width:t.w,height:t.h,scale:1,minLength:Math.max(7,minLength*factor)});
+        let settled=false;
+        const cleanup=()=>{
+          clearTimeout(timeout);
+          signal?.removeEventListener('abort',onAbort);
+          worker.onmessage=null;worker.onerror=null;
+        };
+        const finish=(error?:Error,result?:WorkerResponse)=>{
+          if(settled)return;settled=true;cleanup();
+          if(error)reject(error);else resolve(result!);
+        };
+        const onAbort=()=>finish(new DOMException('Обработка отменена пользователем','AbortError'));
+        const timeout=setTimeout(()=>finish(new Error('Обводка превысила 45 секунд на одном участке. Уменьшите разрешение или используйте быстрый режим.')),45000);
+        signal?.addEventListener('abort',onAbort,{once:true});
+        worker.onmessage=(ev:MessageEvent<WorkerResponse>)=>finish(undefined,ev.data);
+        worker.onerror=ev=>finish(new Error(ev.message));
+        try{
+          if(signal?.aborted){onAbort();return;}
+          // Move tile bytes instead of duplicating ~6 MB per tile in memory.
+          worker.postMessage({rgba,width:t.w,height:t.h,scale:1,minLength:Math.max(7,minLength*factor)},[rgba.buffer]);
+        }catch(err){finish(err instanceof Error?err:new Error(String(err)));}
       });
+      assertActive();
       if(data.error)throw new Error(data.error);
       for(const l of data.lines||[]){
         const a={x:(t.x+l.a.x)*sx,y:(t.y+l.a.y)*sy};
@@ -65,8 +88,10 @@ export async function traceImage(
         const e=entity('circle',[center],'Автообводка','trace');e.center=center;e.radius=radius;e.confidence=c.confidence;circles.push(e);
       }
     }
-    return {entities:[...lines,...circles].slice(0,30000),
+    if(lines.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
+    return {entities:[...lines,...circles].slice(0,30000),warnings,sampledScale:factor,
       note:'Детальная обводка: '+lines.length+' отрезков и '+circles.length+
-      ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'};
+      ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'+
+      (warnings.length?' ВНИМАНИЕ: '+warnings.join('; '):'')};
   }finally{worker.terminate();}
 }
