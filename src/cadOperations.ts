@@ -225,7 +225,29 @@ export function joinCadEntities(
   if(cosine<-.99999)return null;
   const joined={x:(junctionA.x+junctionB.x)/2,y:(junctionA.y+junctionB.y)/2};
   const combined=[...left.slice(0,-1),joined,...right.slice(1)];
-  if(combined.length>20000||combined.slice(1).some((p,k)=>length(sub(p,combined[k]))<=EPS))return null;
+  if(combined.length>1200||combined.slice(1).some((p,k)=>length(sub(p,combined[k]))<=EPS)||
+    length(sub(combined[0],combined[combined.length-1]))<=EPS)return null;
+  // Reject self-crossing open chains (including non-adjacent contacts). This
+  // is bounded O(n²) by the 1200 vertex cap, never a background repair.
+  const orientation=(a:Point,b:Point,p:Point)=>cross(sub(b,a),sub(p,a));
+  const onSegment=(a:Point,b:Point,p:Point)=>{
+    const v=sub(b,a),w=sub(p,a);
+    return Math.abs(cross(v,w))<=Math.max(EPS,length(v)*1e-9)&&
+      dot(v,w)>=-EPS&&dot(v,w)<=dot(v,v)+EPS;
+  };
+  const intersects=(a:Point,b:Point,c:Point,d:Point)=>{
+    const abC=orientation(a,b,c),abD=orientation(a,b,d);
+    const cdA=orientation(c,d,a),cdB=orientation(c,d,b);
+    if((abC>EPS&&abD< -EPS||abC< -EPS&&abD>EPS)&&
+      (cdA>EPS&&cdB< -EPS||cdA< -EPS&&cdB>EPS))return true;
+    return Math.abs(abC)<=EPS&&onSegment(a,b,c)||
+      Math.abs(abD)<=EPS&&onSegment(a,b,d)||
+      Math.abs(cdA)<=EPS&&onSegment(c,d,a)||
+      Math.abs(cdB)<=EPS&&onSegment(c,d,b);
+  };
+  for(let i=0;i<combined.length-1;i++)
+    for(let j=i+2;j<combined.length-1;j++)
+      if(intersects(combined[i],combined[i+1],combined[j],combined[j+1]))return null;
   const straight=first.kind==='line'&&second.kind==='line'&&cosine>1-1e-9;
   const updated:Entity={...first,kind:straight?'line':'polyline',
     points:straight?[combined[0],combined[combined.length-1]]:combined,
