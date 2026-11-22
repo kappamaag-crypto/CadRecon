@@ -7,7 +7,7 @@
  * This is a best-effort reconstruction with an explicit review requirement,
  * not a guarantee of correct geometry, OCR or ESKD semantics.
  */
-import {recognizeText} from './ocr';
+import {recognizeText,type OcrLanguages} from './ocr';
 import {traceImage} from './vectorize';
 import {reconstructDimensionChains} from './dimensions';
 import {detectESKDLabels} from './eskd';
@@ -110,7 +110,7 @@ export async function recognizeBrowserAccurate(
   sheet:Sheet,
   onProgress?:(status:string)=>void,
   signal?:AbortSignal,
-  mode:'auto'|'hybrid'='auto',
+  mode:'auto'|'hybrid'='auto',languages:OcrLanguages='rus+eng',
 ):Promise<BrowserAccurateResult>{
   if(!sheet.image)throw new Error('Для распознавания нужен загруженный PDF или скан');
   const assertActive=()=>{if(signal?.aborted)throw new DOMException('Обработка чертежа отменена','AbortError');};
@@ -141,7 +141,7 @@ export async function recognizeBrowserAccurate(
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
     try {
       const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal,
-        {mode:'enhanced',maxRetries:35});
+        {mode:'enhanced',languages,maxRetries:35});
       assertActive();
       ocrText=ocr.text;
       candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));

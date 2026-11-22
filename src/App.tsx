@@ -61,6 +61,7 @@ export default function App(){
  const [focusTarget,setFocusTarget]=useState<{id:string;token:number}|undefined>();
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
+ const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
  const [ocrVertical,setOcrVertical]=useState(false);
  const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;result:OcrMeasurement}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
@@ -175,7 +176,7 @@ export default function App(){
    localController.current=ctrl;setLocalBusy(true);
    setBusy('Точная реконструкция непосредственно в браузере…');
    try{
-     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal,recognitionMode);
+     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal,recognitionMode,ocrLanguages);
      if(ctrl.signal.aborted)return;
      addToOriginalSheet(sheetId,result.entities);
      if(result.ocrText)setOcrText(result.ocrText);
@@ -230,7 +231,7 @@ export default function App(){
      if(!source.some(e=>e.kind==='text'&&e.origin!=='manual')&&sheet.image){
        setBusy('OCR: распознавание надписей...');
        const o=await recognizeText(sheet,setBusy,ctrl.signal,
-         {mode:'enhanced',detectVertical:ocrVertical,maxRetries:35});
+         {mode:'enhanced',languages:ocrLanguages,detectVertical:ocrVertical,maxRetries:35});
        if(ctrl.signal.aborted)return;
        source=[...source,...o.entities];setOcrText(o.text);
      }
@@ -297,7 +298,7 @@ export default function App(){
      const cropped=await cropOcrRegion(sheet,rect);
      if(ctrl.signal.aborted)return;
      const result=await recognizeText(cropped.sheet,setBusy,ctrl.signal,{
-       mode:ocrMode,detectVertical:ocrVertical,maxRetries:60,
+       mode:ocrMode,languages:ocrLanguages,detectVertical:ocrVertical,maxRetries:60,
      });
      if(ctrl.signal.aborted)return;
      const shifted=placeOcrRegionReadings(result.entities,cropped.offset);
@@ -325,7 +326,7 @@ export default function App(){
    setBusy('Распознавание текста…');
    try{
      const r=await recognizeText(sheet,setBusy,ctrl.signal,
-       {mode:ocrMode,detectVertical:ocrVertical,maxRetries:60});
+       {mode:ocrMode,languages:ocrLanguages,detectVertical:ocrVertical,maxRetries:60});
      if(ctrl.signal.aborted)return;
      setOcrText(r.text);
      // On repeated runs never append the same recognized OCR text again.
@@ -521,6 +522,14 @@ export default function App(){
       <p className="muted">Обычный PDF: исходные векторы без повторной обводки. Для PDF со встроенными изображениями и неполной векторизацией выберите гибридный режим — он дополнительно анализирует растр и может создать дубли. Скан: обводка + OCR RU/EN + проверка размеров и ЕСКД. Результат необходимо сверить с оригиналом.</p>
       <button className="action" onClick={prepareBrowserOcr} disabled={!!busy}>↓ Подготовить языковые модели OCR (RU/EN)</button>
       <h3>Распознавание текста (OCR)</h3>
+      <label className="selector-label">Языки OCR
+        <select aria-label="Языки OCR" value={ocrLanguages}
+          onChange={e=>setOcrLanguages(e.target.value as 'rus+eng'|'rus'|'eng')} disabled={!!busy}>
+          <option value="rus+eng">Русский + English (чертежи со смешанными обозначениями)</option>
+          <option value="rus">Только русский</option>
+          <option value="eng">Только English / латиница</option>
+        </select>
+      </label>
       <label className="selector-label">Качество онлайн-OCR
         <select aria-label="Качество онлайн-OCR" value={ocrMode}
           onChange={e=>setOcrMode(e.target.value as 'standard'|'enhanced')} disabled={!!busy}>

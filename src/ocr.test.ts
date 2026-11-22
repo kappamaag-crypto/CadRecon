@@ -200,6 +200,23 @@ describe('browser OCR language pack preparation',()=>{
       Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
+  it('supports a single English OCR language model instead of always forcing Russian',async()=>{
+    const oldImage=globalThis.Image;
+    class Img{naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),
+        recognize:vi.fn().mockResolvedValue({data:{text:'M16',blocks:[]}}),
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      await recognizeText(sheet,undefined,undefined,{languages:'eng'});
+      expect(createWorker).toHaveBeenCalledWith(['eng'],1,expect.any(Object));
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+    }
+  });
   it('does not create a worker or emit candidates when already cancelled',async ()=>{
     const controller=new AbortController();controller.abort();
     vi.mocked(createWorker).mockClear();

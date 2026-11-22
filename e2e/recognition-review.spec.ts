@@ -75,3 +75,16 @@ test('OCR benchmark compares source-pixel annotated labels locally without netwo
   await expect(page.getByText(/CER: 0.0%/)).toBeVisible();
   await expect(page.getByText(/точных критичных текстов: 1 \/ 1/)).toBeVisible();
 });
+
+test('OCR language and enhanced quality profiles can be changed in the browser without downloading models',async ({page})=>{
+  await page.goto('/CadRecon/');
+  const language=page.getByLabel('Языки OCR');
+  const quality=page.getByLabel('Качество онлайн-OCR');
+  await expect(language).toHaveValue('rus+eng');
+  await language.selectOption('eng');
+  await expect(language).toHaveValue('eng');
+  await quality.selectOption('standard');
+  await expect(page.getByRole('checkbox',{name:/Искать вертикальные надписи/})).toBeDisabled();
+  await quality.selectOption('enhanced');
+  await expect(page.getByRole('checkbox',{name:/Искать вертикальные надписи/})).toBeEnabled();
+});

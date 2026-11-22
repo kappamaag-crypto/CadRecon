@@ -15,8 +15,10 @@ export async function preloadOcrModels(progress?:(message:string)=>void):Promise
   finally{await worker.terminate();}
 }
 export type OcrMode='standard'|'enhanced';
+export type OcrLanguages='rus+eng'|'rus'|'eng';
 export interface OcrOptions {
   mode?:OcrMode;
+  languages?:OcrLanguages;
   /** Opt-in: two whole-page 90° rotations; only when sheet <=3 million pixels. */
   detectVertical?:boolean;
   /** Bound expensive local re-reading of short/uncertain engineering text. */
@@ -50,7 +52,8 @@ export async function recognizeText(
   const enhanced=options.mode==='enhanced',warnings:string[]=[];
   assertActive();
   progress?.('Загрузка OCR-моделей русского и английского языков на устройство…');
-  const worker=await createWorker(['rus','eng'],1,{logger:m=>{
+  const worker=await createWorker(options.languages==='rus'?['rus']:
+    options.languages==='eng'?['eng']:['rus','eng'],1,{logger:m=>{
     if(m.status)progress?.(m.status+' '+Math.round((m.progress||0)*100)+'%');
   }});
   const onAbort=()=>{void worker.terminate().catch(()=>{});};
