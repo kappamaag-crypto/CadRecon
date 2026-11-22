@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {entity,type Entity,type Point} from './model';
-import {intersectLines,trimLine,extendLine,offsetLine,chamferLines,filletLines} from './cadOperations';
+import {intersectLines,trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines} from './cadOperations';
 const p=(x:number,y:number):Point=>({x,y});
 function line(a:Point,b:Point):Entity {
   return entity('line',[a,b],'Контуры','manual');
@@ -31,6 +31,30 @@ describe('W4 deterministic 2D editing commands',()=>{
     expect(out?.replacements[0].points).toEqual([p(0,0),p(80,0)]);
     expect(extendLine(cutting,target,p(45,0),.1)).toBeNull();
     expect(extendLine(line(p(10,-10),p(10,10)),target,p(0,0))).toBeNull();
+  });
+  it('BREAK leaves two editable LINE entities and removes only selected finite interval',()=>{
+    const original=line(p(0,0),p(100,0));original.verified=true;
+    const result=breakLine(original,p(25,1),p(75,-1),2);
+    expect(result).not.toBeNull();
+    expect(result!.replacements).toHaveLength(1);
+    expect(result!.additions).toHaveLength(1);
+    expect(result!.replacements[0].id).toBe(original.id);
+    expect(result!.replacements[0].points).toEqual([p(0,0),p(25,0)]);
+    expect(result!.additions[0].points).toEqual([p(75,0),p(100,0)]);
+    expect(result!.replacements[0].verified).toBe(false);
+    expect(result!.additions[0].verified).toBe(false);
+    expect(original.points).toEqual([p(0,0),p(100,0)]);
+    expect(original.verified).toBe(true);
+    const reversed=breakLine(original,p(75,-1),p(25,1),2);
+    expect(reversed?.replacements[0].points).toEqual(result!.replacements[0].points);
+  });
+  it('BREAK refuses endpoints, identical points, off-line or degenerate geometry',()=>{
+    const e=line(p(0,0),p(100,0));
+    expect(breakLine(e,p(0,0),p(75,0))).toBeNull();
+    expect(breakLine(e,p(20,0),p(100,0))).toBeNull();
+    expect(breakLine(e,p(20,0),p(20,0))).toBeNull();
+    expect(breakLine(e,p(20,40),p(75,40),3)).toBeNull();
+    expect(breakLine(line(p(1,1),p(1,1)),p(1,1),p(1,1))).toBeNull();
   });
   it('OFFSET adds a parallel editable line on the explicitly picked side without moving original',()=>{
     const original=line(p(0,0),p(100,0));
