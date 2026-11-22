@@ -10,6 +10,7 @@ import {traceImage} from './vectorize';
 import {recognizeText} from './ocr';
 import {recognizeAdvanced,validateAdvancedEndpoint} from './advanced';
 import {recognizeOnline} from './online';
+import type {OperationResult} from './cadOperations';
 import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
@@ -17,7 +18,10 @@ import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'select',title:'Выделение / перенос',icon:'↖',hotkey:'V'},{id:'pan',title:'Перемещение полотна',icon:'✋',hotkey:'H'},
-  {id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},{id:'polyline',title:'Полилиния',icon:'〽'},
+  {id:'point',title:'Точка',icon:'·',hotkey:'P'},{id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},{id:'polyline',title:'Полилиния',icon:'〽'},
+  {id:'rectangle',title:'Прямоугольник',icon:'▭',hotkey:'R'},
+  {id:'trim',title:'Подрезать линию по границе',icon:'✂'},{id:'extend',title:'Продлить линию до границы',icon:'↗'},
+  {id:'chamfer',title:'Фаска двух линий',icon:'◩'},{id:'fillet',title:'Сопряжение двух линий',icon:'⌒'},
   {id:'circle',title:'Окружность',icon:'◯',hotkey:'C'},{id:'arc',title:'Дуга (3 точки)',icon:'⌒'},
   {id:'dimension',title:'Размерный объект',icon:'↔',hotkey:'D'},{id:'axis',title:'Осевая линия',icon:'┈'},
   {id:'leader',title:'Выноска',icon:'➤'},{id:'hatch',title:'Замкнутый контур / заливка',icon:'▨'},
@@ -45,6 +49,12 @@ export default function App(){
  function changeSheet(fn:(s:typeof sheet)=>typeof sheet){apply(p=>({...p,sheets:p.sheets.map((s,i)=>i===sheetIndex?fn(s):s)}));}
  function addEntities(es:Entity[]){if(!es.length)return;changeSheet(s=>({...s,entities:[...s.entities,...es]}));setStatus('Добавлено объектов: '+es.length);}
  function modifyEntity(e:Entity){changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?e:x)}));}
+ function applyOperation(result:OperationResult){
+  const ids=new Set(result.replacements.map(e=>e.id));
+  changeSheet(s=>({...s,entities:[...s.entities.map(e=>ids.has(e.id)?result.replacements.find(x=>x.id===e.id)!:e),...result.additions]}));
+  setSelected(null);
+  setStatus('CAD: изменено '+result.replacements.length+' объектов, добавлено '+result.additions.length+'. Проверьте размеры и геометрию.');
+ }
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);
  useEffect(()=>{if(!loaded)return;const t=setTimeout(()=>saveProject(project).catch(e=>setStatus('Не удалось сохранить проект локально: '+e)),1400);return()=>clearTimeout(t);},[project,loaded]);
@@ -173,7 +183,7 @@ export default function App(){
     <aside className="toolrail">{TOOLS.map(t=><button key={t.id} className={tool===t.id?'active':''} onClick={()=>setTool(t.id)} title={t.title+(t.hotkey?' ['+t.hotkey+']':'')} aria-label={t.title}>{t.icon}</button>)}</aside>
     <section className="drawing">
       <div className="sheetnav"><div className="sheet-tabs">{project.sheets.map((s,i)=><button key={s.id} className={sheetIndex===i?'active':''} onClick={()=>{setSheetIndex(i);setSelected(null);}} title={s.name}>{s.name.length>26?s.name.slice(0,24)+'…':s.name}</button>)}</div><span className="meta">{sheet.entities.length.toLocaleString('ru-RU')} объектов · {Math.round(sheet.width)} × {Math.round(sheet.height)} {sheet.calibrated?'мм':'ед.'}</span></div>
-      <Editor key={sheet.id} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
+      <Editor key={sheet.id} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
       <div className="statusbar"><span className={busy?'pulse':''}>{busy||status}</span><span className="status-right">Esc — отмена · Enter — завершить контур · Del — удалить · Ctrl+Z — назад</span></div>
     </section>
     <aside className="sidebar">
