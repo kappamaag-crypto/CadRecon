@@ -178,7 +178,7 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
         item.verified=false;item.sourceId='pdf-path-op-'+opIndex;
         item.reason=changed?
           'Нативный PDF Bézier: прямоугольное отсечение рассчитано без выпрямления кривой; проверьте координаты':
-          'Нативный PDF Bézier целиком внутри прямоугольного clipping; требует проверки';
+          'Нативный PDF Bézier полностью внутри прямоугольного clipping; требует проверки';
         entities.push(item);
       }
       return;
