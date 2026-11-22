@@ -56,5 +56,5 @@ test('W3 2x synthetic raster resolution: local tiled trace retains all axis dire
   for(const c of coverage)expect(c).toBeGreaterThanOrEqual(.97);
   // Regression budget from the same deterministic upsampled fixture: 824
   // candidates after W3 centering. This is NOT a real-scan precision gate.
-  expect(lines.length).toBeLessThan(950);
+  expect(lines.length).toBeLessThan(720);
 });

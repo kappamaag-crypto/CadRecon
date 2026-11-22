@@ -102,7 +102,7 @@ for(const [kind,filename] of [
     // Its removal recovers more proposals, so do NOT force a numeric target
     // that can only pass by hiding geometry. Still guard against the earlier
     // 310-candidate baseline on these fixed synthetic fixtures.
-    expect(lines.length).toBeLessThan(300);
+    expect(lines.length).toBeLessThan(kind==='clean'?270:255);
     // Keep the already detected editable CIRCLE from reappearing as many
     // approximate tangent chords; on this fixture measured 19/22.
     expect(observed.candidateReferenceProxy.redundantCircularChordsRemaining).toBeLessThanOrEqual(25);

@@ -767,7 +767,7 @@ export default function App(){
       </label>
       <label className="check"><input type="checkbox" checked={ocrVertical}
         onChange={e=>setOcrVertical(e.target.checked)} disabled={!!busy||ocrMode!=='enhanced'}/>
-        Искать вертикальные надписи (+90° и −90°, для небольших листов)</label>
+        Искать вертикальные надписи (±90°, на больших листах — по фрагментам)</label>
       <p className="muted">Все вычисления на устройстве. Усиленный режим повторно увеличивает до 60 трудных строк;
         несовпадающие варианты текста сохраняются как замечания, не заменяют чертёж молча.
         На больших листах поворот пропускается, чтобы не перегрузить браузер.</p>
