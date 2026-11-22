@@ -8,6 +8,7 @@ import {
 import {downloadFile} from './storage';
 import {projectReportXlsx,downloadReportXlsx} from './xlsxExport';
 import {parseSpecificationWorkbook} from './specWorkbook';
+import {auditScanGeometry,scanReviewCSV} from './scanReview';
 
 interface Props {
   project:CadProject;
@@ -44,6 +45,7 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   const [query,setQuery]=useState(''),[category,setCategory]=useState<SearchCategory>('all');
   const [caseSensitive,setCaseSensitive]=useState(false),[allSheets,setAllSheets]=useState(true);
   const [showDuplicates,setShowDuplicates]=useState(false),[inventoryKind,setInventoryKind]=useState('all');
+  const [showScanReview,setShowScanReview]=useState(false);
   const [stamp,setStamp]=useState<StampFields>({...DEFAULT_STAMP});
   const [scope,setScope]=useState<'current'|'all'>('current');
   const [importing,setImporting]=useState(false);
@@ -54,6 +56,7 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   }),[project,query,category,caseSensitive,allSheets,sheetIndex]);
   const duplicates=useMemo(()=>showDuplicates?duplicateTechnicalRequirements(project):[],[project,showDuplicates]);
   const inventory=useMemo(()=>inventoryProject(project),[project]);
+  const scanReview=useMemo(()=>showScanReview?auditScanGeometry(project):null,[project,showScanReview]);
   const findings=useMemo(()=>compareSpecification(project,project.specification||[]),[project]);
   const welds=useMemo(()=>weldSchedule(project),[project]);
   const filteredRows=inventory.rows.filter(x=>inventoryKind==='all'||x.kind===inventoryKind);
@@ -156,6 +159,20 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
         <small>{project.sheets[g.sheetIndex].name} · подтверждено {g.verified} из {g.count}</small>
         {g.entityIds[0]&&<button onClick={()=>onFocus(g.sheetIndex,g.entityIds[0])}>◎ Показать</button>}
       </div>)}
+      <h3>Проверка топологии W3</h3>
+      <p className="muted">Диагностика растровой автообводки: близкие концы линий и слабая опора на пиксели. Никаких автоматических соединений и правок. Зазоры — в единицах листа, не в подтверждённых мм.</p>
+      <button className="action" onClick={()=>setShowScanReview(v=>!v)}>{showScanReview?'Скрыть проверку W3':'⚠ W3: проверить топологию автообводки'}</button>
+      {showScanReview&&scanReview&&<>
+        <p className="muted">Исследовано отрезков: {scanReview.examinedLines}. Возможных разрывов: {scanReview.nearGaps}. Слабо подтверждённых штрихов: {scanReview.weakInk}. {scanReview.truncated?'Часть результатов ограничена для защиты браузера.':''}</p>
+        <button className="action" onClick={()=>exportCsv(scanReviewCSV(scanReview),'w3_scan_review')}>↓ Диагностика W3 CSV</button>
+        {scanReview.findings.slice(0,100).map((f,i)=><div key={i} className="archive-hit">
+          <strong>{f.kind==='near-gap'?'Возможный разрыв':'Слабое подтверждение'}</strong>
+          <small>{f.sheetName} · {f.description}</small>
+          <button onClick={()=>onFocus(f.sheetIndex,f.entityId)}>◎ Показать</button>
+          {f.relatedEntityId&&<button onClick={()=>onFocus(f.sheetIndex,f.relatedEntityId!)}>◎ Второй отрезок</button>}
+        </div>)}
+        {scanReview.findings.length>100&&<p className="muted">Показаны первые 100 результатов; сохраните CSV для полного списка.</p>}
+      </>}
       <h3>Реестр объектов</h3>
       <p className="muted">Показаны первые 100; полный перечень доступен в CSV.</p>
       {filteredRows.slice(0,100).map(e=><div key={e.id} className="archive-hit">
