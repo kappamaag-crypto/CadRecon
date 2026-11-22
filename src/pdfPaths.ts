@@ -14,7 +14,7 @@ type Matrix=[number,number,number,number,number,number];
 type Viewport={convertToViewportPoint:(x:number,y:number)=>number[]};
 type Ops={constructPath:number;save:number;restore:number;transform:number;
   moveTo:number;lineTo:number;curveTo:number;curveTo2:number;curveTo3:number;
-  rectangle:number;closePath:number;endPath?:number;clip?:number;eoClip?:number;setGState?:number;
+  rectangle:number;closePath:number;endPath?:number;clip?:number;eoClip?:number;setDash?:number;setGState?:number;
   paintFormXObjectBegin?:number;paintFormXObjectEnd?:number;rawFillPath?:number};
 type OpList={fnArray:ArrayLike<number>;argsArray:ArrayLike<unknown>};
 type Segment={kind:'line'|'bezier';points:Point[]};
@@ -159,17 +159,33 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
   let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,rectangularClipCurves=0,fullyClippedObjects=0,clipActive=false,unknownAlpha=false,formScope=false;
   let clipRect:ClipRect|null=null;
+  let pdfLineStyle:Entity['lineStyle']=undefined,currentPathStroked=true;
   // PDF.js can emit constructPath(END_PATH) followed by OPS.clip, or emit
   // OPS.clip before the path-ending constructPath. Keep the current pending
   // rectangular path until the clip command consumes it; never equate a
   // non-painted rectangle with a visible CAD polyline.
   let pendingClipRect:ClipRect|null=null,awaitingClipPath=false;
-  const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null}>=[];
+  const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null;lineStyle:Entity['lineStyle']}>=[];
   // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
   // 28 endPath, 29 clip, 30 eoClip do NOT paint any geometry.
   const paintable=new Set([20,21,22,23,24,25,26,27,ops.rawFillPath??94]);
+  const strokedPaint=new Set([20,21,24,25,26,27]);
+  const nativeLineStyle=(arg:unknown):Entity['lineStyle']=>{
+    if(!Array.isArray(arg)||arg.length<1)return undefined;
+    const dash=arg[0];
+    if(!numeric(dash)||dash.length>12||!allFinite(dash))return undefined;
+    const values=Array.from(dash);
+    if(values.length===2&&values[0]>0&&values[1]>0)return 'dashed';
+    // Common ISO/engineering long-gap-dot-gap centerline. Anything else
+    // (custom dots, complex patterns, zero gaps) stays unclassified.
+    if(values.length===4&&values.every(x=>x>0)&&values[0]>=2.2*values[2]&&
+      values[2]<=Math.min(values[1],values[3])*1.2)
+      return 'center';
+    return undefined;
+  };
   const push=(e:Entity,opIndex:number)=>{
     if(entities.length>=limit){truncated=true;return;}
+    if(e.kind==='line'&&currentPathStroked&&pdfLineStyle)e.lineStyle=pdfLineStyle;
     // Rectangular cubic Bézier clipping preserves exact editable control
     // geometry via de Casteljau; do not approximate or connect hidden pieces.
     if(clipActive&&clipRect&&e.kind==='bezier'&&e.points.length===4){
@@ -269,8 +285,8 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   };
   for(let i=0;i<list.fnArray.length;i++){
     const fn=list.fnArray[i];
-    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive,clipRect:clipRect?{...clipRect}:null});pendingClipRect=null;awaitingClipPath=false;continue;}
-    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;clipRect=prior?.clipRect??null;pendingClipRect=null;awaitingClipPath=false;continue;}
+    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive,clipRect:clipRect?{...clipRect}:null,lineStyle:pdfLineStyle});pendingClipRect=null;awaitingClipPath=false;continue;}
+    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;clipRect=prior?.clipRect??null;pdfLineStyle=prior?.lineStyle;pendingClipRect=null;awaitingClipPath=false;continue;}
     if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){
       clipActive=true;
       // W (nonzero) permits axis-aligned rectangles; W* (even-odd) only if
@@ -283,6 +299,7 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       }
       continue;
     }
+    if(ops.setDash!==undefined&&fn===ops.setDash){pdfLineStyle=nativeLineStyle(list.argsArray[i]);continue;}
     if(ops.setGState!==undefined&&fn===ops.setGState){unknownAlpha=true;continue;}
     if(ops.paintFormXObjectBegin!==undefined&&fn===ops.paintFormXObjectBegin){formScope=true;continue;}
     if(fn===ops.transform){
@@ -294,6 +311,7 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
     pathOperations++;
     const raw=list.argsArray[i];
     if(!Array.isArray(raw)||raw.length<2){rejectedPaths++;continue;}
+    currentPathStroked=typeof raw[0]!=='number'||strokedPaint.has(raw[0]);
     // Do not create invisible CAD objects from clipping-only paths, or
     // unrecognized paint operations. PDF clipping is NOT geometrically
     // modeled, so any subsequent visible paths in the clipped scope are
@@ -359,7 +377,7 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
         e.center=ellipse.center;e.radius=ellipse.radius;e.axisRatio=ellipse.axisRatio;
         if(canGroup(e)){push(e,i);grouped=true;}
       }
-      if(!grouped&&segments.length>=3&&segments.every(s=>s.kind==='line')
+      if(!grouped&&segments.length>=3&&!(currentPathStroked&&pdfLineStyle)&&segments.every(s=>s.kind==='line')
         &&near(segments[0].points[0],segments[segments.length-1].points[1])){
         const pts=segments.map(s=>s.points[0]);
         const e=entity('polyline',pts,'PDF векторы','pdf');e.closed=true;
