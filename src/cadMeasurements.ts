@@ -16,6 +16,35 @@ const length=(points:Point[],closed=false)=>{
   if(closed&&points.length>2)result+=d(points[points.length-1],points[0]);
   return result;
 };
+/** Reject self-crossing, touching nonadjacent edges, degenerate edges and
+ * unbounded complex polygons before reporting an area as physically meaningful.
+ */
+export function isSimplePolygon(points:Point[]):boolean{
+  const n=points.length;
+  if(n<3||n>350||!points.every(finite))return false;
+  const orientation=(a:Point,b:Point,c:Point)=>
+    (b.x-a.x)*(c.y-a.y)-(b.y-a.y)*(c.x-a.x);
+  const within=(a:Point,b:Point,p:Point)=>
+    p.x>=Math.min(a.x,b.x)-EPS&&p.x<=Math.max(a.x,b.x)+EPS&&
+    p.y>=Math.min(a.y,b.y)-EPS&&p.y<=Math.max(a.y,b.y)+EPS;
+  const intersects=(a:Point,b:Point,c:Point,d:Point)=>{
+    const o1=orientation(a,b,c),o2=orientation(a,b,d),
+      o3=orientation(c,d,a),o4=orientation(c,d,b);
+    if(o1*o2< -EPS&&o3*o4< -EPS)return true;
+    return Math.abs(o1)<=EPS&&within(a,b,c)||
+      Math.abs(o2)<=EPS&&within(a,b,d)||
+      Math.abs(o3)<=EPS&&within(c,d,a)||
+      Math.abs(o4)<=EPS&&within(c,d,b);
+  };
+  for(let i=0;i<n;i++){
+    if(d(points[i],points[(i+1)%n])<EPS)return false;
+    for(let j=i+1;j<n;j++){
+      if(j===i+1||(i===0&&j===n-1))continue;
+      if(intersects(points[i],points[(i+1)%n],points[j],points[(j+1)%n]))return false;
+    }
+  }
+  return true;
+}
 const polygonArea=(pts:Point[])=>Math.abs(pts.reduce((sum,p,i)=>{
   const next=pts[(i+1)%pts.length];return sum+p.x*next.y-next.x*p.y;
 },0))*.5;
@@ -29,8 +58,9 @@ export function measureCadEntity(e:Entity):GeometryMeasure|null{
   if(e.kind==='polyline'||e.kind==='hatch'){
     const closed=e.kind==='hatch'||!!e.closed;
     return {kind:e.kind,length:length(e.points,closed),perimeter:closed?length(e.points,true):undefined,
-      area:closed&&e.points.length>=3?polygonArea(e.points):undefined,closed,
-      note:closed?'Площадь по формуле Гаусса: применима только к простому несамопересекающемуся контуру':
+      area:closed&&isSimplePolygon(e.points)?polygonArea(e.points):undefined,closed,
+      note:closed?(isSimplePolygon(e.points)?'Площадь простого замкнутого контура':
+        'Площадь не рассчитана: есть самопересечение, контакт или непроверяемая сложность контура'):
         'Открытый контур: площадь не рассчитывается'};
   }
   if(e.kind==='circle'&&e.radius!==undefined&&Number.isFinite(e.radius)){
@@ -61,10 +91,10 @@ export function angleBetweenCadLines(a:Entity,b:Entity):number|null{
   return Math.acos(Math.max(-1,Math.min(1,(u.x*v.x+u.y*v.y)/den)))*180/PI;
 }
 export interface TopologyFinding {
-  kind:'open-end'|'gap'|'duplicate';entityId:string;relatedId?:string;description:string;
+  kind:'open-end'|'gap'|'duplicate'|'self-crossing';entityId:string;relatedId?:string;description:string;
 }
 export interface TopologyReport {
-  checked:number;openEnds:number;nearGaps:number;duplicates:number;closedPolylines:number;
+  checked:number;openEnds:number;nearGaps:number;duplicates:number;closedPolylines:number;selfCrossings:number;
   truncated:boolean;findings:TopologyFinding[];
 }
 /** Endpoint matching is deliberately exact to tolerance. A near-gap is
@@ -78,8 +108,14 @@ export function inspectCadTopology(entities:Entity[],tolerance=.01):TopologyRepo
     .slice(0,LIMIT);
   const count=entities.filter(e=>e.kind==='line').length;
   const closedPolylines=entities.filter(e=>e.kind==='polyline'&&e.closed).length;
+  const closedCandidates=entities.filter(e=>(e.kind==='polyline'||e.kind==='hatch')&&
+    (e.closed||e.kind==='hatch')).slice(0,150);
+  const invalidClosed=closedCandidates.filter(e=>!isSimplePolygon(e.points));
+  const selfCrossings=invalidClosed.length;
   const findings:TopologyFinding[]=[];
   const push=(finding:TopologyFinding)=>{if(findings.length<80)findings.push(finding);};
+  for(const e of invalidClosed)push({kind:'self-crossing',entityId:e.id,
+    description:'Замкнутый контур пересекает сам себя, касается или не проходит безопасный анализ. Площадь недостоверна.'});
   let duplicates=0,openEnds=0,nearGaps=0;
   const ends:Array<{entity:Entity;point:Point;other:Point;connected:boolean}>=[];
   const fingerprints=new Set<string>();
@@ -132,6 +168,6 @@ export function inspectCadTopology(entities:Entity[],tolerance=.01):TopologyRepo
     nearGaps++;push({kind:'gap',entityId:a.entity.id,relatedId:b.entity.id,
       description:'Потенциальный соосный зазор '+delta.toFixed(2)+' ед. листа. НЕ замкнут автоматически'});
   }
-  return {checked:segments.length,openEnds,nearGaps,duplicates,closedPolylines,
-    truncated:count>LIMIT||dangling.length>400||findings.length>=80,findings};
+  return {checked:segments.length,openEnds,nearGaps,duplicates,closedPolylines,selfCrossings,
+    truncated:count>LIMIT||dangling.length>400||findings.length>=80||closedPolylines>150,findings};
 }
