@@ -30,7 +30,7 @@ test('SearchTextApp browser search jumps to a matching OCR text across CAD sheet
  await expect(page.locator('.archive-hit').filter({hasText:'Крепление М16'})).toHaveCount(1);
  await page.locator('.archive-hit').filter({hasText:'Крепление М16'})
    .getByRole('button',{name:/Показать/}).click();
- await expect(page.locator('.sheet-tabs button.active')).toHaveText('Чертёж 2');
+ await expect(page.locator('.sheet-tabs .sheet-tab.active .sheet-select')).toHaveText('Чертёж 2');
  await page.locator('.archive-hit').filter({hasText:'Крепление М16'})
    .getByRole('button',{name:/Свойства/}).click();
  await expect(page.getByRole('heading',{name:'Свойства объекта'})).toBeVisible();
