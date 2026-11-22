@@ -27,9 +27,15 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
   const weakInk=trace.filter(e=>e.scanEvidence&&e.scanEvidence.inkSupport<.35).length;
   const brokenSolid=trace.filter(e=>!e.lineStyle&&e.scanEvidence&&e.scanEvidence.blankRunRatio>=.20).length;
   const texts=entities.filter(e=>e.kind==='text');
-  const weakOcr=texts.filter(e=>e.origin==='ocr'&&!e.verified&&
-    (e.confidence===undefined||e.confidence<60||
-    /несовпад|ошиб|проверьте|conflict/i.test(e.reason||''))).length;
+  const weakOcr=texts.filter(e=>{
+    if(e.origin!=='ocr'||e.verified)return false;
+    // OCR Tesseract.js now writes 0..1; older saved projects may have 0..100.
+    // Comparing normalized .93 to 60 incorrectly flagged EVERY OCR line.
+    const score=e.confidence===undefined?null:
+      e.confidence>1?e.confidence/100:e.confidence;
+    return score===null||score<.60||
+      /КОНФЛИКТ OCR|ПОДОЗРЕНИЕ OCR|несовпад|ошиб|conflict/i.test(e.reason||'');
+  }).length;
   const unverified=entities.filter(e=>!e.verified).length;
   const missingPixels=!!sheet.image&&
     (sheet.importWarnings||[]).some(w=>/уменьшен|уменьшена|не обработаны|НЕ обработаны|сжата с потерями|превышен лимит|часть.*не импортирована/i.test(w));
