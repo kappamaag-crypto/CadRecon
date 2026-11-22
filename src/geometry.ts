@@ -12,6 +12,19 @@ export function pointSegmentDistance(p:Point,a:Point,b:Point) {
   return dist(p,{x:a.x+t*dx,y:a.y+t*dy});
 }
 export function shapeDistance(p:Point,e:Entity) {
+  // Editable cubic PDF curves: approximate hit-testing on the true curve,
+  // not its control polygon (the latter is NOT the displayed geometry).
+  if(e.kind==='bezier'&&e.points.length===4){
+    const [a,b,c,d]=e.points;
+    let prev=a,best=Infinity;
+    for(let k=1;k<=32;k++){
+      const t=k/32,u=1-t;
+      const q={x:u*u*u*a.x+3*u*u*t*b.x+3*u*t*t*c.x+t*t*t*d.x,
+        y:u*u*u*a.y+3*u*u*t*b.y+3*u*t*t*c.y+t*t*t*d.y};
+      best=Math.min(best,pointSegmentDistance(p,prev,q));prev=q;
+    }
+    return best;
+  }
   if(e.kind==='circle'||e.kind==='arc')return Math.abs(dist(p,e.center||e.points[0])- (e.radius||0));
   if(e.kind==='text'||e.kind==='table'||e.kind==='stamp'||e.kind==='eskd')return dist(p,e.points[0]);
   const pts=e.points;
@@ -42,6 +55,7 @@ export interface AuditItem {severity:'warning'|'info';message:string;id?:string}
 export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   const issues:AuditItem[]=[];
   if(!sheet.calibrated)issues.push({severity:'warning',message:'Лист не калиброван: координаты и размеры могут не соответствовать миллиметрам.'});
+  for(const message of sheet.importWarnings||[])issues.push({severity:'warning',message:'Импорт PDF: '+message});
   const visibleLayers=new Set(project.layers.map(l=>l.name));
   const unverified=sheet.entities.filter(e=>!e.verified);
   if(unverified.length)issues.push({severity:'warning',message:'Непроверенных объектов: '+unverified.length+'. Их нельзя считать инженерно подтверждёнными.'});
