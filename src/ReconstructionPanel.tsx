@@ -7,6 +7,7 @@ interface Props {
   recognitionMode:'auto'|'hybrid';
   onMode:(mode:'auto'|'hybrid')=>void;
   ocrLanguages:'rus+eng'|'rus'|'eng';
+  ocrVertical:boolean;onVertical:(enabled:boolean)=>void;
   onLanguages:(v:'rus+eng'|'rus'|'eng')=>void;
   onImport:()=>void;onRecognize:()=>void;onTrace:()=>void;onOcr:()=>void;
   onReview:()=>void;onCompare:()=>void;onExport:()=>void;onCleanup:()=>void;
@@ -16,7 +17,7 @@ interface Props {
  * All controls invoke existing browser-only pipeline actions, never a server.
  */
 export default function ReconstructionPanel({
-  quality,loaded,busy,recognitionMode,onMode,ocrLanguages,onLanguages,
+  quality,loaded,busy,recognitionMode,onMode,ocrLanguages,onLanguages,ocrVertical,onVertical,
   onImport,onRecognize,onTrace,onOcr,onReview,onCompare,onExport,onCleanup,
   onCalibrate,onEdit,onStop,onPrepareOcr,
 }:Props){
@@ -57,6 +58,11 @@ export default function ReconstructionPanel({
           <option value="eng">English</option>
         </select>
       </label>
+      <label className="check"><input type="checkbox" checked={ocrVertical}
+        disabled={busy} onChange={e=>onVertical(e.currentTarget.checked)}/>
+        Искать вертикальные надписи ±90° (дополнительные тайлы)</label>
+      {ocrVertical&&<p className="muted">Усиленный OCR повернёт выбранные фрагменты на устройстве.
+        Для огромного A0 возможен неполный охват — используйте OCR области.</p>}
       <button className="action primary recognition-primary" disabled={!loaded||busy}
         onClick={onRecognize}>◎ Точное распознавание в браузере (PDF / скан)</button>
       {busy&&<button className="action" onClick={onStop}>× Остановить обработку на устройстве</button>}

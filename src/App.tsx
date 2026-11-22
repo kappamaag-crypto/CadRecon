@@ -341,7 +341,7 @@ export default function App(){
    localController.current=ctrl;setLocalBusy(true);
    setBusy('Точная реконструкция непосредственно в браузере…');
    try{
-     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal,recognitionMode,ocrLanguages);
+     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal,recognitionMode,ocrLanguages,ocrVertical);
      if(ctrl.signal.aborted)return;
      addToOriginalSheet(sheetId,result.entities);
      if(result.ocrText)setOcrText(result.ocrText);
@@ -662,6 +662,7 @@ export default function App(){
         quality={recognitionQuality} loaded={!!sheet.image} busy={!!busy}
         recognitionMode={recognitionMode} onMode={setRecognitionMode}
         ocrLanguages={ocrLanguages} onLanguages={setOcrLanguages}
+        ocrVertical={ocrVertical} onVertical={setOcrVertical}
         onImport={()=>input.current?.click()} onRecognize={()=>void browserAccurateProcessing()}
         onTrace={()=>void vectorize()} onOcr={()=>void runOcr()}
         onReview={()=>{setPanel('recognition');setReviewPage(0);}}

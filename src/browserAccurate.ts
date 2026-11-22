@@ -111,7 +111,7 @@ export async function recognizeBrowserAccurate(
   sheet:Sheet,
   onProgress?:(status:string)=>void,
   signal?:AbortSignal,
-  mode:'auto'|'hybrid'='auto',languages:OcrLanguages='rus+eng',
+  mode:'auto'|'hybrid'='auto',languages:OcrLanguages='rus+eng',detectVertical=false,
 ):Promise<BrowserAccurateResult>{
   if(!sheet.image)throw new Error('Для распознавания нужен загруженный PDF или скан');
   const assertActive=()=>{if(signal?.aborted)throw new DOMException('Обработка чертежа отменена','AbortError');};
@@ -142,7 +142,7 @@ export async function recognizeBrowserAccurate(
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
     try {
       const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal,
-        {mode:'enhanced',languages,maxRetries:35});
+        {mode:'enhanced',languages,detectVertical,maxRetries:35});
       assertActive();
       ocrText=ocr.text;
       candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));
