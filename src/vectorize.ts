@@ -55,6 +55,9 @@ export async function traceImage(
       const t=finalTiles[k];
       onProgress?.('Обводка исходного разрешения: участок '+(k+1)+' / '+finalTiles.length);
       cv.width=t.w;cv.height=t.h;
+      // Explicit white sheet background: transparent PNG pixels otherwise
+      // enter the grayscale worker with RGB=0 and become false black strokes.
+      ctx.fillStyle='#fff';ctx.fillRect(0,0,t.w,t.h);
       ctx.drawImage(img,t.x/factor,t.y/factor,t.w/factor,t.h/factor,0,0,t.w,t.h);
       const rgba=ctx.getImageData(0,0,t.w,t.h).data;
       assertActive();

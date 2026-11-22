@@ -22,7 +22,7 @@ function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];thresho
   for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
     const i=y*width+x;
     if(gray[i]>th)continue;
-    if(gray[i-1]>=th||gray[i+1]>=th||gray[i-width]>=th||gray[i+width]>=th){
+    if(gray[i-1]>th||gray[i+1]>th||gray[i-width]>th||gray[i+width]>th){
       edgeMask[i]=1;edgeCount++;
     }
   }
