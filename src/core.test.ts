@@ -1,7 +1,7 @@
 import {writeFileSync} from 'node:fs';
 import {describe,it,expect} from 'vitest';
 import {newProject,entity,validateProject} from './model';
-import {dist,snapPoint,scaleSheet,auditSheet,mergeAutoLines} from './geometry';
+import {dist,snapPoint,scaleSheet,auditSheet,mergeAutoLines,measure} from './geometry';
 import {createDxf} from './dxf';
 import {createZip} from './zip';
 describe('CadRecon model and export',()=>{
@@ -16,6 +16,17 @@ describe('CadRecon model and export',()=>{
   const manual=entity('line',[{x:20,y:0},{x:30,y:0}]);
   const out=mergeAutoLines([a,b,manual],1);expect(out.removed).toBe(1);
   expect(out.entities.length).toBe(2);expect(out.entities.some(e=>e.id===manual.id)).toBe(true);
+ });
+ it('does not falsely approve manual objects or report pixel lengths as millimetres',()=>{
+  const p=newProject(),manual=entity('line',[{x:0,y:0},{x:30,y:40}]);
+  expect(manual.verified).toBe(false);
+  manual.verified=true;
+  p.sheets[0].entities=[manual];
+  const scaled=scaleSheet(p.sheets[0],2);
+  expect(scaled.calibrated).toBe(true);
+  expect(scaled.entities[0].verified).toBe(false);
+  expect(measure({x:0,y:0},{x:30,y:40})).toContain('усл. ед.');
+  expect(measure({x:0,y:0},{x:30,y:40},true)).toBe('50.00 мм');
  });
  it('calibrates without losing shape geometry',()=>{
   const p=newProject(),l=entity('line',[{x:0,y:0},{x:10,y:0}]);p.sheets[0].entities=[l];
