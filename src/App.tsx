@@ -28,6 +28,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'trim',title:'Подрезать линию по границе',icon:'✂'},{id:'extend',title:'Продлить линию до границы',icon:'↗'},
   {id:'offset',title:'Параллельный отрезок (OFFSET)',icon:'⇢'},
   {id:'break',title:'Разорвать прямой отрезок (BREAK)',icon:'⊣'},
+  {id:'join',title:'Соединить линии и полилинии (JOIN)',icon:'⤴',hotkey:'J'},
   {id:'chamfer',title:'Фаска двух линий',icon:'◩'},{id:'fillet',title:'Сопряжение двух линий',icon:'⌒'},
   {id:'circle',title:'Окружность',icon:'◯',hotkey:'C'},{id:'arc',title:'Дуга (3 точки)',icon:'⌒'},
   {id:'dimension',title:'Размерный объект',icon:'↔',hotkey:'D'},{id:'axis',title:'Осевая линия',icon:'┈'},
@@ -65,9 +66,13 @@ export default function App(){
  function modifyEntity(e:Entity,explicitReview=false){const edited=explicitReview?e:{...e,verified:false,reason:'Объект изменён: требуется повторная проверка по оригиналу'};changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?edited:x)}));}
  function applyOperation(result:OperationResult){
   const ids=new Set(result.replacements.map(e=>e.id));
-  changeSheet(s=>({...s,entities:[...s.entities.map(e=>ids.has(e.id)?result.replacements.find(x=>x.id===e.id)!:e),...result.additions]}));
+  const deleted=new Set(result.removals||[]);
+  changeSheet(s=>({...s,entities:[
+    ...s.entities.filter(e=>!deleted.has(e.id)).map(e=>ids.has(e.id)?result.replacements.find(x=>x.id===e.id)!:e),
+    ...result.additions]}));
   setSelected(null);
-  setStatus('CAD: изменено '+result.replacements.length+' объектов, добавлено '+result.additions.length+'. Проверьте размеры и геометрию.');
+  setStatus('CAD: изменено '+result.replacements.length+' объектов, добавлено '+result.additions.length+
+    ', удалено '+deleted.size+'. Проверьте размеры и геометрию.');
  }
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);

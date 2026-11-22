@@ -125,3 +125,28 @@ test('W4 BREAK cuts one manual line into two DXF-editable parts and one Undo res
   expect(back.sheets[0].entities).toHaveLength(1);
   expect(back.sheets[0].entities[0].points).toEqual(source.points);
 });
+
+
+test('W4 JOIN connects exact shared endpoints to editable LINE, with one Undo and no new approval',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;sheet.calibrated=true;
+  const a=entity('line',[{x:40,y:100},{x:130,y:100}]);
+  const b=entity('line',[{x:130,y:100},{x:240,y:100}]);
+  sheet.entities=[a,b];
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Соединить линии и полилинии (JOIN)'}).click();
+  await worldClick(page,{x:80,y:100});
+  await expect(page.getByText(/JOIN: выбран первый объект/)).toBeVisible();
+  page.once('dialog',d=>d.accept());
+  await worldClick(page,{x:200,y:100});
+  await expect(page.getByText(/CAD: изменено 1 объектов, добавлено 0, удалено 1/)).toBeVisible();
+  const saved=await exportProject(page);
+  expect(saved.sheets[0].entities).toHaveLength(1);
+  expect(saved.sheets[0].entities[0].points).toEqual([{x:40,y:100},{x:240,y:100}]);
+  expect(saved.sheets[0].entities[0].origin).toBe('manual');
+  expect(saved.sheets[0].entities[0].verified).toBe(false);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  const undone=await exportProject(page);
+  expect(undone.sheets[0].entities).toHaveLength(2);
+  expect(undone.sheets[0].entities.map(e=>e.id)).toEqual([a.id,b.id]);
+});

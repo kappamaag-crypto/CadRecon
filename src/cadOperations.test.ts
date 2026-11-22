@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {entity,type Entity,type Point} from './model';
-import {intersectLines,trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines} from './cadOperations';
+import {intersectLines,trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities} from './cadOperations';
 const p=(x:number,y:number):Point=>({x,y});
 function line(a:Point,b:Point):Entity {
   return entity('line',[a,b],'Контуры','manual');
@@ -107,5 +107,57 @@ describe('W4 deterministic 2D editing commands',()=>{
     expect(intersectLines(a,b)).toBeNull();
     expect(chamferLines(a,b,p(0,0),p(10,2),5)).toBeNull();
     expect(filletLines(a,b,p(0,0),p(10,2),5)).toBeNull();
+  });
+});
+
+
+describe('W4 JOIN finite CAD entities with exact shared endpoints',()=>{
+  it('joins two contiguous collinear lines into a single editable LINE, with one removed ID',()=>{
+    const a=line(p(0,0),p(50,0)),b=line(p(50,0),p(100,0));
+    a.verified=true;b.verified=true;
+    const output=joinCadEntities(a,b);
+    expect(output?.replacements).toHaveLength(1);
+    expect(output?.removals).toEqual([b.id]);
+    expect(output?.additions).toHaveLength(0);
+    expect(output?.replacements[0].kind).toBe('line');
+    expect(output?.replacements[0].points).toEqual([p(0,0),p(100,0)]);
+    expect(output?.replacements[0].origin).toBe('manual');
+    expect(output?.replacements[0].verified).toBe(false);
+    expect(a.verified).toBe(true);
+    expect(b.verified).toBe(true);
+  });
+  it('joins a real corner as editable POLYLINE; supports reversed endpoint order',()=>{
+    const a=line(p(0,0),p(50,0)),b=line(p(50,50),p(50,0));
+    const output=joinCadEntities(a,b);
+    expect(output?.replacements[0].kind).toBe('polyline');
+    expect(output?.replacements[0].points).toEqual([p(0,0),p(50,0),p(50,50)]);
+    const chain=entity('polyline',[p(50,50),p(80,60),p(90,60)]);
+    chain.layer=a.layer;
+    const out=joinCadEntities(output!.replacements[0],chain);
+    expect(out?.replacements[0].points).toEqual([p(0,0),p(50,0),p(50,50),p(80,60),p(90,60)]);
+  });
+  it('refuses positive gaps, including visually tiny gaps, without changing input',()=>{
+    const a=line(p(0,0),p(50,0)),b=line(p(50.002,0),p(100,0));
+    expect(joinCadEntities(a,b)).toBeNull();
+    expect(joinCadEntities(a,b,.005)).toBeNull(); // maximum safe tolerance is .001
+    expect(a.points).toEqual([p(0,0),p(50,0)]);
+    expect(b.points).toEqual([p(50.002,0),p(100,0)]);
+  });
+  it('rejects backtracking, duplicate lines, distinct layers and closed contours',()=>{
+    const a=line(p(0,0),p(50,0)),back=line(p(50,0),p(20,0));
+    expect(joinCadEntities(a,back)).toBeNull();
+    const duplicate=line(p(0,0),p(50,0));
+    expect(joinCadEntities(a,duplicate)).toBeNull();
+    const otherLayer=line(p(50,0),p(100,0));otherLayer.layer='Оси';
+    expect(joinCadEntities(a,otherLayer)).toBeNull();
+    const closed=entity('polyline',[p(0,0),p(50,0),p(50,50)]);closed.closed=true;
+    expect(joinCadEntities(closed,back)).toBeNull();
+  });
+  it('rejects infinite coordinates, same entity, zero-length segments, and T-intersections',()=>{
+    const a=line(p(0,0),p(50,0));
+    expect(joinCadEntities(a,a)).toBeNull();
+    expect(joinCadEntities(a,line(p(50,0),p(50,0)))).toBeNull();
+    expect(joinCadEntities(a,line(p(25,0),p(25,40)))).toBeNull();
+    expect(joinCadEntities(a,line(p(NaN,0),p(50,0)))).toBeNull();
   });
 });

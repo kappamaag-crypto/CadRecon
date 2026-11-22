@@ -7,6 +7,7 @@ import {entity,type Entity,type Point} from './model';
 export type OperationResult={
   replacements:Entity[];
   additions:Entity[];
+  removals?:string[];
   warning?:string;
 };
 const EPS=1e-8;
@@ -187,4 +188,50 @@ export function filletLines(
   arc.startAngle=start;arc.endAngle=end;
   return {replacements:[edited(first,[r.a.chosenEnd,tx]),edited(second,[r.b.chosenEnd,ty])],
     additions:[arc]};
+}
+
+/** W4 JOIN: user selects two open segments/polylines with a single identical
+ * endpoint. No extension, snap over a white gap, T-junction assumption, or
+ * automatic verification. Original #1 ID survives, #2 removed in one Undo.
+ * Reject ambiguous dual-ended overlap/loops and near 180° backtracking.
+ */
+export function joinCadEntities(
+  first:Entity,second:Entity,tolerance=1e-5
+):OperationResult|null {
+  const allowed=(e:Entity)=> (e.kind==='line'||e.kind==='polyline')&&
+    !e.closed&&e.points.length>=2&&e.points.length<=10000&&
+    e.points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y));
+  if(!allowed(first)||!allowed(second)||first.id===second.id||
+    first.layer!==second.layer||!Number.isFinite(tolerance)||
+    tolerance<0||tolerance>.001)return null;
+  const ae=[first.points[0],first.points[first.points.length-1]];
+  const be=[second.points[0],second.points[second.points.length-1]];
+  const matches:Array<{i:number;j:number}>=[];
+  for(let i=0;i<2;i++)for(let j=0;j<2;j++){
+    if(length(sub(ae[i],be[j]))<=tolerance)matches.push({i,j});
+  }
+  // Two matches suggest duplicated/reversed paths or a loop: do not guess.
+  if(matches.length!==1)return null;
+  const {i,j}=matches[0];
+  const left=i===0?[...first.points].reverse():[...first.points];
+  const right=j===1?[...second.points].reverse():[...second.points];
+  const a=left[left.length-2],junctionA=left[left.length-1],
+    junctionB=right[0],b=right[1];
+  const incoming=sub(junctionA,a),outgoing=sub(b,junctionB);
+  const lenA=length(incoming),lenB=length(outgoing);
+  if(!Number.isFinite(lenA)||!Number.isFinite(lenB)||lenA<=EPS||lenB<=EPS)return null;
+  const cosine=dot(incoming,outgoing)/(lenA*lenB);
+  // Reject doubling back along the same feature: not a valid open JOIN.
+  if(cosine<-.99999)return null;
+  const joined={x:(junctionA.x+junctionB.x)/2,y:(junctionA.y+junctionB.y)/2};
+  const combined=[...left.slice(0,-1),joined,...right.slice(1)];
+  if(combined.length>20000||combined.slice(1).some((p,k)=>length(sub(p,combined[k]))<=EPS))return null;
+  const straight=first.kind==='line'&&second.kind==='line'&&cosine>1-1e-9;
+  const updated:Entity={...first,kind:straight?'line':'polyline',
+    points:straight?[combined[0],combined[combined.length-1]]:combined,
+    closed:false,origin:'manual',verified:false,confidence:undefined,
+    bbox:undefined,sourceId:undefined,chainId:undefined,
+    reason:'JOIN: концы выбраны пользователем и совпали; требуется проверка исходной геометрии'};
+  return {replacements:[updated],additions:[],removals:[second.id],
+    warning:'Соединение подтверждается пользователем; отсутствующие штрихи не восстанавливаются'};
 }
