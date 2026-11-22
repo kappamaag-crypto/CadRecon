@@ -4,7 +4,8 @@ import {suppressRedundantCircleStrokes} from './circleStrokeFilter';
 import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 import {rankLineByInkEvidence} from './lineEvidence';
 import {refineStrokeCenters} from './inkCenterline';
-type P={x:number;y:number};type Segment={a:P;b:P;confidence:number};
+import {classifyLinePattern} from './linePattern';
+type P={x:number;y:number};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center'};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   const gray=new Uint8Array(width*height);const histogram=new Uint32Array(256);
@@ -47,7 +48,26 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
     const strideR=rhoStride,t=Math.floor(key/strideR),r=(key-t*strideR-rhoMax)*2;
     const {c,s}=angles[t],along={x:-s,y:c},matches:number[]=[];
     for(const p of sampled)if(Math.abs(p.x*c+p.y*s-r)<1.7)matches.push(p.x*along.x+p.y*along.y);
-    matches.sort((a,b)=>a-b);let first=matches[0],last=matches[0];
+    matches.sort((a,b)=>a-b);
+    // Test the full Hough axis before splitting at white spaces. Repeated
+    // dashed/centre marks can form one editable STYLED LINE proposal without
+    // claiming that each white gap contains a solid stroke.
+    if(matches.length>=4&&matches[matches.length-1]-matches[0]>minLength*3){
+      const start=matches[0],end=matches[matches.length-1];
+      const full={a:{x:r*c+start*along.x,y:r*s+start*along.y},
+        b:{x:r*c+end*along.x,y:r*s+end*along.y},confidence:Math.min(.80,.35+votes/150)};
+      const pattern=classifyLinePattern(full,rgba,width,height);
+      if(pattern){
+        const candidate:Segment={a:{x:full.a.x*scale,y:full.a.y*scale},
+          b:{x:full.b.x*scale,y:full.b.y*scale},
+          confidence:Math.min(full.confidence,.75),lineStyle:pattern.style};
+        if(!found.some(previous=>previous.lineStyle===candidate.lineStyle&&sameFiniteLine(previous,candidate,2.5*scale))){
+          found.push(candidate);
+        }
+        continue;
+      }
+    }
+    let first=matches[0],last=matches[0];
     const push=()=>{if(last-first<minLength)return;const a={x:(r*c+first*along.x)*scale,y:(r*s+first*along.y)*scale},b={x:(r*c+last*along.x)*scale,y:(r*s+last*along.y)*scale}; const confidence=Math.min(.95,.35+votes/150);if(!found.some(s=>sameFiniteLine(s,{a,b,confidence},2.5*scale)))found.push({a,b,confidence});};
     for(let i=1;i<matches.length;i++){if(matches[i]-last>Math.max(7,minLength/3)){push();first=matches[i];}last=matches[i];}
     if(matches.length)push();

@@ -8,7 +8,7 @@
  * direction. A standalone tangent extending outside the rim is preserved.
  */
 export interface XY {x:number;y:number}
-export interface InkLine {a:XY;b:XY;confidence:number}
+export interface InkLine {a:XY;b:XY;confidence:number;lineStyle?:'dashed'|'center'}
 export interface InkCircle {x:number;y:number;radius:number;confidence:number}
 
 const hypot=(x:number,y:number)=>Math.hypot(x,y);

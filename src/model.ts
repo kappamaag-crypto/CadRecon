@@ -7,7 +7,7 @@ export interface Entity {
   points:Point[]; center?:Point; radius?:number; startAngle?:number; endAngle?:number;
   closed?:boolean; text?:string; size?:number; offset?:number;
   rows?:number; cols?:number; width?:number; height?:number;
-  confidence?:number; color?:string; symbol?:EskdType;
+  confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
   reason?:string; sourceId?:string; chainId?:string;
   bbox?:{x0:number;y0:number;x1:number;y1:number};
 }
@@ -83,6 +83,7 @@ export function validateProject(value:unknown):CadProject {
         (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
         (e.confidence!==undefined&&!Number.isFinite(e.confidence))||
+        (e.lineStyle!==undefined&&(e.kind!=='line'||!['dashed','center'].includes(e.lineStyle)))||
         (e.text!==undefined&&(typeof e.text!=='string'||e.text.length>10000))||
         (e.rows!==undefined&&(!Number.isInteger(e.rows)||e.rows<1||e.rows>250))||
         (e.cols!==undefined&&(!Number.isInteger(e.cols)||e.cols<1||e.cols>250))||

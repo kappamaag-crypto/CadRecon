@@ -41,7 +41,7 @@ function entityDxf(e:Entity){
   const layer=e.layer,pts=e.points;
   switch(e.kind){
     case 'point':return pts.length?emit(0,'POINT',100,'AcDbEntity',8,layer,100,'AcDbPoint')+v(pts[0]):'';
-    case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'?'CENTER':''):'';
+    case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'||e.lineStyle==='center'?'CENTER':e.lineStyle==='dashed'?'DASHED':''):'';
     case 'polyline':return polygon(pts,layer,!!e.closed);
     case 'bezier':return cubicSpline(pts,layer);
     case 'hatch':return solidHatch(pts,layer);
@@ -84,7 +84,7 @@ export function createDxf(sheet:Sheet,project:CadProject) {
   const dims=sheet.entities.filter(e=>e.kind==='dimension'&&e.points.length>=2).map(dimensionBlock);
   const symbols=sheet.entities.filter(e=>e.kind==='eskd'&&e.points.length>=1).map(eskdBlock);
   let out=emit(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$INSUNITS',70,sheet.calibrated?4:0,9,'$MEASUREMENT',70,1,9,'$LUNITS',70,2,9,'$LUPREC',70,4,9,'$DWGCODEPAGE',3,'ANSI_1251',0,'ENDSEC');
-  out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,2,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'LTYPE',2,'CENTER',70,0,3,'Center line',72,65,73,4,40,30,49,15,74,0,49,-5,74,0,49,5,74,0,49,-5,74,0,0,'ENDTAB');
+  out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,3,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'LTYPE',2,'CENTER',70,0,3,'Center line',72,65,73,4,40,30,49,15,74,0,49,-5,74,0,49,5,74,0,49,-5,74,0,0,'LTYPE',2,'DASHED',70,0,3,'Dashed line',72,65,73,2,40,15,49,9,74,0,49,-6,74,0,0,'ENDTAB');
   out+=emit(0,'TABLE',2,'LAYER',70,project.layers.length+1);
   for(const l of [...project.layers,{name:'0',color:'#e4ebf4',visible:true,locked:false}])out+=emit(0,'LAYER',2,l.name,70,l.locked?4:0,62,l.visible?col(l.color):-col(l.color),6,'CONTINUOUS');
   out+=emit(0,'ENDTAB',0,'TABLE',2,'STYLE',70,1,0,'STYLE',2,'Standard',70,0,40,0,41,1,50,0,71,0,42,2.5,3,'txt',4,'',0,'ENDTAB');

@@ -94,6 +94,23 @@ describe('CadRecon model and export',()=>{
   expect(dxf).toContain('\n$INSUNITS\n70\n0\n');
   writeFileSync('/tmp/cadrecon-spline-test.dxf',dxf,'utf8');
  });
+ it('exports line-style candidates to explicit native DXF linetypes, never verifies scans',()=>{
+  const project=newProject(),s=project.sheets[0];
+  const dash=entity('line',[{x:0,y:0},{x:120,y:0}],'Автообводка','trace');
+  dash.lineStyle='dashed';
+  const center=entity('line',[{x:0,y:20},{x:120,y:20}],'Автообводка','trace');
+  center.lineStyle='center';
+  s.entities=[dash,center];
+  const dxf=createDxf(s,project);
+  expect(dxf).toContain('DASHED');
+  expect(dxf).toContain('CENTER');
+  expect(dxf).toContain('6\\nDASHED');
+  expect(dxf).toContain('6\\nCENTER');
+  expect(validateProject(project).sheets[0].entities[0].verified).toBe(false);
+  const bad=entity('line',[{x:0,y:0},{x:10,y:0}]);
+  (bad as typeof bad & {lineStyle:string}).lineStyle='evil';
+  expect(()=>validateProject({...project,sheets:[{...s,entities:[bad]}]})).toThrow();
+ });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
   const p=newProject(),s=p.sheets[0];
   const line=entity('line',[{x:0,y:0},{x:6000,y:0}]);

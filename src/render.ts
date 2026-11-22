@@ -20,7 +20,8 @@ export function drawEntity(ctx:CanvasRenderingContext2D,e:Entity,lineWidth:numbe
     if(selected){ctx.fillStyle='#facc15';const p=e.points[0];ctx.fillRect(p.x-lineWidth*4,p.y-lineWidth*4,lineWidth*8,lineWidth*8);}
     ctx.restore();return;
   }
-  if(e.kind==='axis'){ctx.setLineDash([12*lineWidth,5*lineWidth,2*lineWidth,5*lineWidth]);}
+  if(e.kind==='axis'||e.lineStyle==='center'){ctx.setLineDash([12*lineWidth,5*lineWidth,2*lineWidth,5*lineWidth]);}
+  else if(e.lineStyle==='dashed'){ctx.setLineDash([10*lineWidth,6*lineWidth]);}
   if(e.kind==='point'){const p=pts[0],r=Math.max(2*lineWidth,1.3);ctx.beginPath();ctx.moveTo(p.x-r,p.y);ctx.lineTo(p.x+r,p.y);ctx.moveTo(p.x,p.y-r);ctx.lineTo(p.x,p.y+r);ctx.stroke();}
   if(e.kind==='line'||e.kind==='axis'||e.kind==='polyline'||e.kind==='hatch'){
     if(e.kind==='hatch'){poly(ctx,pts,true);ctx.globalAlpha=.13;ctx.fill();ctx.globalAlpha=1;}

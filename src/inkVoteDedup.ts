@@ -9,7 +9,7 @@
  * This does not extrapolate, close gaps or invent any dimensions.
  */
 export type Point2D={x:number;y:number};
-export interface StrokeSegment {a:Point2D;b:Point2D;confidence:number}
+export interface StrokeSegment {a:Point2D;b:Point2D;confidence:number;lineStyle?:'dashed'|'center'}
 export interface InkDedupResult {lines:StrokeSegment[];removed:number}
 const dist=(a:Point2D,b:Point2D)=>Math.hypot(a.x-b.x,a.y-b.y);
 const dot=(a:Point2D,b:Point2D)=>a.x*b.x+a.y*b.y;
