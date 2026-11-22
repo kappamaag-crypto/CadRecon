@@ -34,6 +34,30 @@ function edited(e:Entity,points:Point[]):Entity {
   return {...e,points,verified:false,
     reason:'Изменена пользователем в CAD-операции: проверьте геометрию'};
 }
+/** W4 OFFSET: create a separate parallel LINE at an explicitly chosen
+ * distance and side. Leaves the original line untouched. The measurement unit
+ * is controlled by sheet.calibrated in the UI; a raw scan cannot claim mm. */
+export function offsetLine(
+  source:Entity,distance:number,side:Point
+):OperationResult|null{
+  if(source.kind!=='line'||source.points.length!==2||
+    !Number.isFinite(distance)||distance<=0||distance>1e7||
+    !Number.isFinite(side.x)||!Number.isFinite(side.y))return null;
+  const [a,b]=source.points;
+  const v=sub(b,a),len=length(v);
+  if(!Number.isFinite(len)||len<EPS)return null;
+  const normal={x:-v.y/len,y:v.x/len};
+  const signed=normal.x*(side.x-a.x)+normal.y*(side.y-a.y);
+  if(Math.abs(signed)<Math.max(EPS,len*1e-9))return null;
+  const delta=scale(normal,signed>0?distance:-distance);
+  const points=[add(a,delta),add(b,delta)];
+  if(!points.every(p=>Number.isFinite(p.x)&&Number.isFinite(p.y)))return null;
+  const out=entity('line',points,source.layer,'manual');
+  out.verified=false;
+  out.reason='OFFSET: создан параллельный отрезок; пользователь должен проверить направление, калибровку и расстояние';
+  return {replacements:[],additions:[out]};
+}
+
 /** Trim the clicked part of a line at the intersection with boundary.
  * Requires physical crossing of BOTH finite segments.
  */
