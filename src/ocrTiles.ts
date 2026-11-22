@@ -74,6 +74,7 @@ export function planVerticalOcrTiles(tiles:OcrTile[],maxTiles=8):VerticalOcrSele
   if(!Number.isInteger(maxTiles)||maxTiles<1||maxTiles>100)
     throw new Error('OCR: неверный предел повёрнутых фрагментов');
   if(tiles.length<=maxTiles)return {tiles:[...tiles],skipped:0,complete:true};
+  if(maxTiles===1)return {tiles:[tiles[tiles.length-1]],skipped:tiles.length-1,complete:false};
   // Include first and last fragments (the final is usually the title block).
   const positions=new Set<number>([0,tiles.length-1]);
   for(let i=0;i<maxTiles&&positions.size<maxTiles;i++){
