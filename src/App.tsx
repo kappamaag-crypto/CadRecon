@@ -22,6 +22,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'point',title:'Точка',icon:'·',hotkey:'P'},{id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},{id:'polyline',title:'Полилиния',icon:'〽'},
   {id:'rectangle',title:'Прямоугольник',icon:'▭',hotkey:'R'},
   {id:'trim',title:'Подрезать линию по границе',icon:'✂'},{id:'extend',title:'Продлить линию до границы',icon:'↗'},
+  {id:'offset',title:'Параллельный отрезок (OFFSET)',icon:'⇢'},
   {id:'chamfer',title:'Фаска двух линий',icon:'◩'},{id:'fillet',title:'Сопряжение двух линий',icon:'⌒'},
   {id:'circle',title:'Окружность',icon:'◯',hotkey:'C'},{id:'arc',title:'Дуга (3 точки)',icon:'⌒'},
   {id:'dimension',title:'Размерный объект',icon:'↔',hotkey:'D'},{id:'axis',title:'Осевая линия',icon:'┈'},
