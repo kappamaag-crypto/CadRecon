@@ -8,6 +8,7 @@
  * Original PDF paths are hypotheses: no imported entity is engineer-verified.
  */
 import {entity,type Entity,type Point} from './model';
+import {clipPdfCubicToRect,type PdfCubic} from './pdfBezierClip';
 
 type Matrix=[number,number,number,number,number,number];
 type Viewport={convertToViewportPoint:(x:number,y:number)=>number[]};
@@ -24,6 +25,7 @@ export interface PdfVectorReport {
   nonPaintedPaths:number;
   clippedGeometry:number;
   rectangularClipLines:number;
+  rectangularClipCurves:number;
   fullyClippedObjects:number;
   truncated:boolean;
   warnings:string[];
@@ -155,7 +157,7 @@ function insideRect(a:ClipRect,b:ClipRect):boolean{
 export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):PdfVectorReport {
   const entities:Entity[]=[],warnings:string[]=[];
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
-  let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,fullyClippedObjects=0,clipActive=false,unknownAlpha=false,formScope=false;
+  let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,rectangularClipCurves=0,fullyClippedObjects=0,clipActive=false,unknownAlpha=false,formScope=false;
   let clipRect:ClipRect|null=null;
   const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null}>=[];
   // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
@@ -163,8 +165,26 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   const paintable=new Set([20,21,22,23,24,25,26,27,ops.rawFillPath??94]);
   const push=(e:Entity,opIndex:number)=>{
     if(entities.length>=limit){truncated=true;return;}
-    // Only exact LINE vs axis-aligned rectangular clipping is implemented.
-    // Unknown clip shapes and curved paths remain explicit unresolved evidence.
+    // Rectangular cubic Bézier clipping preserves exact editable control
+    // geometry via de Casteljau; do not approximate or connect hidden pieces.
+    if(clipActive&&clipRect&&e.kind==='bezier'&&e.points.length===4){
+      const segments=clipPdfCubicToRect(e.points as PdfCubic,clipRect);
+      if(!segments.length){fullyClippedObjects++;return;}
+      const changed=segments.length!==1||segments[0].some((p,j)=>dist(p,e.points[j])>1e-7);
+      if(changed)rectangularClipCurves++;
+      for(const part of segments){
+        if(entities.length>=limit){truncated=true;break;}
+        const item=changed?entity('bezier',part,'PDF векторы','pdf'):e;
+        item.verified=false;item.sourceId='pdf-path-op-'+opIndex;
+        item.reason=changed?
+          'Нативный PDF Bézier: прямоугольное отсечение рассчитано без выпрямления кривой; проверьте координаты':
+          'Нативный PDF Bézier целиком внутри прямоугольного clipping; требует проверки';
+        entities.push(item);
+      }
+      return;
+    }
+    // Exact LINE clipping; unsupported arbitrary clip shapes remain explicit.
+
     if(clipActive&&clipRect&&e.kind==='line'&&e.points.length===2){
       rectangularClipLines++;
       const visible=clipStraightLine(e.points[0],e.points[1],clipRect);
@@ -277,22 +297,35 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       // A PDF rectangle arrives as 4 consecutive lines and a close; retain one
       // closed editable polyline rather than four unrelated segments.
       const circular=circleFromQuarterCurves(segments);
+      const ellipse=circular?null:ellipseFromQuarterCurves(segments);
+      // A clipped full circle/ellipse must not be exported as a full entity.
+      // If fully inside or PROVEN fully outside, retain/cull as one primitive.
+      // Otherwise clip each original Bézier quarter to individual SPLINE
+      // pieces. The same applies to clipped closed polylines: never insert
+      // invented boundary strokes along the clipping rectangle.
+      const canGroup=(e:Entity)=>{
+        if(!clipActive||!clipRect)return true;
+        const b=geometricBounds(e);
+        return !!b&&(insideRect(b,clipRect)||outsideRect(b,clipRect));
+      };
+      let grouped=false;
       if(circular){
         const e=entity('circle',[circular.center],'PDF векторы','pdf');
-        e.center=circular.center;e.radius=circular.radius;push(e,i);
-      }else if(ellipseFromQuarterCurves(segments)){
-        const ellipse=ellipseFromQuarterCurves(segments)!;
+        e.center=circular.center;e.radius=circular.radius;
+        if(canGroup(e)){push(e,i);grouped=true;}
+      }else if(ellipse){
         const e=entity('ellipse',[ellipse.center,ellipse.majorTip],'PDF векторы','pdf');
         e.center=ellipse.center;e.radius=ellipse.radius;e.axisRatio=ellipse.axisRatio;
-        push(e,i);
-      }else if(segments.length>=3&&segments.every(s=>s.kind==='line')
+        if(canGroup(e)){push(e,i);grouped=true;}
+      }
+      if(!grouped&&segments.length>=3&&segments.every(s=>s.kind==='line')
         &&near(segments[0].points[0],segments[segments.length-1].points[1])){
         const pts=segments.map(s=>s.points[0]);
-        const e=entity('polyline',pts,'PDF векторы','pdf');e.closed=true;push(e,i);
-      }else{
-        for(const s of segments){
-          const e=entity(s.kind,s.points,'PDF векторы','pdf');push(e,i);
-        }
+        const e=entity('polyline',pts,'PDF векторы','pdf');e.closed=true;
+        if(canGroup(e)){push(e,i);grouped=true;}
+      }
+      if(!grouped)for(const s of segments){
+        const e=entity(s.kind,s.points,'PDF векторы','pdf');push(e,i);
       }
       segments=[];
     };
@@ -368,11 +401,12 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   if(pathOperations&&entities.length===0)warnings.push('PDF содержит команды пути, но редактируемая геометрия не извлечена.');
   if(nonPaintedPaths)warnings.push('Пропущено '+nonPaintedPaths+' невидимых или ограничивающих PDF path: это не CAD-линии.');
   if(clippedGeometry)warnings.push('PDF содержит clipping: у '+clippedGeometry+' CAD-объектов отсечение НЕ рассчитано; видимость и контуры могут отличаться от оригинала.');
-  if(rectangularClipLines)warnings.push('Прямоугольный PDF clipping применён к '+rectangularClipLines+' LINE; сложные кривые и маски всё ещё требуют проверки.');
+  if(rectangularClipLines)warnings.push('Прямоугольный PDF clipping применён к '+rectangularClipLines+' LINE.');
+  if(rectangularClipCurves)warnings.push('Прямоугольный PDF clipping точно разделил '+rectangularClipCurves+' кубических кривых на видимые сегменты SPLINE; оригинальный контур требует проверки.');
   if(fullyClippedObjects)warnings.push('Прямоугольный PDF clipping исключил '+fullyClippedObjects+' заведомо невидимых кривых или контуров.');
   if(unknownAlpha)warnings.push('PDF использует графические состояния: прозрачность/альфа пока не учитываются при извлечении векторов.');
   if(formScope)warnings.push('PDF использует Form XObject: требуется проверить вложенные координаты и clipping по оригиналу.');
   if(rejectedPaths)warnings.push('Часть команд PDF не распознана: '+rejectedPaths+'. Результат неполный.');
   if(truncated)warnings.push('Превышен лимит CAD-объектов PDF: фрагменты не импортированы. Разделите документ.');
-  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,rectangularClipLines,fullyClippedObjects,truncated,warnings};
+  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,rectangularClipLines,rectangularClipCurves,fullyClippedObjects,truncated,warnings};
 }
