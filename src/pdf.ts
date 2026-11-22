@@ -33,10 +33,11 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
       const scale=Math.min(5,Math.max(1,Math.min(longest/Math.max(initial.width,initial.height),
         Math.sqrt(pixelLimit/(initial.width*initial.height)))));
       const vp=page.getViewport({scale});
+      // Decode BEFORE render: PDF.js may reuse/cache mutable operator-list path buffers.
+      const vectorResult=extractPdfPaths(list,vp,pdfjs.OPS);
       const canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
       const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');
       await page.render({canvasContext:ctx,canvas,viewport:vp}).promise;
-      const vectorResult=extractPdfPaths(list,vp,pdfjs.OPS);
       const entities=vectorResult.entities;
       // Digital PDF text remains editable; scans are handled by OCR separately.
       const textContent=await page.getTextContent();
