@@ -34,6 +34,26 @@ describe('W1-W3 non-deceptive 2D recognition risk report',()=>{
    expect(q.unverified).toBe(2);
    expect(sheet.entities.every(e=>!e.verified)).toBe(true);
  });
+ it('correctly interprets normalized 0..1 and historical 0..100 OCR confidence scales',()=>{
+   const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';
+   const text=(label:string,confidence:number,reason='')=>{
+     const t=entity('text',[pt(20,20)],'OCR','ocr');t.text=label;
+     t.confidence=confidence;t.reason=reason;return t;
+   };
+   const highNormalized=text('6000',.95,'Браузерный Tesseract RU/EN: надпись не проверена');
+   const highLegacy=text('R20',95);
+   const lowNormalized=text('8O0',.45);
+   const lowLegacy=text('M16',42);
+   const riskHigh=text('M16Х',.97,'ПОДОЗРЕНИЕ OCR: смешаны кириллица и латиница');
+   const reviewed=text('5000',.15);reviewed.verified=true;
+   sheet.entities=[highNormalized,highLegacy,lowNormalized,lowLegacy,riskHigh,reviewed];
+   const report=assessRecognitionQuality(sheet);
+   expect(report.texts).toBe(6);
+   expect(report.weakOcr).toBe(3);
+   expect(report.unverified).toBe(5);
+   expect(highNormalized.verified).toBe(false);
+   expect(report.warnings.join(' ')).toContain('3');
+ });
  it('recognizes lossy PDF fallback and weak OCR without inventing accuracy',()=>{
    const sheet=newProject().sheets[0];sheet.sourceType='pdf';sheet.image='data:image/jpeg;base64,AA';
    sheet.importWarnings=['ПОДЛОЖКА PDF сжата с потерями (JPEG)'];
