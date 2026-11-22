@@ -95,11 +95,13 @@ for(const [kind,filename] of [
     const floor=kind==='clean'?.97:.85;
     for(const c of lineCoverage)expect(c).toBeGreaterThanOrEqual(floor);
     expect(lines.length).toBeGreaterThanOrEqual(3);
-    // W3 false-positive / fragmentation regression GATE established after
-    // independent pixel-backed near-duplicate suppression, on these two
-    // synthetic fixtures ONLY. We still do not claim real-world precision.
-    expect(lines.length).toBeLessThan(260);
-    expect(outsideKnownStraight).toBeLessThanOrEqual(kind==='clean'?60:80);
+    // Preserve valid independent diagonals: the old Hough shortcut compared
+    // only first.x / last.y / angle and incorrectly dropped distinct strokes.
+    // Its removal recovers more proposals, so do NOT force a numeric target
+    // that can only pass by hiding geometry. Still guard against the earlier
+    // 310-candidate baseline on these fixed synthetic fixtures.
+    expect(lines.length).toBeLessThan(300);
+    expect(outsideKnownStraight).toBeLessThanOrEqual(kind==='clean'?90:120);
     if(kind==='clean'){
       expect(nearest).not.toBeNull();
       expect(nearest!.centerErrorPx).toBeLessThanOrEqual(6);
