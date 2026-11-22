@@ -3,7 +3,7 @@ import type {PointerEvent,WheelEvent} from 'react';
 import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from './model';
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
-import {trimLine,extendLine,offsetLine,chamferLines,filletLines,type OperationResult} from './cadOperations';
+import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,type OperationResult} from './cadOperations';
 import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
@@ -36,6 +36,21 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
       const found=findHit(p,workingEntities,tol);onSelect(found?.id||null);if(found)pointer.current={type:'move',x:ev.clientX,y:ev.clientY,world:toWorld(ev)};return;
+    }
+    if(tool==='break'){
+      const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
+      if(!found){onMessage('BREAK: выберите первый и второй пункт удаления НА ОДНОМ отрезке.');return;}
+      if(!pending){
+        setPending({id:found.id,click:raw});
+        onMessage('BREAK: первая точка зафиксирована. Щёлкните вторую точку того же отрезка; Esc — отмена.');
+        return;
+      }
+      setPending(null);
+      if(found.id!==pending.id){onMessage('BREAK: обе точки должны принадлежать одному исходному отрезку.');return;}
+      const result=breakLine(found,pending.click,raw,tol);
+      if(result)onOperation(result);
+      else onMessage('BREAK: точки должны лежать внутри прямого отрезка, не совпадать и оставлять обе части.');
+      return;
     }
     if(tool==='offset'){
       const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
@@ -145,6 +160,6 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
     {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
-    {pending&&<div className="hint">Выбран опорный отрезок · Укажите второй отрезок · Esc — отмена</div>}
+    {pending&&<div className="hint">{tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }
