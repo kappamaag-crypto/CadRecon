@@ -30,6 +30,18 @@ describe('W3 non-destructive source-ink confidence ranking',()=>{
   expect(e.support).toBeLessThan(.8);
   expect(e.adjustedScore).toBeLessThan(.9);
  });
+ it('penalizes sustained white gap without deleting the raster candidate',()=>{
+  const continuous=raster(),separated=raster();
+  continuous.draw(10,230,50,52);
+  separated.draw(10,95,50,52);separated.draw(145,230,50,52);
+  const a=rankLineByInkEvidence(line(51),continuous.rgba,continuous.w,continuous.h);
+  const b=rankLineByInkEvidence(line(51),separated.rgba,separated.w,separated.h);
+  expect(a.blankRunRatio).toBe(0);
+  expect(b.blankRunRatio).toBeGreaterThan(.15);
+  expect(b.adjustedScore).toBeLessThan(.7);
+  expect(b.adjustedScore).toBeLessThan(a.adjustedScore);
+  expect(b.longestBlankRun).toBeGreaterThan(0);
+ });
  it('keeps evidence in [0,1] and never auto-approves or increases votes',()=>{
   const im=raster();im.draw(10,230,50,52);
   const e=rankLineByInkEvidence({...line(51),confidence:.42},im.rgba,im.w,im.h);

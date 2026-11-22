@@ -5,7 +5,7 @@
 import type {CadProject,Entity,Point} from './model';
 import {exportTableCSV} from './archiveFeatures';
 
-export type ScanFindingKind='near-gap'|'weak-ink';
+export type ScanFindingKind='near-gap'|'weak-ink'|'long-gap';
 export interface ScanFinding {
   kind:ScanFindingKind;
   sheetIndex:number;
@@ -19,6 +19,7 @@ export interface ScanReview {
   examinedLines:number;
   nearGaps:number;
   weakInk:number;
+  longGaps:number;
   findings:ScanFinding[];
   truncated:boolean;
 }
@@ -47,7 +48,7 @@ function endpoints(e:Entity):End[] {
 /** Uses endpoint spatial bins rather than all-pairs search. No changes to input. */
 export function auditScanGeometry(project:CadProject):ScanReview {
   const findings:ScanFinding[]=[];
-  let examinedLines=0,nearGaps=0,weakInk=0,truncated=false;
+  let examinedLines=0,nearGaps=0,weakInk=0,longGaps=0,truncated=false;
   const push=(f:ScanFinding)=>{
     if(findings.length<LIMIT)findings.push(f);
     else truncated=true;
@@ -68,6 +69,15 @@ export function auditScanGeometry(project:CadProject):ScanReview {
         push({kind:'weak-ink',sheetIndex:si,sheetName:sheet.name,entityId:e.id,
           description:ink!==null?'Низкая опора отрезка на исходные пиксели: '+ink+'%. Проверить вручную.':
             'Низкий эвристический балл отрезка. Проверить вручную.'});
+      }
+      // A long white interval may also be an intentional dashed stroke.
+      const run=/неподтверждённый интервал\s+(\d{1,3})%/i.exec(e.reason||'');
+      const pct=run?Number(run[1]):null;
+      if(pct!==null&&pct>=20&&pct<=100){
+        longGaps++;
+        push({kind:'long-gap',sheetIndex:si,sheetName:sheet.name,entityId:e.id,
+          description:'Длинный участок без опоры на исходные пиксели: '+pct+
+            '% длины. Возможно штрихпунктир или ложное соединение; проверить.'});
       }
       for(const end of ends){
         const g=grid(end.point);
@@ -100,13 +110,13 @@ export function auditScanGeometry(project:CadProject):ScanReview {
       }
     }
   }
-  return {examinedLines,nearGaps,weakInk,findings,truncated};
+  return {examinedLines,nearGaps,weakInk,longGaps,findings,truncated};
 }
 
 export function scanReviewCSV(review:ScanReview):string {
   return exportTableCSV(['Тип проверки','Лист','Объект','Связанный объект',
     'Расстояние (ед. листа, не мм)','Замечание'],review.findings.map(f=>[
-    f.kind==='near-gap'?'Возможный разрыв':'Слабое подтверждение пикселями',
+    f.kind==='near-gap'?'Возможный разрыв':f.kind==='long-gap'?'Протяжённый белый участок':'Слабое подтверждение пикселями',
     f.sheetName,f.entityId,f.relatedEntityId||'',f.distance===undefined?'':f.distance.toFixed(3),
     f.description,
   ]));

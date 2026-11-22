@@ -49,6 +49,16 @@ describe('W3 raster topology review (diagnostic, never auto-connect)',()=>{
     expect(r.findings[0].description).toContain('19%');
     expect(a.verified).toBe(false);
   });
+  it('reports long unsupported ink without editing geometry',()=>{
+    const project=newProject(),a=l(p(0,10),p(150,10));
+    a.reason='Обводка: опора на исходный штрих 65%; неподтверждённый интервал 35% длины.';
+    project.sheets[0].entities=[a];
+    const r=auditScanGeometry(project);
+    expect(r.longGaps).toBe(1);
+    expect(r.findings[0].kind).toBe('long-gap');
+    expect(scanReviewCSV(r)).toContain('Протяжённый белый участок');
+    expect(a.points).toEqual([p(0,10),p(150,10)]);
+  });
   it('ignores malformed and tiny fragments, with formula-safe CSV export',()=>{
     const project=newProject();
     const short=l(p(0,0),p(3,0)),bad=l(p(0,0),p(Number.NaN,0));

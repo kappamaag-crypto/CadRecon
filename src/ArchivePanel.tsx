@@ -163,10 +163,10 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
       <p className="muted">Диагностика растровой автообводки: близкие концы линий и слабая опора на пиксели. Никаких автоматических соединений и правок. Зазоры — в единицах листа, не в подтверждённых мм.</p>
       <button className="action" onClick={()=>setShowScanReview(v=>!v)}>{showScanReview?'Скрыть проверку W3':'⚠ W3: проверить топологию автообводки'}</button>
       {showScanReview&&scanReview&&<>
-        <p className="muted">Исследовано отрезков: {scanReview.examinedLines}. Возможных разрывов: {scanReview.nearGaps}. Слабо подтверждённых штрихов: {scanReview.weakInk}. {scanReview.truncated?'Часть результатов ограничена для защиты браузера.':''}</p>
+        <p className="muted">Исследовано отрезков: {scanReview.examinedLines}. Возможных разрывов: {scanReview.nearGaps}. Слабо подтверждённых штрихов: {scanReview.weakInk}. Длинных белых участков: {scanReview.longGaps}. {scanReview.truncated?'Часть результатов ограничена для защиты браузера.':''}</p>
         <button className="action" onClick={()=>exportCsv(scanReviewCSV(scanReview),'w3_scan_review')}>↓ Диагностика W3 CSV</button>
         {scanReview.findings.slice(0,100).map((f,i)=><div key={i} className="archive-hit">
-          <strong>{f.kind==='near-gap'?'Возможный разрыв':'Слабое подтверждение'}</strong>
+          <strong>{f.kind==='near-gap'?'Возможный разрыв':f.kind==='long-gap'?'Длинный белый участок':'Слабое подтверждение'}</strong>
           <small>{f.sheetName} · {f.description}</small>
           <button onClick={()=>onFocus(f.sheetIndex,f.entityId)}>◎ Показать</button>
           {f.relatedEntityId&&<button onClick={()=>onFocus(f.sheetIndex,f.relatedEntityId!)}>◎ Второй отрезок</button>}
