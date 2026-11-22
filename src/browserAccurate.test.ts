@@ -63,6 +63,16 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(result.entities.some(e=>e.kind==='line')).toBe(false);
     expect(result.entities.some(e=>e.kind==='text'&&e.text==='R20')).toBe(false);
   });
+  it('preserves 2000 distinct line segments even when PDF path source ID is shared',()=>{
+    const lines=Array.from({length:2000},(_,i)=>{
+      const e=line(i*3,0,i*3+1,0);
+      e.sourceId='pdf-path-op-17';return e;
+    });
+    const fresh=uniqueCandidates([],lines);
+    expect(fresh).toHaveLength(2000);
+    expect(uniqueCandidates(fresh,lines)).toHaveLength(0);
+    expect(fresh.every(e=>!e.verified)).toBe(true);
+  });
   it('does not merge different OCR values or adjacent but distinct lines',()=>{
     const existing=[line(0,0,100,0),ocr('60',50,15)];
     const newLine=line(0,2,100,2),newText=ocr('80',50,15);
