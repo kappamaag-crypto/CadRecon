@@ -320,3 +320,39 @@ export function findingsCSV(findings:BomFinding[]):string{
   return exportTableCSV(['Статус','Позиция','Описание','Лист','ID'],
     findings.map(f=>[f.status,f.position,f.description,f.sheetIndex??'',f.entityId||'']));
 }
+
+/** GALS file naming proposal — a local preview, NEVER native KOMPAS file modification.
+ * A filename may contain a designation, separator " - " and description;
+ * uncertain names must not silently populate CAD or specification metadata.
+ */
+export interface CadFileProposal {
+  filename:string;extension:string;documentType:string;
+  designation:string;name:string;status:'proposed'|'unresolved';
+}
+const documentTypes:Record<string,string>={
+  a3d:'Сборка КОМПАС',m3d:'Деталь КОМПАС',cdw:'Чертёж КОМПАС',
+  spw:'Спецификация КОМПАС',step:'STEP 3D',stp:'STEP 3D',
+  sldprt:'Деталь SOLIDWORKS',sldasm:'Сборка SOLIDWORKS',
+  pdf:'PDF',dxf:'DXF',dwg:'DWG (не редактируется)',
+};
+export function analyzeCadFilenames(names:string[]):CadFileProposal[]{
+  if(names.length>4000)throw new Error('Слишком много CAD-файлов: максимум 4000');
+  return names.map(raw=>{
+    const filename=raw.split(/[\\/]/).pop()?.slice(0,240)||'';
+    const ext=/\.([^.]+)$/.exec(filename)?.[1].toLocaleLowerCase('ru-RU')||'';
+    const base=ext?filename.slice(0,-ext.length-1):filename;
+    const delimiter=base.indexOf(' - ');
+    const proposal=delimiter>=0?base.slice(0,delimiter).trim():'';
+    const designation=/^[\p{L}\p{N}][\p{L}\p{N}._-]{4,99}$/u.test(proposal)?proposal:'';
+    const name=designation?base.slice(delimiter+3).trim():base.trim();
+    return {filename,extension:ext,documentType:documentTypes[ext]||'Неизвестный формат',
+      designation,name:name.slice(0,180),status:designation&&name?'proposed':'unresolved'};
+  });
+}
+export function cadFileProposalsCSV(rows:CadFileProposal[]):string{
+  return exportTableCSV(['Исходный файл','Формат','Тип файла','Предложенное обозначение',
+    'Предложенное наименование','Статус','Требование проверки'],
+    rows.map(r=>[r.filename,r.extension,r.documentType,r.designation,r.name,
+      r.status==='proposed'?'кандидат':'неразобранное имя',
+      'Только предварительное предложение; свойства КОМПАС не изменялись']));
+}
