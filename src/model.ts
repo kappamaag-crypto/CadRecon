@@ -54,7 +54,16 @@ export function validateProject(value:unknown):CadProject {
         (e.center!==undefined&&!isPoint(e.center))||
         (e.radius!==undefined&&(!Number.isFinite(e.radius)||e.radius<0))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
-        (e.confidence!==undefined&&!Number.isFinite(e.confidence)))
+        (e.confidence!==undefined&&!Number.isFinite(e.confidence))||
+        (e.text!==undefined&&(typeof e.text!=='string'||e.text.length>10000))||
+        (e.rows!==undefined&&(!Number.isInteger(e.rows)||e.rows<1||e.rows>250))||
+        (e.cols!==undefined&&(!Number.isInteger(e.cols)||e.cols<1||e.cols>250))||
+        (e.width!==undefined&&(!Number.isFinite(e.width)||e.width<0||e.width>1e8))||
+        (e.height!==undefined&&(!Number.isFinite(e.height)||e.height<0||e.height>1e8))||
+        (e.offset!==undefined&&!Number.isFinite(e.offset))||
+        (e.startAngle!==undefined&&!Number.isFinite(e.startAngle))||
+        (e.endAngle!==undefined&&!Number.isFinite(e.endAngle))||
+        (e.bbox!==undefined&&![e.bbox.x0,e.bbox.y0,e.bbox.x1,e.bbox.y1].every(Number.isFinite)))
         throw new Error('Повреждённая геометрия или свойства объекта');
     }
   }
