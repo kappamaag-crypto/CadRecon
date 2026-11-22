@@ -1,5 +1,6 @@
 /// <reference lib="webworker" />
 import {detectOverlappedCircles} from './circleDetector';
+import {suppressRedundantCircleStrokes} from './circleStrokeFilter';
 type P={x:number;y:number};type Segment={a:P;b:P;confidence:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
@@ -94,6 +95,8 @@ self.onmessage=(ev:MessageEvent<Msg>)=>{try{
     if(!circles.some(x=>Math.hypot(x.x-c.x,x.y-c.y)<Math.max(6,c.radius*.12)&&
       Math.abs(x.radius-c.radius)<Math.max(5,c.radius*.1)))circles.push(c);
   }
-  (self as unknown as Worker).postMessage({lines:trace(msg),circles:circles.slice(0,300)});
+  const traced=trace(msg);
+  const filtered=suppressRedundantCircleStrokes(traced,circles);
+  (self as unknown as Worker).postMessage({lines:filtered.lines,circles:circles.slice(0,300),circleStrokeDuplicates:filtered.removed});
 }catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
 export {};
