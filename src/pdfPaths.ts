@@ -13,13 +13,16 @@ type Matrix=[number,number,number,number,number,number];
 type Viewport={convertToViewportPoint:(x:number,y:number)=>number[]};
 type Ops={constructPath:number;save:number;restore:number;transform:number;
   moveTo:number;lineTo:number;curveTo:number;curveTo2:number;curveTo3:number;
-  rectangle:number;closePath:number;endPath?:number;clip?:number;eoClip?:number};
+  rectangle:number;closePath:number;endPath?:number;clip?:number;eoClip?:number;setGState?:number;
+  paintFormXObjectBegin?:number;paintFormXObjectEnd?:number;rawFillPath?:number};
 type OpList={fnArray:ArrayLike<number>;argsArray:ArrayLike<unknown>};
 type Segment={kind:'line'|'bezier';points:Point[]};
 export interface PdfVectorReport {
   entities:Entity[];
   pathOperations:number;
   rejectedPaths:number;
+  nonPaintedPaths:number;
+  clippedGeometry:number;
   truncated:boolean;
   warnings:string[];
 }
@@ -73,11 +76,17 @@ function circleFromQuarterCurves(parts:Segment[]):{center:Point;radius:number}|n
 export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):PdfVectorReport {
   const entities:Entity[]=[],warnings:string[]=[];
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
-  const stack:Matrix[]=[];
+  let nonPaintedPaths=0,clippedGeometry=0,clipActive=false,unknownAlpha=false,formScope=false;
+  const stack:Array<{ctm:Matrix;clipActive:boolean}>=[];
+  // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
+  // 28 endPath, 29 clip, 30 eoClip do NOT paint any geometry.
+  const paintable=new Set([20,21,22,23,24,25,26,27,ops.rawFillPath??94]);
   const push=(e:Entity,opIndex:number)=>{
     if(entities.length>=limit){truncated=true;return;}
     e.verified=false;e.sourceId='pdf-path-op-'+opIndex;
-    e.reason='Нативный PDF path; проверьте тип объекта, масштаб и контекст';
+    e.reason='Нативный PDF path; проверьте тип объекта, масштаб и контекст'+
+      (clipActive?'; ОБЛАСТЬ ОТСЕЧЕНИЯ PDF не рассчитана, часть линии может быть скрыта':'');
+    if(clipActive)clippedGeometry++;
     entities.push(e);
   };
   const transform=(x:number,y:number):Point=>{
@@ -87,8 +96,11 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   };
   for(let i=0;i<list.fnArray.length;i++){
     const fn=list.fnArray[i];
-    if(fn===ops.save){stack.push([...ctm]);continue;}
-    if(fn===ops.restore){ctm=stack.pop()||[...IDENTITY];continue;}
+    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive});continue;}
+    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;continue;}
+    if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){clipActive=true;continue;}
+    if(ops.setGState!==undefined&&fn===ops.setGState){unknownAlpha=true;continue;}
+    if(ops.paintFormXObjectBegin!==undefined&&fn===ops.paintFormXObjectBegin){formScope=true;continue;}
     if(fn===ops.transform){
       const m=list.argsArray[i];
       if(numeric(m)&&m.length===6&&allFinite(m))ctm=compose(ctm,Array.from(m) as Matrix);
@@ -98,6 +110,22 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
     pathOperations++;
     const raw=list.argsArray[i];
     if(!Array.isArray(raw)||raw.length<2){rejectedPaths++;continue;}
+    // Do not create invisible CAD objects from clipping-only paths, or
+    // unrecognized paint operations. PDF clipping is NOT geometrically
+    // modeled, so any subsequent visible paths in the clipped scope are
+    // explicitly marked as potentially over-exported.
+    if(typeof raw[0]==='number'){
+      const paintOp=raw[0] as number;
+      if(paintOp===28||paintOp===29||paintOp===30){
+        nonPaintedPaths++;
+        if(paintOp===29||paintOp===30)clipActive=true;
+        continue;
+      }
+      if(!paintable.has(paintOp)){
+        rejectedPaths++;
+        continue;
+      }
+    }
     // PDF.js >=5: [paintOperation, Array<Float32Array>, boundingBox]
     // DrawOPS: 0=moveTo, 1=lineTo, 2=cubic, 3=quadratic, 4=close.
     // Legacy: [Array<OPS>, Array<number>, boundingBox].
@@ -200,8 +228,12 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
     if(entities.length>=limit){truncated=true;break;}
     if(entities.length>MAX_ITEMS){truncated=true;break;}
   }
-  if(pathOperations&&entities.length===0)warnings.push('PDF содержит команды рисования, но редактируемая геометрия не извлечена.');
+  if(pathOperations&&entities.length===0)warnings.push('PDF содержит команды пути, но редактируемая геометрия не извлечена.');
+  if(nonPaintedPaths)warnings.push('Пропущено '+nonPaintedPaths+' невидимых или ограничивающих PDF path: это не CAD-линии.');
+  if(clippedGeometry)warnings.push('PDF содержит clipping: у '+clippedGeometry+' CAD-объектов отсечение НЕ рассчитано; видимость и контуры могут отличаться от оригинала.');
+  if(unknownAlpha)warnings.push('PDF использует графические состояния: прозрачность/альфа пока не учитываются при извлечении векторов.');
+  if(formScope)warnings.push('PDF использует Form XObject: требуется проверить вложенные координаты и clipping по оригиналу.');
   if(rejectedPaths)warnings.push('Часть команд PDF не распознана: '+rejectedPaths+'. Результат неполный.');
   if(truncated)warnings.push('Превышен лимит CAD-объектов PDF: фрагменты не импортированы. Разделите документ.');
-  return {entities,pathOperations,rejectedPaths,truncated,warnings};
+  return {entities,pathOperations,rejectedPaths,nonPaintedPaths,clippedGeometry,truncated,warnings};
 }
