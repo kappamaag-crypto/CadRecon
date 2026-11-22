@@ -1,4 +1,5 @@
 import type {CadProject,Entity,Point,Sheet} from './model';
+import {auditNominalChains} from './dimensionAudit';
 const EPS=1e-8;
 export const add=(a:Point,b:Point):Point=>({x:a.x+b.x,y:a.y+b.y});
 export const sub=(a:Point,b:Point):Point=>({x:a.x-b.x,y:a.y-b.y});
@@ -76,6 +77,7 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
     return stated>0&&Math.abs(dimensionLength(e)-stated)/stated>.025;
   });
   if(discrepancies.length)issues.push({severity:'warning',message:'Размерные значения противоречат текущей геометрии: '+discrepancies.length});
+  issues.push(...auditNominalChains(sheet));
   const nonManual=sheet.entities.filter(e=>e.origin==='ocr'||e.origin==='trace'||e.origin==='pdf');
   if(nonManual.length)issues.push({severity:'info',message:'Автоматически восстановлено объектов: '+nonManual.length+'; потребуется сверка.'});
   if(!issues.length)issues.push({severity:'info',message:'Базовые проверки пройдены. Для выпуска КМ/КМД необходима инженерная экспертиза.'});
