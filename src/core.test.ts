@@ -34,6 +34,18 @@ describe('CadRecon model and export',()=>{
   expect(s.calibrated).toBe(true);expect(validateProject(p).version).toBe(1);
   expect(()=>validateProject({...p,version:2})).toThrow();
  });
+ it('rejects untrusted project images, malformed layer names and DXF resource bombs',()=>{
+  const p=newProject();
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],image:'https://example.invalid/tracker.png'}]})).toThrow(/подложка/);
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],image:'data:image/svg+xml;base64,PHN2Zz4='}]})).toThrow(/подложка/);
+  const forged=entity('line',[{x:0,y:0},{x:20,y:0}],'BAD\\n0\\nLINE');
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],entities:[{...forged,layer:'BAD\n0\nLINE'}]}]})).toThrow();
+  const table=entity('table',[{x:0,y:0}],'Текст');table.rows=100000000;
+  expect(()=>validateProject({...p,sheets:[{...p.sheets[0],entities:[table]}]})).toThrow();
+  // Export must also sanitize any manually edited layer names before validation.
+  p.layers[0].name='INJECT\n0\nLINE';
+  expect(createDxf(p.sheets[0],p)).not.toContain('INJECT\n0\nLINE');
+ });
  it('packs multiple DXF sheets in a standard ZIP',()=>{
   const p=newProject();const z=createZip([{name:'лист_01.dxf',data:createDxf(p.sheets[0],p)},{name:'02.dxf',data:'test'}]);
   expect(z[0]).toBe(0x50);expect(z[1]).toBe(0x4b);writeFileSync('/tmp/cadrecon-test.zip',z);
