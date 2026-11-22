@@ -174,14 +174,17 @@ export function parseSpecificationCSV(content:string):SpecificationRow[]{
   if(positions.position<0||positions.name<0)
     throw new Error('Для спецификации обязательны столбцы «Позиция» и «Наименование»');
   if(rows.length>5001)throw new Error('Спецификация: максимум 5000 позиций');
-  return rows.slice(1).map((cells,index)=>{
+  const parsed:SpecificationRow[]=[];
+  for(let index=1;index<rows.length;index++){
+    const cells=rows[index];
     const field=(key:keyof SpecificationRow)=>positions[key]<0?'':normalize(cells[positions[key]]||'').slice(0,400);
     const position=field('position'),name=field('name');
-    if(!position&&!name)return null;
-    if(!position||!name)throw new Error('CSV: нет позиции или наименования в строке '+(index+2));
-    return {position,designation:field('designation'),name,quantity:field('quantity'),
-      material:field('material'),mass:field('mass'),note:field('note')};
-  }).filter((r):r is SpecificationRow=>r!==null);
+    if(!position&&!name)continue;
+    if(!position||!name)throw new Error('CSV: нет позиции или наименования в строке '+(index+1));
+    parsed.push({position,designation:field('designation'),name,quantity:field('quantity'),
+      material:field('material'),mass:field('mass'),note:field('note')});
+  }
+  return parsed;
 }
 const normPos=(s:string)=>normalize(s).replace(/^0+(?=\d)/,'').toLocaleUpperCase('ru-RU');
 export function compareSpecification(project:CadProject,rows:SpecificationRow[]):BomFinding[]{
@@ -213,7 +216,7 @@ export function compareSpecification(project:CadProject,rows:SpecificationRow[])
 export function inventoryProject(project:CadProject):{rows:InventoryRow[];circles:CircleGroup[];counts:Record<string,number>;unverified:number}{
   const rows:InventoryRow[]=[],circles:CircleGroup[]=[],counts:Record<string,number>={};let unverified=0;
   for(let si=0;si<project.sheets.length;si++){
-    const sheet=project.sheets[si],tolerance=sheet.calibrated?.02:.6;
+    const sheet=project.sheets[si],tolerance=sheet.calibrated ? 0.02 : 0.6;
     const groups:CircleGroup[]=[];
     for(const e of sheet.entities){
       counts[e.kind]=(counts[e.kind]||0)+1;
