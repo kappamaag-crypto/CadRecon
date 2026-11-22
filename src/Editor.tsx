@@ -3,7 +3,7 @@ import type {PointerEvent,WheelEvent} from 'react';
 import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from './model';
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
-import {trimLine,extendLine,chamferLines,filletLines,type OperationResult} from './cadOperations';
+import {trimLine,extendLine,offsetLine,chamferLines,filletLines,type OperationResult} from './cadOperations';
 import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
@@ -36,6 +36,21 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
       const found=findHit(p,workingEntities,tol);onSelect(found?.id||null);if(found)pointer.current={type:'move',x:ev.clientX,y:ev.clientY,world:toWorld(ev)};return;
+    }
+    if(tool==='offset'){
+      const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
+      if(!found){onMessage('OFFSET: укажите прямой отрезок, затем сторону отступа рядом с ним.');return;}
+      const units=sheet.calibrated?'миллиметрах':'условных единицах (лист не калиброван)';
+      const value=window.prompt('OFFSET: расстояние в '+units,'10');
+      if(value===null)return;
+      const distance=Number(value.replace(',','.'));
+      if(!Number.isFinite(distance)||distance<=0){
+        onMessage('OFFSET: требуется положительное расстояние.');return;
+      }
+      const op=offsetLine(found,distance,raw);
+      if(!op){onMessage('OFFSET: нельзя определить сторону. Щёлкните чуть выше или ниже отрезка.');return;}
+      onOperation(op);
+      return;
     }
     if(['trim','extend','chamfer','fillet'].includes(tool)){
       const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
