@@ -324,5 +324,9 @@ test('W4 horizontal dimension computes projected distance and remains unverified
     page.getByRole('button',{name:'↓ DXF',exact:true}).click()]);
   const dxf=await readFile((await dl.path())!,'utf8');
   expect(dxf).toContain('AcDbRotatedDimension');
-  expect(dxf).toContain('\n42\n100\n');
+  const dimBlock=dxf.slice(dxf.lastIndexOf('\n0\nDIMENSION\n'));
+  const measured=/\n42\n([\d.-]+)\n/.exec(dimBlock);
+  expect(measured).not.toBeNull();
+  const projected=Math.abs(dim.points[1].x-dim.points[0].x);
+  expect(Number(measured![1])).toBeCloseTo(projected,4);
 });
