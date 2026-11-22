@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {planOcrTiles,sameOcrLine,unrotateOcrBox} from './ocrTiles';
+import {planOcrTiles,planVerticalOcrTiles,sameOcrLine,unrotateOcrBox} from './ocrTiles';
 
 describe('browser-only large OCR tiling',()=>{
   it('keeps ordinary small drawings as one exact full-resolution tile',()=>{
@@ -17,6 +17,29 @@ describe('browser-only large OCR tiling',()=>{
     }
     expect(tiles.some(t=>t.x===0&&t.y===0)).toBe(true);
     expect(tiles.some(t=>t.x+t.width===width&&t.y+t.height===height)).toBe(true);
+  });
+
+  it('rotates every fragment for manageable multi-tile drawings, without losing any region',()=>{
+    const tiles=planOcrTiles(3500,2500);
+    const selected=planVerticalOcrTiles(tiles);
+    expect(tiles.length).toBeGreaterThan(1);
+    expect(selected.complete).toBe(true);
+    expect(selected.skipped).toBe(0);
+    expect(selected.tiles).toEqual(tiles);
+  });
+  it('bounds large A0 ±90 scans, includes title block and announces uncovered tiles',()=>{
+    const tiles=planOcrTiles(6800,4700);
+    expect(tiles.length).toBeGreaterThan(8);
+    const pass=planVerticalOcrTiles(tiles,8);
+    expect(pass.complete).toBe(false);
+    expect(pass.skipped).toBe(tiles.length-8);
+    expect(pass.tiles).toHaveLength(8);
+    expect(pass.tiles[0]).toEqual(tiles[0]);
+    expect(pass.tiles.at(-1)).toEqual(tiles.at(-1));
+    expect(planVerticalOcrTiles(tiles,1)).toEqual({
+      tiles:[tiles.at(-1)],skipped:tiles.length-1,complete:false,
+    });
+    expect(()=>planVerticalOcrTiles(tiles,0)).toThrow();
   });
   it('maps both vertical OCR rotations back to the original pixel rectangle',()=>{
     const original={text:'Позиция 6',x0:40,y0:15,x1:55,y1:80};
