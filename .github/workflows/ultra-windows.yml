@@ -1,0 +1,57 @@
+name: Ultra Windows installer smoke
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/install-ultra.ps1'
+      - 'Install-CadRecon-Ultra.cmd'
+      - '.github/workflows/ultra-windows.yml'
+permissions:
+  contents: read
+
+jobs:
+  validate-installer:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Parse PowerShell installer without executing it
+        shell: pwsh
+        run: |
+          $tokens = $null; $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path 'scripts/install-ultra.ps1'), [ref]$tokens, [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            throw 'Installer has PowerShell parse errors'
+          }
+          Write-Host 'PowerShell syntax validated'
+      - name: Install to chosen temporary path (no Paddle model download)
+        shell: pwsh
+        run: |
+          $target = Join-Path $env:RUNNER_TEMP 'CadReconUltra-Testing'
+          & .\scripts\install-ultra.ps1 -TargetDir $target -NonInteractive -SkipPaddleForTests
+          if (-not (Test-Path (Join-Path $target 'Start-CadRecon-Ultra.cmd'))) {
+            throw 'Missing start launcher'
+          }
+          if (-not (Test-Path (Join-Path $target 'config\token.txt'))) {
+            throw 'Missing token'
+          }
+          $token = [IO.File]::ReadAllText((Join-Path $target 'config\token.txt'))
+          if ($token.Length -lt 24) { throw 'Token too short' }
+          Push-Location (Join-Path $target 'app')
+          try {
+            $env:CADRECON_ONLINE_TOKEN = $token
+            & (Join-Path $target 'app\.venv\Scripts\python.exe') -c 'from fastapi.testclient import TestClient; from backend.online_server import app; assert TestClient(app).get("/v1/health").json()["ready"]'
+            if ($LASTEXITCODE -ne 0) { throw 'Installed API failed health check' }
+          } finally {
+            Pop-Location
+            Remove-Item Env:\CADRECON_ONLINE_TOKEN -ErrorAction SilentlyContinue
+          }
+          Write-Host 'CPU pilot install, token permission command, and ASGI health validated'
