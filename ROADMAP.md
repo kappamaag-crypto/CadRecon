@@ -1,5 +1,24 @@
 # Roadmap CadRecon
 
+## Фактический статус реализации (22.11.2026)
+
+**Source of truth:** [сводка W0–W8 и доказательства CI](docs/IMPLEMENTATION_STATUS_2026-11-22.md). Это текущий статус, разделы с фразами «не реализовано» выше — **историческая редакция плана на момент его подготовки**.
+
+| Трек | Статус | Объективный результат | Открытая задача |
+|---|---|---|---|
+| W0 | частично | 4 синтетических goldens, baseline, ADR (proposed) | [#3](https://github.com/kappamaag-crypto/CadRecon/issues/3) — разрешённые реальные CAD/PDF/сканы |
+| **W1** | частично, геометрический дефект исправлен | Native paths & Bezier editable SPLINE; 2/2 lines CTM, 0 PDF pt в synthetic; независимый DXF parser | [#4](https://github.com/kappamaag-crypto/CadRecon/issues/4) — clip/paint/XObjects и реальные goldens |
+| **W2** | pilot, production не готов | Токен+consent+очередь+delete и UI Online Accurate | [#5](https://github.com/kappamaag-crypto/CadRecon/issues/5) — multi-tenant, security, storage, models |
+| **W3** | частично | Synthetic scan circle 0→1, центр 2px, радиус 0px; 93 line fragments пока без topology merge | [#6](https://github.com/kappamaag-crypto/CadRecon/issues/6) |
+| W4 | частично | Point, rectangle, line trim/extend/chamfer/fillet, atomic Undo; 33 unit+12 E2E | [#7](https://github.com/kappamaag-crypto/CadRecon/issues/7) — полный CAD |
+| W5 | частично | Audit closure/gaps/unknown nominal chains, 37 unit+12 E2E | [#8](https://github.com/kappamaag-crypto/CadRecon/issues/8) — подтверждённый ЕСКД ruleset |
+| W6 | экспериментальный CPU bootstrap | Windows path chooser + installer/start scripts, Windows syntax+test-install health CI | [#9](https://github.com/kappamaag-crypto/CadRecon/issues/9) — bundled Python/GPU/offline/rollback |
+| W7 | запланирован | Только открытый DXF сейчас | Договор/лицензия ODA/КОМПАС и нативные contract tests |
+| W8 | запланирован | CI для синтетических примеров | Реальный пилот и инженерная приёмка |
+
+**Главное правило релиза:** пользовательский CAD требует проверки геометрии и независимых размеров. Успешный CI и синтетические графики не равны 100% точности скана. Внешние OCR API и DWG/CDW adapters не включаются без законных оснований, проверенной приватности и лицензий.
+
+
 ## Трек точной реконструкции
 
 Главный документ: [план онлайн-реконструкции 2D CAD](docs/ONLINE_CAD_RECONSTRUCTION_PLAN.md). Трекер: [issue #2](https://github.com/kappamaag-crypto/CadRecon/issues/2).
