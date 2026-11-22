@@ -1,5 +1,17 @@
 import {createWorker,PSM} from 'tesseract.js';
 import {entity,type Entity,type Sheet} from './model';
+/** Optional explicit download of public RU/EN OCR language packs.
+ * Models and worker binaries are fetched to the user's browser. Tesseract.js
+ * manages its own browser cache; this does not promise guaranteed offline use
+ * after a cache clear or across all browser engines. Drawing data is not used. */
+export async function preloadOcrModels(progress?:(message:string)=>void):Promise<void>{
+  progress?.('Загрузка языковых моделей OCR на этот компьютер…');
+  const worker=await createWorker(['rus','eng'],1,{
+    logger:m=>{if(m.status)progress?.('OCR-модели: '+m.status+' '+Math.round((m.progress||0)*100)+'%');},
+  });
+  try{progress?.('OCR-модели русского и английского готовы в текущем браузере.');}
+  finally{await worker.terminate();}
+}
 export async function recognizeText(sheet:Sheet,progress?:(s:string)=>void):Promise<{entities:Entity[];text:string}> {
   if(!sheet.image)throw new Error('Для OCR нужен скан или PDF');
   progress?.('Загрузка OCR-моделей русского и английского языков…');
