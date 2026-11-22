@@ -13,7 +13,12 @@ export function createZip(files:ZipEntry[]):Uint8Array{
   if(files.length>65535)throw new Error('Too many ZIP files');
   const parts:Uint8Array[]=[];const central:Uint8Array[]=[];let offset=0;
   for(const f of files){
-    const name=encoder.encode(f.name.replace(/[\/\\]/g,'_'));const data=encoder.encode(f.data);
+    // Preserve safe relative folders for per-project report packages.
+    // Strip parent traversal, absolute prefixes and Windows-reserved chars.
+    const relative=f.name.replace(/\\/g,'/').split('/').filter(x=>x&&x!=='.'&&x!=='..')
+      .map(x=>x.replace(/[<>:"|?*\x00-\x1f]/g,'_')).join('/');
+    if(!relative||relative.length>220)throw new Error('Invalid ZIP entry name');
+    const name=encoder.encode(relative),data=encoder.encode(f.data);
     const crc=crc32(data),local=new Uint8Array(30+name.length),lv=new DataView(local.buffer);
     u32(lv,0,0x04034b50);u16(lv,4,20);u16(lv,6,0x0800);u16(lv,8,0);u16(lv,10,0);u16(lv,12,0);
     u32(lv,14,crc);u32(lv,18,data.length);u32(lv,22,data.length);u16(lv,26,name.length);u16(lv,28,0);local.set(name,30);
