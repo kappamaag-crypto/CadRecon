@@ -10,7 +10,7 @@ interface Props {
   onLanguages:(v:'rus+eng'|'rus'|'eng')=>void;
   onImport:()=>void;onRecognize:()=>void;onTrace:()=>void;onOcr:()=>void;
   onReview:()=>void;onCompare:()=>void;onExport:()=>void;
-  onCalibrate:()=>void;onEdit:()=>void;onStop:()=>void;
+  onCalibrate:()=>void;onEdit:()=>void;onStop:()=>void;onPrepareOcr:()=>void;
 }
 /** Recognition-first workflow, CAD drawing tools deliberately remain optional.
  * All controls invoke existing browser-only pipeline actions, never a server.
@@ -18,7 +18,7 @@ interface Props {
 export default function ReconstructionPanel({
   quality,loaded,busy,recognitionMode,onMode,ocrLanguages,onLanguages,
   onImport,onRecognize,onTrace,onOcr,onReview,onCompare,onExport,
-  onCalibrate,onEdit,onStop,
+  onCalibrate,onEdit,onStop,onPrepareOcr,
 }:Props){
   const names:Record<RecognitionQuality['source'],string>={
     empty:'Лист не загружен',
@@ -57,13 +57,14 @@ export default function ReconstructionPanel({
         </select>
       </label>
       <button className="action primary recognition-primary" disabled={!loaded||busy}
-        onClick={onRecognize}>◎ Распознать PDF / скан в браузере</button>
-      {busy&&<button className="action" onClick={onStop}>× Остановить локальную обработку</button>}
-      <details>
+        onClick={onRecognize}>◎ Точное распознавание в браузере (PDF / скан)</button>
+      {busy&&<button className="action" onClick={onStop}>× Остановить обработку на устройстве</button>}
+      <details open>
         <summary>Отдельные операции и сложные случаи</summary>
         <div className="stack">
-          <button className="action" disabled={!loaded||busy} onClick={onTrace}>⌁ Детальная обводка скана</button>
+          <button className="action" disabled={!loaded||busy} onClick={onTrace}>⌁ Детальная обводка (исходное разрешение)</button>
           <button className="action" disabled={!loaded||busy} onClick={onOcr}>Aa Только OCR текста</button>
+          <button className="action" disabled={busy} onClick={onPrepareOcr}>↓ Подготовить языковые модели OCR (RU/EN)</button>
         </div>
         <p className="muted">Для смешанного PDF гибридный режим добавляет кандидатов поверх исходных
           векторов; совпадения и ошибочные линии требуют проверки.</p>
@@ -82,7 +83,7 @@ export default function ReconstructionPanel({
       <p className="muted">Сомнительных по чернилам: {quality.weakInk};
         сплошных линий с пробелами: {quality.brokenSolid};
         сомнительных OCR: {quality.weakOcr}.
-        Эти числа — флаги проверки, **не процент точности**.</p>
+        Эти числа — флаги проверки, не процент точности.</p>
       {quality.warnings.length>0&&<div className="reconstruction-warnings" aria-label="Замечания к распознаванию">
         {quality.warnings.slice(0,6).map((warning,i)=><p key={i}>{warning}</p>)}
       </div>}
