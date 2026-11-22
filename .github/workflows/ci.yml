@@ -42,6 +42,13 @@ jobs:
           assert spline.header.get('$INSUNITS')==0, 'Uncalibrated PDF cannot claim mm'
           assert not spline.audit().has_errors
           print('Native cubic SPLINE and unitless uncalibrated header audited')
+          styled=ezdxf.readfile('/tmp/cadrecon-styled-test.dxf')
+          styles=set(e.dxf.linetype for e in styled.modelspace().query('LINE'))
+          assert {'DASHED','CENTER'}.issubset(styles), styles
+          assert 'DASHED' in styled.linetypes and 'CENTER' in styled.linetypes
+          assert not styled.audit().has_errors, 'Styled DXF invalid'
+          print('Native DASHED and CENTER linetypes validated independently')
+
           PY
       - name: ZIP archive smoke check
         run: |
