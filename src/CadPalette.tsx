@@ -14,7 +14,7 @@ const groups:{title:string;hint:string;ids:Tool[]}[]=[
   {title:'Правка и сопряжения',hint:'Ручное редактирование с Undo',
     ids:['trim','extend','offset','break','join','chamfer','fillet','stretch','mirror']},
   {title:'Размеры и измерения',hint:'Значения требуют калибровки',
-    ids:['dimension','dimension-h','dimension-v','dimension-3pt','leader','measure','measure-angle','calibrate']},
+    ids:['dimension','dimension-h','dimension-v','dimension-3pt','dimension-angle','leader','measure','measure-angle','calibrate']},
   {title:'Оформление и ЕСКД',hint:'Отметки, текст, таблицы',
     ids:['hatch','text','technical-requirements','table','stamp','eskd']},
   {title:'Текст и OCR',hint:'Обработка на вашем устройстве',

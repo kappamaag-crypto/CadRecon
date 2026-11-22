@@ -26,6 +26,7 @@ import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetri
 import {arrayEntity} from './geometryTransform';
 import {lineFromCoordinates,orientedLineAtPoint,tangentFromPoint,pointOnCurve} from './cadConstructions';
 import {centerAxes,circleDimensionLeader} from './cadAnnotations';
+import {dimensionsAlongPolyline} from './cadDimensionSeries';
 import {measureCadEntity,inspectCadTopology} from './cadMeasurements';
 import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
   polarArrayCad,alignCadLine} from './affineCad';
@@ -70,6 +71,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'eskd',title:'Обозначения ЕСКД',icon:'⌗'},
   {id:'measure',title:'Измерить расстояние',icon:'📏',hotkey:'M'},
   {id:'measure-angle',title:'Измерить угол между двумя LINE',icon:'∠'},
+  {id:'dimension-angle',title:'Угловой размер по двум LINE (дуга и текст)',icon:'∡'},
   {id:'ocr-region',title:'OCR выделенной области (2 угла)',icon:'▧'},
   {id:'calibrate',title:'Калибровка по известному размеру',icon:'⊞'}
 ];
@@ -223,6 +225,19 @@ export default function App(){
    if(!result){setStatus('ARRAY: допустимы 1–20 строк/столбцов и максимум 100 объектов, ненулевые шаги; поддерживаются POINT/LINE/POLYLINE/CIRCLE.');return;}
    if(!window.confirm('Создать '+result.additions.length+' независимых CAD-копий? Исходный объект останется без изменений; отмена Ctrl+Z.'))return;
    applyOperation(result);
+ }
+ function createDimensionSeries(mode:'chain'|'baseline'){
+   const source=sheet.entities.find(e=>e.id===selected);
+   if(source?.kind!=='polyline'){
+     setStatus('Размерная серия: выберите открытую или замкнутую полилинию со списком вершин.');return;
+   }
+   const proposed=dimensionsAlongPolyline(source,sheet,mode);
+   if(!proposed){setStatus('Размерная серия: требуется полилиния из 3–40 различных вершин.');return;}
+   if(!window.confirm('Создать '+proposed.length+' неподтверждённых '+(mode==='chain'?'цепных':'базовых')+
+     ' размеров по узлам полилинии? Эти размеры НЕ обновляются автоматически при редактировании.'))return;
+   addEntities(proposed);
+   setStatus('Создано '+proposed.length+' предварительных размеров по '+
+     (mode==='chain'?'цепочке':'общей базе')+'. Нужна проверка расположения и значений.');
  }
  function annotateCircle(kind:'radius'|'diameter'|'axes'){
    const selectedCircle=sheet.entities.find(e=>e.id===selected);
@@ -654,6 +669,11 @@ export default function App(){
         <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('radius')}>R Радиальный размер (выноска)</button>
         <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('diameter')}>⌀ Диаметральный размер (выноска)</button>
         <button className="action" disabled={selection?.kind!=='circle'||!!busy} onClick={()=>annotateCircle('axes')}>⊕ Центровые оси окружности</button>
+        <button className="action" onClick={()=>setTool('dimension-angle')}>∡ Угловой размер (две линии)</button>
+        <button className="action" disabled={selection?.kind!=='polyline'||!!busy}
+          onClick={()=>createDimensionSeries('chain')}>↔ Цепные размеры по вершинам</button>
+        <button className="action" disabled={selection?.kind!=='polyline'||!!busy}
+          onClick={()=>createDimensionSeries('baseline')}>⇥ Размеры от общей базы</button>
       </div>
       <p className="muted">{sheet.calibrated?'Калибровка установлена; размеры нужно проверить.':
         '⚠ Масштаб не подтверждён. Авторазмеры создаются без чисел (?).'} Диаметр окружности предлагается как редактируемая выноска, не как ассоциативный DIMDIAMETER.</p>

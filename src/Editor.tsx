@@ -6,6 +6,7 @@ import {drawScene,type Camera} from './render';
 import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities,type OperationResult} from './cadOperations';
 import {mirrorEntity,stretchVertex} from './geometryTransform';
 import {angleBetweenCadLines} from './cadMeasurements';
+import {angularDimension} from './cadDimensionSeries';
 import {makeRequirements} from './cadAnnotations';
 import {constructionLine,angleBisector,regularPolygon,circleByThreePoints,
   ellipseFromAxes,arcThroughThreePoints} from './cadPrimitives';
@@ -90,13 +91,19 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       if(!result){onMessage('STRETCH: новая вершина создаёт нулевой или самопересекающийся контур.');return;}
       onOperation(result);return;
     }
-    if(tool==='measure-angle'){
+    if(tool==='measure-angle'||tool==='dimension-angle'){
       const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
       if(!found){onMessage('Угол: укажите два отдельных LINE.');return;}
       if(!pending){setPending({id:found.id,click:raw});
         onMessage('Угол: выбран первый LINE. Укажите второй, Esc — отмена.');return;}
       const first=workingEntities.find(e=>e.id===pending.id);setPending(null);
       if(!first||first.id===found.id){onMessage('Угол: требуется второй отрезок.');return;}
+      if(tool==='dimension-angle'){
+        const additions=angularDimension(first,found,pending.click,raw,sheet);
+        if(additions){onOperation({replacements:[],additions});}
+        else onMessage('Угловой размер: LINE должны пересекаться в конечных отрезках, а выбранные лучи иметь ненулевой угол. Для остальных случаев используйте измерение угла.');
+        return;
+      }
       const value=angleBetweenCadLines(first,found);
       onMessage(value===null?'Угол: некорректная геометрия.':
         'Угол между ориентированными отрезками: '+value.toFixed(3)+'°. Объекты не изменены.');
@@ -356,6 +363,6 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
     {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='construction-bisector'?'Вершина угла, затем точки на двух лучах':tool==='ellipse'?'Центр, конец главной полуоси, затем малая полуось':tool==='bezier'?'Начало, два контрольных узла, конец кривой':tool==='ocr-region'?'OCR: укажите второй угол прямоугольной области':tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
-    {pending&&<div className="hint">{tool==='measure-angle'?'Угол: укажите второй LINE':tool==='stretch'?'STRETCH: укажите новое положение вершины':tool==='mirror'?'MIRROR: укажите конец оси':tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
+    {pending&&<div className="hint">{tool==='measure-angle'||tool==='dimension-angle'?'Угол: укажите второй LINE':tool==='stretch'?'STRETCH: укажите новое положение вершины':tool==='mirror'?'MIRROR: укажите конец оси':tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }
