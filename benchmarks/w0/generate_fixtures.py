@@ -75,6 +75,32 @@ BT /F1 12 Tf 20 300 Td (6000) Tj ET
     pdf_page(path, content)
 
 
+
+def pdf_clipped_curves(path: Path) -> None:
+    """Real PDF stream: rectangle W n, partially hidden cubic/circle/outline.
+
+    Tests exact PDF.js operator list, not just a synthetic operator mock.
+    No user drawings or external licensed assets are used.
+    """
+    cx, cy, radius = 80, 60, 35
+    d = radius * KAPPA
+    content = f"""1 w
+q 20 20 80 80 re W n
+{cx+radius:.8f} {cy:.8f} m
+{cx+radius:.8f} {cy+d:.8f} {cx+d:.8f} {cy+radius:.8f} {cx:.8f} {cy+radius:.8f} c
+{cx-d:.8f} {cy+radius:.8f} {cx-radius:.8f} {cy+d:.8f} {cx-radius:.8f} {cy:.8f} c
+{cx-radius:.8f} {cy-d:.8f} {cx-d:.8f} {cy-radius:.8f} {cx:.8f} {cy-radius:.8f} c
+{cx+d:.8f} {cy-radius:.8f} {cx+radius:.8f} {cy-d:.8f} {cx+radius:.8f} {cy:.8f} c S
+Q
+q 20 20 80 80 re W n
+-50 60 m 0 170 100 -50 150 60 c S
+Q
+q 20 20 80 80 re W n
+-30 30 180 65 re S
+Q
+"""
+    pdf_page(path, content)
+
 def draw_raster(path: Path, degraded: bool = False) -> None:
     width, height = 900, 600
     pixels = bytearray([255]) * (width * height)
@@ -131,6 +157,7 @@ def main() -> None:
     output.mkdir(parents=True, exist_ok=True)
     pdf_vector(output / "native_curves.pdf")
     pdf_transform(output / "native_ctm.pdf")
+    pdf_clipped_curves(output / "native_clipped_curves.pdf")
     draw_raster(output / "scan_clean_300dpi.png")
     draw_raster(output / "scan_degraded_300dpi.png", degraded=True)
     cases = [
