@@ -4,6 +4,7 @@ import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
 import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,joinCadEntities,type OperationResult} from './cadOperations';
+import {mirrorEntity,stretchVertex} from './geometryTransform';
 import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
@@ -17,7 +18,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
   const canvas=useRef<HTMLCanvasElement>(null),frame=useRef<HTMLDivElement>(null);
   const [size,setSize]=useState({w:1000,h:700}),[camera,setCamera]=useState<Camera>({x:0,y:0,w:1200,h:850});
   const [image,setImage]=useState<HTMLImageElement|undefined>(),[draft,setDraft]=useState<Point[]>([]),[cursor,setCursor]=useState<Point|null>(null),[drag,setDrag]=useState<Point|null>(null);
-  const [pending,setPending]=useState<{id:string;click:Point}|null>(null);
+  const [pending,setPending]=useState<{id:string;click:Point;vertex?:number}|null>(null);
   const pointer=useRef<{type:'pan'|'move';x:number;y:number;world:Point}|null>(null),camRef=useRef(camera),imageRef=useRef(sheet.image);
   useEffect(()=>{camRef.current=camera;},[camera]);
   useEffect(()=>{setPending(null);},[tool,sheet.id]);
@@ -57,6 +58,30 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
       const found=findHit(p,workingEntities,tol);onSelect(found?.id||null);if(found)pointer.current={type:'move',x:ev.clientX,y:ev.clientY,world:toWorld(ev)};return;
+    }
+    if(tool==='mirror'){
+      const chosen=workingEntities.find(e=>e.id===selected);
+      if(!chosen){onMessage('MIRROR: сначала выделите LINE/POLYLINE/CIRCLE/POINT.');return;}
+      if(!pending){setPending({id:chosen.id,click:p});onMessage('MIRROR: начало оси задано. Укажите вторую точку оси (Esc — отмена).');return;}
+      setPending(null);
+      const result=mirrorEntity(chosen,pending.click,p);
+      if(!result){onMessage('MIRROR: неподдерживаемый объект или ось нулевой длины.');return;}
+      onOperation(result);return;
+    }
+    if(tool==='stretch'){
+      const chosen=workingEntities.find(e=>e.id===selected);
+      if(!chosen||!['line','polyline'].includes(chosen.kind)){onMessage('STRETCH: сначала выделите LINE или открытую POLYLINE.');return;}
+      if(!pending){
+        const sorted=chosen.points.map((q,index)=>({index,distance:dist(raw,q)}))
+          .sort((a,b)=>a.distance-b.distance);
+        if(!sorted.length||sorted[0].distance>tol){onMessage('STRETCH: нажмите точно около вершины выделенного объекта.');return;}
+        setPending({id:chosen.id,click:raw,vertex:sorted[0].index});
+        onMessage('STRETCH: вершина выбрана. Укажите новое положение (Esc — отмена).');return;
+      }
+      setPending(null);
+      const result=pending.vertex===undefined?null:stretchVertex(chosen,pending.vertex,p);
+      if(!result){onMessage('STRETCH: новая вершина создаёт нулевой или самопересекающийся контур.');return;}
+      onOperation(result);return;
     }
     if(tool==='join'){
       const found=findHit(raw,workingEntities.filter(e=>(e.kind==='line'||e.kind==='polyline')&&!e.closed),tol);
@@ -209,6 +234,6 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
     {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
-    {pending&&<div className="hint">{tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
+    {pending&&<div className="hint">{tool==='stretch'?'STRETCH: укажите новое положение вершины':tool==='mirror'?'MIRROR: укажите конец оси':tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }

@@ -20,6 +20,7 @@ import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import {proposeAutoDimensions} from './dimensionTools';
+import {arrayEntity} from './geometryTransform';
 import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
@@ -30,6 +31,8 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'offset',title:'Параллельный отрезок (OFFSET)',icon:'⇢'},
   {id:'break',title:'Разорвать прямой отрезок (BREAK)',icon:'⊣'},
   {id:'join',title:'Соединить линии и полилинии (JOIN)',icon:'⤴',hotkey:'J'},
+  {id:'stretch',title:'Переместить вершину (STRETCH)',icon:'⤢'},
+  {id:'mirror',title:'Зеркальная копия (MIRROR)',icon:'◀'},
   {id:'chamfer',title:'Фаска двух линий',icon:'◩'},{id:'fillet',title:'Сопряжение двух линий',icon:'⌒'},
   {id:'circle',title:'Окружность',icon:'◯',hotkey:'C'},{id:'arc',title:'Дуга (3 точки)',icon:'⌒'},
   {id:'dimension',title:'Размер по двум точкам',icon:'↔',hotkey:'D'},
@@ -94,6 +97,18 @@ export default function App(){
    setSheetIndex(current=>index<current?current-1:Math.min(current,Math.max(0,project.sheets.length-2)));
    setSelected(null);setFocusTarget(undefined);
    setStatus('Лист «'+target.name+'» закрыт. Ctrl+Z — вернуть. Резервная копия сохранена.');
+ }
+ function makeRectangularArray(){
+   const source=sheet.entities.find(e=>e.id===selected);
+   if(!source){setStatus('ARRAY: сначала выделите объект инструментом «Выделение».');return;}
+   const raw=window.prompt('Прямоугольный массив: столбцы; строки; шаг X; шаг Y (единицы листа)','3;2;40;30');
+   if(raw===null)return;
+   const values=raw.split(';').map(v=>Number(v.trim().replace(',','.')));
+   if(values.length!==4){setStatus('ARRAY: нужно ровно 4 значения через «;».');return;}
+   const result=arrayEntity(source,values[0],values[1],values[2],values[3]);
+   if(!result){setStatus('ARRAY: допустимы 1–20 строк/столбцов и максимум 100 объектов, ненулевые шаги; поддерживаются POINT/LINE/POLYLINE/CIRCLE.');return;}
+   if(!window.confirm('Создать '+result.additions.length+' независимых CAD-копий? Исходный объект останется без изменений; отмена Ctrl+Z.'))return;
+   applyOperation(result);
  }
  function makeAutoDimensions(mode:'selected'|'all'){
    const targets=mode==='selected'?
@@ -382,6 +397,13 @@ export default function App(){
       </div>
       <p className="muted">{sheet.calibrated?'Калибровка установлена; размеры нужно проверить.':
         '⚠ Масштаб не подтверждён. Авторазмеры создаются без чисел (?).'} Диаметр окружности предлагается как редактируемая выноска, не как ассоциативный DIMDIAMETER.</p>
+      <h3>Редактирование геометрии</h3>
+      <p className="muted">Сначала выделите один объект. STRETCH перемещает выбранную вершину двумя кликами, MIRROR создаёт копию относительно оси, ARRAY — прямоугольный массив.</p>
+      <div className="stack">
+        <button className="action" disabled={!selected} onClick={()=>setTool('stretch')}>⤢ STRETCH — переместить вершину</button>
+        <button className="action" disabled={!selected} onClick={()=>setTool('mirror')}>◀ MIRROR — две точки оси</button>
+        <button className="action" disabled={!selected} onClick={makeRectangularArray}>▦ ARRAY — прямоугольный массив</button>
+      </div>
       <h3>Обозначения ЕСКД — конструктор</h3>
       <p className="muted">Выберите тип и текст, затем укажите место на чертеже инструментом ⌗. Объект сохраняется единым редактируемым знаком.</p>
       <label className="selector-label">Тип обозначения

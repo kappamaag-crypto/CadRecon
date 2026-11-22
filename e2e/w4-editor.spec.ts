@@ -221,3 +221,19 @@ test('W4 selected auto-dimension inserts linked unverified dimension and can und
   await page.getByRole('button',{name:/Отмена/}).click();
   expect((await exportProject(page)).sheets[0].entities).toHaveLength(1);
 });
+
+test('W4 ARRAY creates editable copies of selected line in a single Undo',async ({page})=>{
+  const project=newProject(),s=project.sheets[0];s.width=300;s.height=200;
+  const src=entity('line',[{x:40,y:100},{x:80,y:100}]);s.entities=[src];
+  await putProject(page,project);
+  await worldClick(page,{x:60,y:100});
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
+  page.once('dialog',d=>d.accept('3;2;40;30'));
+  // Second dialog confirms independent copies.
+  page.on('dialog',d=>d.accept());
+  await page.getByRole('button',{name:/ARRAY — прямоугольный массив/}).click();
+  await expect(page.getByText(/CAD: изменено 0 объектов, добавлено 5/)).toBeVisible();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(6);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(1);
+});
