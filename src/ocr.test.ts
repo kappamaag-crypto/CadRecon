@@ -171,6 +171,72 @@ describe('browser OCR language pack preparation',()=>{
       Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
+  it('finds vertical OCR text on multi-tile 3500x2500 without a full-page rotated canvas',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img{naturalWidth=3500;naturalHeight=2500;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const tiles=planOcrTiles(3500,2500),n=tiles.length;
+    const last=tiles[n-1],noText={data:{text:'',blocks:[]}};
+    const found={data:{text:'ОСЬ 2',blocks:[{paragraphs:[{lines:[{
+      text:'ОСЬ 2',confidence:88,bbox:{x0:10,y0:20,x1:45,y1:90},
+    }]}]}]}};
+    let count=0;
+    const recognize=vi.fn(async()=>++count===n+(n-1)*2+1?found:noText);
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        recognize,terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      sheet.width=3500;sheet.height=2500;
+      const out=await recognizeText(sheet,undefined,undefined,
+        {mode:'enhanced',detectVertical:true,maxRetries:0});
+      expect(recognize).toHaveBeenCalledTimes(n*3);
+      expect(out.diagnostics?.rotations).toBe(n*2);
+      expect(out.entities).toHaveLength(1);
+      expect(out.entities[0].bbox).toEqual({
+        x0:last.x+20,x1:last.x+90,
+        y0:last.y+last.height-45,y1:last.y+last.height-10,
+      });
+      expect(out.warnings||[]).not.toContain(expect.stringContaining('пропущен'));
+      expect(out.entities[0].verified).toBe(false);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
+  it('explicitly reports partial vertical coverage on huge A0-like scan instead of silently skipping',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img{naturalWidth=6800;naturalHeight=4700;src='';async decode(){}}
+    const cv={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>cv}});
+    const recognize=vi.fn().mockResolvedValue({data:{text:'',blocks:[]}});
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        recognize,setParameters:vi.fn().mockResolvedValue(undefined),
+        terminate:vi.fn().mockResolvedValue(undefined),
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      sheet.width=6800;sheet.height=4700;
+      const tiles=planOcrTiles(6800,4700);
+      const out=await recognizeText(sheet,undefined,undefined,
+        {mode:'enhanced',detectVertical:true,maxRetries:0});
+      expect(tiles.length).toBeGreaterThan(8);
+      expect(out.diagnostics?.rotations).toBe(16);
+      expect(recognize).toHaveBeenCalledTimes(tiles.length+16);
+      expect(out.warnings?.join(' ')).toContain('не пропустить подписи');
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
   it('aborts during expensive retry without returning partially recognized CAD text',async()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
