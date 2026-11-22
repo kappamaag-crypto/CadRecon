@@ -1,5 +1,5 @@
 export type Point = { x:number; y:number };
-export type Kind = 'line'|'polyline'|'circle'|'arc'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp'|'eskd';
+export type Kind = 'line'|'polyline'|'bezier'|'circle'|'arc'|'text'|'dimension'|'axis'|'leader'|'hatch'|'table'|'stamp'|'eskd';
 export type Origin = 'manual'|'pdf'|'trace'|'ocr';
 export type EskdType = 'weld'|'roughness'|'datum'|'geotol'|'section'|'detail'|'elevation'|'diameter'|'radius'|'thread'|'slope'|'taper';
 export interface Entity {
@@ -12,7 +12,7 @@ export interface Entity {
   bbox?:{x0:number;y0:number;x1:number;y1:number};
 }
 export interface Layer { name:string; color:string; visible:boolean; locked:boolean; }
-export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; sourceType:'pdf'|'image'|'blank'; }
+export interface Sheet { id:string; name:string; width:number; height:number; image?:string; entities:Entity[]; calibrated:boolean; importWarnings?:string[]; sourceType:'pdf'|'image'|'blank'; }
 export interface CadProject { version:1; id:string; name:string; sheets:Sheet[]; layers:Layer[]; created:string; updated:string; }
 export type Tool = 'select'|'pan'|'line'|'polyline'|'circle'|'arc'|'dimension'|'axis'|'leader'|'hatch'|'text'|'table'|'stamp'|'measure'|'calibrate'|'eskd';
 export const COLORS = ['#e4ebf4','#38bdf8','#4ade80','#f9bd5a','#e879f9','#fb7185','#94a3b8','#22d3ee'];
