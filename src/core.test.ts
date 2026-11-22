@@ -108,7 +108,7 @@ describe('CadRecon model and export',()=>{
   expect(dxf).toContain('6\nCENTER');
   expect(validateProject(project).sheets[0].entities[0].verified).toBe(false);
   const bad=entity('line',[{x:0,y:0},{x:10,y:0}]);
-  (bad as typeof bad & {lineStyle:string}).lineStyle='evil';
+  (bad as unknown as {lineStyle:string}).lineStyle='evil';
   expect(()=>validateProject({...project,sheets:[{...s,entities:[bad]}]})).toThrow();
  });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
