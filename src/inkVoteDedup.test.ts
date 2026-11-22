@@ -1,5 +1,5 @@
 import {describe,it,expect} from 'vitest';
-import {deduplicateInkStrokeVotes,type StrokeSegment} from './inkVoteDedup';
+import {deduplicateInkStrokeVotes,sameFiniteLine,type StrokeSegment} from './inkVoteDedup';
 const line=(x0:number,y0:number,x1:number,y1:number):StrokeSegment=>
  ({a:{x:x0,y:y0},b:{x:x1,y:y1},confidence:.8});
 function white(width=200,height=100){
@@ -43,6 +43,12 @@ describe('W3 pixel-evidence Hough vote consolidation',()=>{
       line(10,40,180,40),line(50,45,120,45),
     ],m.rgba,m.width,m.height);
     expect(out.removed).toBe(0);
+  });
+  it('keeps disjoint diagonals even when x-start/y-end and slope match',()=>{
+    const a=line(0,0,50,50),b=line(0,40,10,50);
+    // Previously these wrongly collided in Hough's two-coordinate heuristic.
+    expect(sameFiniteLine(a,b)).toBe(false);
+    expect(sameFiniteLine(a,line(50,50,0,0))).toBe(true);
   });
   it('safely ignores corrupt or absent raster evidence',()=>{
     const lines=[line(1,2,30,2),line(1,2,30,2)];
