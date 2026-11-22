@@ -24,7 +24,7 @@ const dist=(a:Point,b:Point)=>Math.hypot(a.x-b.x,a.y-b.y);
 
 function duplicate(a:Entity,b:Entity):boolean {
   if(a.kind!==b.kind)return false;
-  if(a.sourceId&&b.sourceId&&a.sourceId===b.sourceId)return true;
+  if(['dimension','eskd'].includes(a.kind)&&a.sourceId&&b.sourceId&&a.sourceId===b.sourceId)return true;
   if(a.kind==='text'){
     return (a.text||'').trim()===(b.text||'').trim()
       &&a.points.length>0&&b.points.length>0
@@ -47,11 +47,53 @@ function duplicate(a:Entity,b:Entity):boolean {
 }
 /** Keep model candidates distinct unless they are demonstrably the same;
  * never conflate nearby lines or different dimension/OCR text values. */
+/** Spatial hash prevents quadratic comparison on thousands of scanned lines.
+ * Geometric candidates sharing a PDF source-operation ID are NOT equivalent:
+ * one path can contain many distinct segments. SourceID dedup is reserved for
+ * derived semantic objects (dimension / ESKD).
+ */
 export function uniqueCandidates(existing:Entity[],proposals:Entity[]):Entity[]{
+  const buckets=new Map<string,Entity[]>();
+  const sourced=new Set<string>();
   const fresh:Entity[]=[];
-  for(const candidate of proposals){
-    if(existing.some(e=>duplicate(e,candidate))||fresh.some(e=>duplicate(e,candidate)))continue;
-    fresh.push({...candidate,verified:false});
+  const semanticKey=(e:Entity)=>e.sourceId&&['dimension','eskd'].includes(e.kind)
+    ?e.kind+'|'+e.sourceId:null;
+  const anchor=(e:Entity):Point=>{
+    if(e.kind==='circle'&&e.center)return e.center;
+    if(e.kind==='line'&&e.points.length===2){
+      const [a,b]=e.points;
+      return a.x<b.x||(a.x===b.x&&a.y<=b.y)?a:b;
+    }
+    return e.points[0]||{x:0,y:0};
+  };
+  const size=(e:Entity)=>e.kind==='text'?6:e.kind==='circle'?4:2;
+  const bucketKey=(e:Entity,x=0,y=0,r=0)=>{
+    const a=anchor(e),cell=size(e);
+    const cx=Math.floor(a.x/cell)+x,cy=Math.floor(a.y/cell)+y;
+    const radial=e.kind==='circle'?':'+(Math.floor((e.radius||0)/4)+r):'';
+    const txt=e.kind==='text'?':'+(e.text||'').trim():'';
+    return e.kind+':'+cx+':'+cy+radial+txt;
+  };
+  const index=(e:Entity)=>{
+    const k=bucketKey(e),items=buckets.get(k)||[];
+    items.push(e);buckets.set(k,items);
+    const semantic=semanticKey(e);if(semantic)sourced.add(semantic);
+  };
+  for(const e of existing)index(e);
+  for(const proposal of proposals){
+    const semantic=semanticKey(proposal);
+    if(semantic&&sourced.has(semantic))continue;
+    let seen=false;
+    for(let dy=-1;dy<=1&&!seen;dy++)for(let dx=-1;dx<=1&&!seen;dx++){
+      const radiusOffsets=proposal.kind==='circle'?[-1,0,1]:[0];
+      for(const dr of radiusOffsets){
+        const candidates=buckets.get(bucketKey(proposal,dx,dy,dr));
+        if(candidates?.some(e=>duplicate(e,proposal))){seen=true;break;}
+      }
+    }
+    if(seen)continue;
+    const e={...proposal,verified:false};
+    fresh.push(e);index(e);
   }
   return fresh;
 }
