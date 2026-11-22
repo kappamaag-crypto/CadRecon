@@ -159,6 +159,11 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   let ctm:Matrix=[...IDENTITY],pathOperations=0,rejectedPaths=0,truncated=false;
   let nonPaintedPaths=0,clippedGeometry=0,rectangularClipLines=0,rectangularClipCurves=0,fullyClippedObjects=0,clipActive=false,unknownAlpha=false,formScope=false;
   let clipRect:ClipRect|null=null;
+  // PDF.js can emit constructPath(END_PATH) followed by OPS.clip, or emit
+  // OPS.clip before the path-ending constructPath. Keep the current pending
+  // rectangular path until the clip command consumes it; never equate a
+  // non-painted rectangle with a visible CAD polyline.
+  let pendingClipRect:ClipRect|null=null,awaitingClipPath=false;
   const stack:Array<{ctm:Matrix;clipActive:boolean;clipRect:ClipRect|null}>=[];
   // Stable PDF.js OPS values (src/shared/util.js): 20..27 paint visible paths;
   // 28 endPath, 29 clip, 30 eoClip do NOT paint any geometry.
@@ -219,6 +224,26 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
    */
   const rectangularClip=(raw:unknown):ClipRect|null=>{
     if(!Array.isArray(raw)||raw.length<2)return null;
+    // Some PDF.js versions retain the legacy rectangle command 19 with
+    // separate [x,y,width,height] operands; others use packed DrawOPS 0/1/4.
+    if(numeric(raw[0])&&numeric(raw[1])){
+      const commands=raw[0],coords=raw[1];
+      if(commands.length===1&&commands[0]===ops.rectangle&&
+        coords.length===4&&allFinite(coords)){
+        const [x,y,w,h]=Array.from(coords);
+        const pts=[transform(x,y),transform(x+w,y),
+          transform(x+w,y+h),transform(x,y+h)];
+        if(pts.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return null;
+        const xs=pts.map(p=>p.x),ys=pts.map(p=>p.y);
+        const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.min(...ys),y1=Math.max(...ys);
+        if(x1<=x0||y1<=y0)return null;
+        const allowed=pts.every(p=>(Math.abs(p.x-x0)<1e-5||Math.abs(p.x-x1)<1e-5)&&
+          (Math.abs(p.y-y0)<1e-5||Math.abs(p.y-y1)<1e-5));
+        if(!allowed||new Set(pts.map(p=>Math.round(p.x*1e4)+':'+Math.round(p.y*1e4))).size!==4)return null;
+        return {x0,y0,x1,y1};
+      }
+      return null;
+    }
     const src=raw[1],chunks=Array.isArray(src)?src:[src];
     const corners:Point[]=[];let closed=false;
     for(const chunk of chunks){
@@ -244,9 +269,20 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
   };
   for(let i=0;i<list.fnArray.length;i++){
     const fn=list.fnArray[i];
-    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive,clipRect:clipRect?{...clipRect}:null});continue;}
-    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;clipRect=prior?.clipRect??null;continue;}
-    if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){clipActive=true;clipRect=null;continue;}
+    if(fn===ops.save){stack.push({ctm:[...ctm],clipActive,clipRect:clipRect?{...clipRect}:null});pendingClipRect=null;awaitingClipPath=false;continue;}
+    if(fn===ops.restore){const prior=stack.pop();ctm=prior?.ctm??[...IDENTITY];clipActive=prior?.clipActive??false;clipRect=prior?.clipRect??null;pendingClipRect=null;awaitingClipPath=false;continue;}
+    if((ops.clip!==undefined&&fn===ops.clip)||(ops.eoClip!==undefined&&fn===ops.eoClip)){
+      clipActive=true;
+      // W (nonzero) permits axis-aligned rectangles; W* (even-odd) only if
+      // there is one proven rectangle with no subpaths, same as normal W.
+      if(pendingClipRect){
+        clipRect=clipRect?intersectRect(clipRect,pendingClipRect):pendingClipRect;
+        pendingClipRect=null;awaitingClipPath=false;
+      }else{
+        awaitingClipPath=true;clipRect=null;
+      }
+      continue;
+    }
     if(ops.setGState!==undefined&&fn===ops.setGState){unknownAlpha=true;continue;}
     if(ops.paintFormXObjectBegin!==undefined&&fn===ops.paintFormXObjectBegin){formScope=true;continue;}
     if(fn===ops.transform){
@@ -266,10 +302,15 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       const paintOp=raw[0] as number;
       if(paintOp===28||paintOp===29||paintOp===30){
         nonPaintedPaths++;
-        if(paintOp===29||paintOp===30){
-          const rectangle=paintOp===29?rectangularClip(raw):null;
+        const rectangle=rectangularClip(raw);
+        if(paintOp===28){
+          if(awaitingClipPath){
+            clipRect=rectangle?(clipRect?intersectRect(clipRect,rectangle):rectangle):null;
+            clipActive=true;awaitingClipPath=false;pendingClipRect=null;
+          }else pendingClipRect=rectangle;
+        }else{
           clipRect=rectangle?(clipRect?intersectRect(clipRect,rectangle):rectangle):null;
-          clipActive=true;
+          clipActive=true;pendingClipRect=null;awaitingClipPath=false;
         }
         continue;
       }
