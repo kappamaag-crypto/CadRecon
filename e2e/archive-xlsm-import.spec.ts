@@ -37,3 +37,28 @@ test('reads compressed user XLSM specification locally without executing macro d
   await expect(page.getByText(/Позиция спецификации не найдена/)).toBeVisible();
   await expect(page.getByText(/макросы и формулы НЕ запускаются/)).toBeVisible();
 });
+
+
+test('rejects hostile DTD in imported workbook before interpreting cell content',async ({page})=>{
+ const xlsx=createReportXlsx([
+  {name:'Спецификация',headers:['Позиция','Наименование'],rows:[['1','Деталь']]},
+ ]);
+ const modified=execFileSync('python3',['-c',[
+   'import io,sys,zipfile',
+   'src=io.BytesIO(sys.stdin.buffer.read());out=io.BytesIO()',
+   'with zipfile.ZipFile(src) as zin,zipfile.ZipFile(out,"w",compression=zipfile.ZIP_DEFLATED) as zout:',
+   ' for name in zin.namelist():',
+   '  data=zin.read(name)',
+   '  if name=="xl/worksheets/sheet1.xml":data=data.replace(b"<worksheet",b"<!DOCTYPE worksheet [<!ENTITY xxe SYSTEM \\"file:///etc/passwd\\">]><worksheet",1)',
+   '  zout.writestr(name,data)',
+   'sys.stdout.buffer.write(out.getvalue())',
+ ].join('\n')],{input:Buffer.from(xlsx),maxBuffer:10*1024*1024});
+ await page.goto('/CadRecon/');
+ await page.locator('.panel-tabs button[title="Поиск и аудит"]').click();
+ await page.getByRole('tab',{name:'Спецификация'}).click();
+ await page.locator('.archive-tools input[type=file]').setInputFiles({
+  name:'hostile.xlsm',mimeType:'application/vnd.ms-excel.sheet.macroEnabled.12',buffer:modified,
+ });
+ await expect(page.getByText(/запрещены DTD/)).toBeVisible();
+ await expect(page.getByText(/Загружено позиций: 0/)).toBeVisible();
+});
