@@ -54,5 +54,7 @@ test('W3 2x synthetic raster resolution: local tiled trace retains all axis dire
   // Strict loss regression on deterministic 2x-upsampled synthetic strokes.
   // Does not measure any real scanner's DPI, geometric precision or F1.
   for(const c of coverage)expect(c).toBeGreaterThanOrEqual(.97);
-  expect(lines.length).toBeLessThan(1200);
+  // Regression budget from the same deterministic upsampled fixture: 824
+  // candidates after W3 centering. This is NOT a real-scan precision gate.
+  expect(lines.length).toBeLessThan(950);
 });
