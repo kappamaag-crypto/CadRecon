@@ -11,7 +11,7 @@ test('PDF.js 5.x real clipped and unpainted paths do NOT become editable CAD lin
     '10 25 m 80 25 l S',
     'Q',
     '120 25 m 180 25 l n',
-  ].join('\\n')+'\\n';
+  ].join('\n')+'\n';
   execFileSync('python3',['-c',[
     'from pathlib import Path',
     'import runpy',
