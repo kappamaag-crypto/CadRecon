@@ -42,6 +42,7 @@ test('Local Ultra uses consent, scoped credentials and deletes user-owned job',a
     name:'online-fixture.cadrecon.json',mimeType:'application/json',
     buffer:Buffer.from(JSON.stringify(project)),
   });
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
   await page.locator('summary').filter({hasText:'Ultra'}).click();
   await page.getByLabel('Локальный адрес Ultra').fill('http://127.0.0.1:8766');
   await page.getByLabel('Токен Ultra').fill('fixture-token');

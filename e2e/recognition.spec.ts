@@ -17,6 +17,7 @@ function addSyntheticSheet(){
 test('recognition panel restores unverified dimension chain and exports native DIMENSION',async ({page})=>{
  await page.goto('/CadRecon/');
  await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({name:'synthetic.cadrecon.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(addSyntheticSheet()))});
+ await page.locator('.panel-tabs button[title="Инструменты"]').click();
  await page.getByRole('button',{name:'▤ Восстановить размерные цепочки и ЕСКД'}).click();
  await expect(page.getByRole('heading',{name:'Проверка распознавания'})).toBeVisible();
  await expect(page.locator('.recognition-item')).toHaveCount(2);
@@ -28,6 +29,7 @@ test('recognition panel restores unverified dimension chain and exports native D
 });
 test('manual ESKD placement exports an editable block INSERT',async ({page})=>{
  await page.goto('/CadRecon/');
+ await page.locator('.panel-tabs button[title="Инструменты"]').click();
  await page.getByRole('button',{name:'Обозначения ЕСКД'}).click();
  const cv=page.locator('canvas[aria-label="Редактор CAD"]');
  const bbox=await cv.boundingBox();expect(bbox).toBeTruthy();

@@ -45,6 +45,7 @@ test('Pages-only UI rejects an external Ultra URL before any document transmissi
   await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
     name:'local-only.cadrecon.json',mimeType:'application/json',buffer:Buffer.from(JSON.stringify(p)),
   });
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
   await page.locator('summary').filter({hasText:'Ultra'}).click();
   await page.getByLabel('Локальный адрес Ultra').fill('https://unknown-external.example.com');
   await page.getByLabel('Токен Ultra').fill('fixture-token');

@@ -9,6 +9,7 @@ async function putProject(page:import('@playwright/test').Page,project:ReturnTyp
     buffer:Buffer.from(JSON.stringify(project)),
   });
   await expect(page.getByText(/Проект открыт: /)).toBeVisible();
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
 }
 async function exportProject(page:import('@playwright/test').Page){
   const [dl]=await Promise.all([page.waitForEvent('download'),
@@ -261,6 +262,7 @@ test('W4 selected LINE linetype is editable and persists to JSON and DXF',async 
 
 test('W4 searchable command palette, hotkey and adjustable/collapsible sidebar',async ({page})=>{
   await page.goto('/CadRecon/');
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
   const search=page.getByLabel('Поиск CAD-команды');
   await expect(search).toBeVisible();
   await page.keyboard.press('Control+k');
