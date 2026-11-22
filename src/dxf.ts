@@ -12,6 +12,15 @@ const col=(hex:string)=>{const colors:Record<string,number>={'#4ade80':3,'#38bdf
 function dxfLine(a:Point,b:Point,layer:string,lineType='') {return emit(0,'LINE',100,'AcDbEntity',8,layer,100,'AcDbLine')+(lineType?emit(6,lineType):'')+v(a)+p2(11,b);}
 function dxfCircle(c:Point,r:number,layer:string) {return emit(0,'CIRCLE',100,'AcDbEntity',8,layer,100,'AcDbCircle')+v(c)+emit(40,clamp(r));}
 function dxfText(p:Point,text:string,height:number,layer:string){return emit(0,'TEXT',100,'AcDbEntity',8,layer,100,'AcDbText')+v(p)+emit(40,clamp(height),1,escapeText(text||' '),7,'Standard',50,0);}
+function cubicSpline(points:Point[],layer:string){
+  if(points.length!==4||points.some(p=>!Number.isFinite(p.x)||!Number.isFinite(p.y)))return '';
+  // Cubic Bezier is exactly a clamped degree-3 B-spline with four control points.
+  // CAD retains its editable control geometry; no 8-piece line approximation.
+  return emit(0,'SPLINE',100,'AcDbEntity',8,layer,100,'AcDbSpline',
+    70,8,71,3,72,8,73,4,74,0)
+    +[0,0,0,0,1,1,1,1].map(v=>emit(40,v)).join('')
+    +points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y),30,0)).join('');
+}
 function polygon(points:Point[],layer:string,closed=true){
   if(points.length<2)return '';
   return emit(0,'LWPOLYLINE',100,'AcDbEntity',8,layer,100,'AcDbPolyline',90,points.length,70,closed?1:0)+points.map(p=>emit(10,clamp(p.x),20,clamp(-p.y))).join('');
@@ -33,6 +42,7 @@ function entityDxf(e:Entity){
   switch(e.kind){
     case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'?'CENTER':''):'';
     case 'polyline':return polygon(pts,layer,!!e.closed);
+    case 'bezier':return cubicSpline(pts,layer);
     case 'hatch':return solidHatch(pts,layer);
     case 'circle':return e.center && e.radius?dxfCircle(e.center,e.radius,layer):'';
     case 'arc':{
@@ -72,7 +82,7 @@ function eskdBlock(e:Entity,i:number):DimBlock{
 export function createDxf(sheet:Sheet,project:CadProject) {
   const dims=sheet.entities.filter(e=>e.kind==='dimension'&&e.points.length>=2).map(dimensionBlock);
   const symbols=sheet.entities.filter(e=>e.kind==='eskd'&&e.points.length>=1).map(eskdBlock);
-  let out=emit(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$INSUNITS',70,4,9,'$MEASUREMENT',70,1,9,'$LUNITS',70,2,9,'$LUPREC',70,4,9,'$DWGCODEPAGE',3,'ANSI_1251',0,'ENDSEC');
+  let out=emit(0,'SECTION',2,'HEADER',9,'$ACADVER',1,'AC1015',9,'$INSUNITS',70,sheet.calibrated?4:0,9,'$MEASUREMENT',70,1,9,'$LUNITS',70,2,9,'$LUPREC',70,4,9,'$DWGCODEPAGE',3,'ANSI_1251',0,'ENDSEC');
   out+=emit(0,'SECTION',2,'TABLES',0,'TABLE',2,'LTYPE',70,2,0,'LTYPE',2,'CONTINUOUS',70,0,3,'Solid line',72,65,73,0,40,0,0,'LTYPE',2,'CENTER',70,0,3,'Center line',72,65,73,4,40,30,49,15,74,0,49,-5,74,0,49,5,74,0,49,-5,74,0,0,'ENDTAB');
   out+=emit(0,'TABLE',2,'LAYER',70,project.layers.length+1);
   for(const l of [...project.layers,{name:'0',color:'#e4ebf4',visible:true,locked:false}])out+=emit(0,'LAYER',2,l.name,70,l.locked?4:0,62,l.visible?col(l.color):-col(l.color),6,'CONTINUOUS');
