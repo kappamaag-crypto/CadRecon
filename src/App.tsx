@@ -2,6 +2,7 @@ import {useState,useEffect,useRef,useMemo} from 'react';
 import Editor from './Editor';
 import ArchivePanel from './ArchivePanel';
 import {projectReportXlsx} from './xlsxExport';
+import {auditScanGeometry,scanReviewCSV} from './scanReview';
 import {newProject,newSheet,newId,validateProject,type CadProject,type Entity,type Tool} from './model';
 import {auditSheet,scaleSheet,translateEntity,mergeAutoLines} from './geometry';
 import {createDxf} from './dxf';
@@ -242,6 +243,7 @@ export default function App(){
      data:createDxf(s,project),
    }));
    files.push({name:'Отчеты/Объекты.csv',data:inventoryCSV(project)});
+   files.push({name:'Отчеты/Диагностика_топологии_W3.csv',data:scanReviewCSV(auditScanGeometry(project))});
    files.push({name:'Отчеты/Сводный_отчет.xlsx',data:projectReportXlsx(project)});
    files.push({name:'Отчеты/Сварные_обозначения.csv',data:weldsCSV(project)});
    if(project.specification?.length){
@@ -271,6 +273,7 @@ export default function App(){
       'Некалиброванных листов: '+project.sheets.filter(s=>!s.calibrated).length,
       'DXF только для инженерной проверки; без калибровки единицы условные.',
       'Отчёты об объектах, сварке и позициях не являются автоматическим нормоконтролем.',
+      'Диагностика W3: потенциальные разрывы и слабые штрихи требуют проверки исходного изображения. Единицы зазоров условные.',
       'Отсутствие позиций не доказывает ошибку PDF: возможны пропуски распознавания.',
       'Исходные КОМПАС/CDW, STEP и SOLIDWORKS не синтезируются из PDF.',
      ].join('\n')+'\n'});

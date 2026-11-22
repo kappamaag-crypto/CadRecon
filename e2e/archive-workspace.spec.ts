@@ -79,4 +79,5 @@ test('ГАЛС inventory, BOM CSV import, stamp preview and ZIP export remain on
  expect(buffer.subarray(0,2).toString()).toBe('PK');
  expect(buffer.toString('utf8')).toContain('DXF/');
  expect(buffer.toString('utf8')).toContain('README.txt');
+ expect(buffer.toString('utf8')).toContain('Диагностика_топологии_W3.csv');
 });

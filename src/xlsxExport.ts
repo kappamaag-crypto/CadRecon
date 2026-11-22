@@ -5,6 +5,7 @@
 import type {CadProject} from './model';
 import {inventoryProject,weldSchedule,compareSpecification} from './archiveFeatures';
 import {createZip} from './zip';
+import {auditScanGeometry} from './scanReview';
 
 export type Cell=string|number|boolean|null|undefined;
 export interface ReportSheet {name:string;headers:string[];rows:Cell[][];}
@@ -104,6 +105,7 @@ export function createReportXlsx(sheets:ReportSheet[]):Uint8Array{
 export function projectReportXlsx(project:CadProject):Uint8Array{
   const inventory=inventoryProject(project);
   const welds=weldSchedule(project);
+  const scan=auditScanGeometry(project);
   const issues=project.specification?.length?compareSpecification(project,project.specification):[];
   const sheets:ReportSheet[]=[
     {name:'Сводка',headers:['Показатель','Значение','Пояснение'],rows:[
@@ -114,6 +116,9 @@ export function projectReportXlsx(project:CadProject):Uint8Array{
       ['Листов без калибровки',project.sheets.filter(s=>!s.calibrated).length,'На них единицы условные'],
       ['Групп сварных обозначений',welds.length,'Проверять по подложке'],
       ['Расхождений позиций',issues.length,'Контроль только явно подписанных позиций'],
+      ['Потенциальных разрывов W3',scan.nearGaps,'Диагностика без автоматических соединений'],
+      ['Слабых штрихов W3',scan.weakInk,'Не является доказательством ошибки'],
+      ['Выдача диагностики W3 ограничена',scan.truncated?'да':'нет','Максимум 600 замечаний; плотные области могут быть пропущены'],
     ]},
     {name:'Объекты',headers:['Лист','ID','Тип','Слой','Источник','Проверен','Параметр','Координаты'],
       rows:inventory.rows.map(e=>[e.sheet,e.id,e.kind,e.layer,e.origin,e.verified?'да':'нет',e.detail,e.location])},
@@ -123,6 +128,9 @@ export function projectReportXlsx(project:CadProject):Uint8Array{
         'Только окружности, НЕ доказанные отверстия'])},
     {name:'Сварка',headers:['Обозначение','Отметок','Листы','Непроверенных'],
       rows:welds.map(w=>[w.designation,w.count,w.sheetIndices.map(i=>project.sheets[i].name).join(', '),w.unverified])},
+    {name:'Диагностика W3',headers:['Тип','Лист','Объект','Связанный объект','Зазор (ед. листа)','Замечание'],
+      rows:scan.findings.map(f=>[f.kind,f.sheetName,f.entityId,f.relatedEntityId||'',
+        f.distance===undefined?'':Number(f.distance.toFixed(3)),f.description])},
   ];
   if(project.specification?.length){
     sheets.push({name:'Спецификация',headers:['Позиция','Обозначение','Наименование','Количество','Материал','Масса','Примечание'],
