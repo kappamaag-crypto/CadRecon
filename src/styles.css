@@ -82,3 +82,29 @@
 .topology-findings{display:flex;flex-direction:column;gap:4px;max-height:280px;overflow:auto;margin-top:8px}
 .cad-finding{font-size:11px;text-align:left;padding:7px;border:1px solid #34536d;background:#11263a;white-space:normal}
 @media(max-width:560px){.cad-action-grid{grid-template-columns:1fr}}
+
+
+/* Recognition-first conversion flow (structural cards, not quality scores). */
+.sidebar .panel-tabs{grid-template-columns:repeat(8,minmax(0,1fr))}
+.sidebar .panel-tabs button{min-width:0;font-size:18px;padding:9px 2px}
+.reconstruction-workflow{display:flex;flex-direction:column;gap:12px}
+.reconstruction-workflow>h3{font-size:15px;color:#e7f5ff;margin:2px 0 0}
+.reconstruction-workflow>.muted{font-size:12px;line-height:1.5;margin:0 0 3px}
+.recognition-step{border:1px solid #29445d;background:#102338;border-radius:9px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.recognition-step-title{display:flex;align-items:center;gap:9px;color:#d6eaf9;font-size:12px}
+.recognition-step-title>span{display:grid;place-items:center;width:24px;height:24px;flex-shrink:0;border:1px solid #466983;border-radius:50%;color:#d7ebf5}
+.recognition-step>p{font-size:12px;margin:0;line-height:1.5}
+.recognition-step .selector-label{font-size:11px;line-height:1.4}
+.recognition-step select{max-width:100%;font-size:11px}
+.recognition-step button{width:100%;text-align:left;font-size:12px}
+.recognition-step button.primary{font-size:13px;min-height:43px}
+.recognition-step details{border:0;padding:0;background:transparent}
+.recognition-step details summary{cursor:pointer;color:#a8d8ed;font-size:11px;margin:4px 0}
+.recognition-step details .stack{margin-top:9px}
+.recognition-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:5px}
+.recognition-stats>div{border:1px solid #2a455e;border-radius:5px;padding:7px 2px;text-align:center}
+.recognition-stats strong{display:block;font-size:18px;color:#ddf3ff;font-variant-numeric:tabular-nums}
+.recognition-stats small{font-size:10px;color:#a0bacd;overflow-wrap:anywhere}
+.reconstruction-warnings{display:flex;flex-direction:column;gap:5px;border-left:2px solid #647b94;padding:6px 9px}
+.reconstruction-warnings>p{font-size:11px;line-height:1.5;margin:0;color:#d4e5f1}
+@media(max-width:560px){.recognition-step{padding:9px}}
