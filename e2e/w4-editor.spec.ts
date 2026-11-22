@@ -382,3 +382,24 @@ test('W4 chain dimensions are suggestions, not automatic mm when polyline uncali
   expect(dims.map(e=>e.text)).toEqual(['?','?']);
   expect(dims.every(e=>!e.verified)).toBe(true);
 });
+
+
+test('W4 schematic hatch pattern is editable in properties without claiming a native patterned HATCH',async ({page})=>{
+  const project=newProject(),s=project.sheets[0];s.width=300;s.height=200;
+  const hatch=entity('hatch',[{x:60,y:60},{x:160,y:60},{x:160,y:130},{x:60,y:130}],'Штриховка');
+  hatch.closed=true;s.entities=[hatch];await putProject(page,project);
+  await worldClick(page,{x:110,y:60});
+  await page.locator('.panel-tabs button[title="Свойства"]').click();
+  const select=page.getByLabel('Рисунок штриховки');
+  await expect(select).toBeVisible();
+  await select.selectOption('cross');
+  const data=await exportProject(page);
+  expect(data.sheets[0].entities[0].hatchPattern).toBe('cross');
+  expect(data.sheets[0].entities[0].verified).toBe(false);
+  page.once('dialog',d=>d.accept());
+  const [download]=await Promise.all([page.waitForEvent('download'),
+    page.getByRole('button',{name:'↓ DXF',exact:true}).click()]);
+  const dxf=await readFile((await download.path())!,'utf8');
+  expect((dxf.match(/\n0\nLINE\n/g)||[]).length).toBeGreaterThan(10);
+  expect(dxf).not.toContain('\n0\nHATCH\n');
+});

@@ -142,6 +142,18 @@ describe('CadRecon model and export',()=>{
   expect(dxf).not.toContain('\n0\nXLINE\n');
   writeFileSync('/tmp/cadrecon-cadtools-test.dxf',dxf,'utf8');
  });
+ it('exports schematic diagonal hatching as bounded editable LINEs without mislabeling native associative HATCH',()=>{
+  const p=newProject(),s=p.sheets[0];
+  const h=entity('hatch',[{x:0,y:0},{x:100,y:0},{x:100,y:80},{x:0,y:80}],'Штриховка');
+  h.hatchPattern='diagonal';h.hatchSpacing=12;
+  s.entities=[h];
+  expect(validateProject(p)).toBe(p);
+  const dxf=createDxf(s,p);
+  expect(dxf).toContain('\n0\nLWPOLYLINE\n');
+  expect((dxf.match(/\n0\nLINE\n/g)||[]).length).toBeGreaterThan(5);
+  expect(dxf).not.toContain('\n0\nHATCH\n');
+  writeFileSync('/tmp/cadrecon-hatch-linework-test.dxf',dxf,'utf8');
+ });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
   const p=newProject(),s=p.sheets[0];
   const line=entity('line',[{x:0,y:0},{x:6000,y:0}]);
