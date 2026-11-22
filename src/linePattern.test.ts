@@ -36,7 +36,7 @@ describe('W3 repeated line pattern candidates (pixel-only, unverified)',()=>{
    const r=raster();r.bar(15,360,50,51);
    for(let x=15;x<360;x+=30)r.bar(x,x+15,70,71);
    expect(classifyLinePattern(hline(15,50,360),r.data,w,h)).toBeNull();
-   expect(classifyLinePattern(hline(15,70,346),r.data,w,h)?.style).toBe('dashed');
+   expect(classifyLinePattern(hline(15,70,360),r.data,w,h)?.style).toBe('dashed');
  });
  it('declines invalid data, overlong geometry and random marks',()=>{
    const r=raster();r.bar(10,12,70,71);r.bar(150,153,70,71);r.bar(300,303,70,71);

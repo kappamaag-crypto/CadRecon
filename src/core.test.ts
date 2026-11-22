@@ -104,8 +104,8 @@ describe('CadRecon model and export',()=>{
   const dxf=createDxf(s,project);
   expect(dxf).toContain('DASHED');
   expect(dxf).toContain('CENTER');
-  expect(dxf).toContain('6\\nDASHED');
-  expect(dxf).toContain('6\\nCENTER');
+  expect(dxf).toContain('6\nDASHED');
+  expect(dxf).toContain('6\nCENTER');
   expect(validateProject(project).sheets[0].entities[0].verified).toBe(false);
   const bad=entity('line',[{x:0,y:0},{x:10,y:0}]);
   (bad as typeof bad & {lineStyle:string}).lineStyle='evil';
