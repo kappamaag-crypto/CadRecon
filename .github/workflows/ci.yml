@@ -48,6 +48,13 @@ jobs:
           assert 'DASHED' in styled.linetypes and 'CENTER' in styled.linetypes
           assert not styled.audit().has_errors, 'Styled DXF invalid'
           print('Native DASHED and CENTER linetypes validated independently')
+          tools=ezdxf.readfile('/tmp/cadrecon-cadtools-test.dxf')
+          assert len(tools.modelspace().query('ELLIPSE'))==1
+          assert len(tools.modelspace().query('DIMENSION'))==3
+          assert len(tools.modelspace().query('XLINE'))==0, 'Construction lines must not be exported'
+          assert not tools.audit().has_errors, '2D ellipse/dimension DXF audit failed'
+          print('Native ELLIPSE, aligned and rotated dimensions audited')
+
 
           PY
       - name: ZIP archive smoke check

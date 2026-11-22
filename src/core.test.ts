@@ -122,6 +122,26 @@ describe('CadRecon model and export',()=>{
   (bad as unknown as {lineStyle:string}).lineStyle='evil';
   expect(()=>validateProject({...project,sheets:[{...s,entities:[bad]}]})).toThrow();
  });
+ it('exports native ELLIPSE and aligned/horizontal/vertical DIMENSION but excludes construction lines',()=>{
+  const p=newProject(),s=p.sheets[0];
+  const ellipse=entity('ellipse',[{x:50,y:50},{x:100,y:50}]);
+  ellipse.center={x:50,y:50};ellipse.radius=50;ellipse.axisRatio=.5;
+  const aux=entity('construction',[{x:0,y:50},{x:1,y:50}],'Вспомогательные');
+  const a=entity('dimension',[{x:0,y:0},{x:30,y:40}],'Размеры');
+  const h=entity('dimension',[{x:0,y:10},{x:30,y:40}],'Размеры');
+  h.dimMode='horizontal';h.text='30';h.offset=20;
+  const v=entity('dimension',[{x:20,y:10},{x:30,y:40}],'Размеры');
+  v.dimMode='vertical';v.text='30';v.offset=20;
+  s.entities=[ellipse,aux,a,h,v];
+  expect(validateProject(p)).toBe(p);
+  const dxf=createDxf(s,p);
+  expect(dxf).toContain('\n0\nELLIPSE\n');
+  expect(dxf).toContain('\n40\n0.5\n');
+  expect(dxf).toContain('\n100\nAcDbRotatedDimension\n');
+  expect((dxf.match(/\n0\nDIMENSION\n/g)||[])).toHaveLength(3);
+  expect(dxf).not.toContain('\n0\nXLINE\n');
+  writeFileSync('/tmp/cadrecon-cadtools-test.dxf',dxf,'utf8');
+ });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
   const p=newProject(),s=p.sheets[0];
   const line=entity('line',[{x:0,y:0},{x:6000,y:0}]);
