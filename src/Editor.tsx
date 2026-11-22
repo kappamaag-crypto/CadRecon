@@ -3,19 +3,23 @@ import type {PointerEvent,WheelEvent} from 'react';
 import {entity,type CadProject,type Entity,type Point,type Sheet,type Tool} from './model';
 import {dist,sub,add,snapPoint,findHit,measure} from './geometry';
 import {drawScene,type Camera} from './render';
+import {trimLine,extendLine,chamferLines,filletLines,type OperationResult} from './cadOperations';
 import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
-  onCreate:(e:Entity)=>void;onMove:(e:Entity,delta:Point)=>void;onCalibrate:(factor:number)=>void;
+  onCreate:(e:Entity)=>void;onMove:(e:Entity,delta:Point)=>void;
+  onOperation:(result:OperationResult)=>void;onCalibrate:(factor:number)=>void;
   onMessage:(message:string)=>void;source:boolean;compare:boolean;grid:boolean;snap:boolean;
   symbolType:EskdType;symbolText:string;
 }
-export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText}:Props){
+export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onOperation,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText}:Props){
   const canvas=useRef<HTMLCanvasElement>(null),frame=useRef<HTMLDivElement>(null);
   const [size,setSize]=useState({w:1000,h:700}),[camera,setCamera]=useState<Camera>({x:0,y:0,w:1200,h:850});
   const [image,setImage]=useState<HTMLImageElement|undefined>(),[draft,setDraft]=useState<Point[]>([]),[cursor,setCursor]=useState<Point|null>(null),[drag,setDrag]=useState<Point|null>(null);
+  const [pending,setPending]=useState<{id:string;click:Point}|null>(null);
   const pointer=useRef<{type:'pan'|'move';x:number;y:number;world:Point}|null>(null),camRef=useRef(camera),imageRef=useRef(sheet.image);
   useEffect(()=>{camRef.current=camera;},[camera]);
+  useEffect(()=>{setPending(null);},[tool,sheet.id]);
   useEffect(()=>{const r=frame.current;if(!r)return;const obs=new ResizeObserver(()=>setSize({w:Math.max(250,r.clientWidth),h:Math.max(250,r.clientHeight)}));obs.observe(r);return ()=>obs.disconnect();},[]);
   useEffect(()=>{const aspect=size.w/size.h;const w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});setDraft([]);onSelect(null);},[sheet.id,sheet.width,sheet.height,size.w,size.h]);
   useEffect(()=>{if(sheet.image===imageRef.current&&image)return;imageRef.current=sheet.image;let cancelled=false;if(!sheet.image){setImage(undefined);return;}const img=new Image();img.src=sheet.image;img.decode().then(()=>{if(!cancelled)setImage(img);}).catch(()=>{if(!cancelled)setImage(undefined);});return()=>{cancelled=true;};},[sheet.image]);
@@ -28,11 +32,40 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
   const takePoint=(p:Point)=>snap?snapPoint(p,workingEntities,Math.max(2,tol),grid?Math.max(1,Math.pow(10,Math.floor(Math.log10(Math.max(1,40*camera.w/size.w))))):0):p;
   function finish(points:Point[],kind:'polyline'|'hatch'){if(points.length<2){setDraft([]);return;}const e=entity(kind,points,kind==='hatch'?'Штриховка':'Контуры');e.closed=kind==='hatch';onCreate(e);setDraft([]);}
   function down(ev:PointerEvent<HTMLCanvasElement>){
-    ev.currentTarget.setPointerCapture(ev.pointerId);const p=takePoint(toWorld(ev));
+    ev.currentTarget.setPointerCapture(ev.pointerId);const raw=toWorld(ev),p=takePoint(raw);
     if(tool==='pan'||ev.button===1||ev.button===2){pointer.current={type:'pan',x:ev.clientX,y:ev.clientY,world:p};return;}
     if(tool==='select'){
       const found=findHit(p,workingEntities,tol);onSelect(found?.id||null);if(found)pointer.current={type:'move',x:ev.clientX,y:ev.clientY,world:toWorld(ev)};return;
     }
+    if(['trim','extend','chamfer','fillet'].includes(tool)){
+      const found=findHit(raw,workingEntities.filter(e=>e.kind==='line'),tol);
+      if(!found){onMessage('Для операции выберите два прямых отрезка.');return;}
+      if(!pending){setPending({id:found.id,click:raw});onMessage('CAD: выбран первый отрезок. Укажите второй отрезок.');return;}
+      const first=workingEntities.find(e=>e.id===pending.id);
+      setPending(null);
+      if(!first||first.id===found.id){onMessage('Выберите другой отрезок.');return;}
+      let result:OperationResult|null=null;
+      if(tool==='trim')result=trimLine(first,found,raw);
+      else if(tool==='extend')result=extendLine(first,found,raw);
+      else {
+        const label=tool==='chamfer'?'Расстояние фаски':'Радиус сопряжения';
+        const input=window.prompt(label+' ('+(sheet.calibrated?'мм':'условные единицы')+')','10');
+        if(input===null){onMessage('CAD: операция отменена');return;}
+        const d=Number(input.replace(',','.'));
+        if(!Number.isFinite(d)||d<=0){onMessage('Введите положительное расстояние или радиус.');return;}
+        result=tool==='chamfer'?chamferLines(first,found,pending.click,raw,d):
+          filletLines(first,found,pending.click,raw,d);
+      }
+      if(result)onOperation(result);
+      else onMessage('CAD: геометрия или выбор стороны не допускает эту операцию. Проверьте пересечение, направление и расстояние.');
+      return;
+    }
+    if(tool==='point'){
+      const e=entity('point',[p],'Контуры');e.verified=false;
+      e.reason='Создана точка: не означает инженерную проверку';
+      onCreate(e);return;
+    }
+
     if(tool==='eskd'){
       const e=entity('eskd',[p],'ЕСКД');
       e.symbol=symbolType;e.text=symbolText;e.size=sheet.calibrated?4:Math.max(8,sheet.width/145);
@@ -47,6 +80,16 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     }
     const pts=[...draft,p];
     if(tool==='polyline'||tool==='hatch'){setDraft(pts);return;}
+    if(tool==='rectangle'){
+      if(pts.length<2){setDraft(pts);return;}
+      const [a,b]=pts;setDraft([]);
+      if(Math.abs(a.x-b.x)<1e-5||Math.abs(a.y-b.y)<1e-5){
+        onMessage('Прямоугольник: требуются ненулевые ширина и высота.');return;
+      }
+      const e=entity('polyline',[a,{x:b.x,y:a.y},b,{x:a.x,y:b.y}],'Контуры');
+      e.closed=true;e.verified=false;e.reason='Прямоугольник создан вручную: проверьте размеры';
+      onCreate(e);return;
+    }
     if(tool==='arc'){
       if(pts.length<3){setDraft(pts);return;}
       const [center,a,b]=pts;const e=entity('arc',[center,a,b]);e.center=center;e.radius=dist(center,a);e.startAngle=Math.atan2(a.y-center.y,a.x-center.x);e.endAngle=Math.atan2(b.y-center.y,b.x-center.x);if(e.radius>0)onCreate(e);setDraft([]);return;
@@ -79,7 +122,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     const p=toWorld(ev),factor=Math.exp(Math.max(-.45,Math.min(.45,ev.deltaY*.001)));
     setCamera(c=>{const w=Math.max(.01,Math.min(5e8,c.w*factor)),h=w*size.h/size.w;const x=p.x-(p.x-c.x)*(w/c.w),y=p.y-(p.y-c.y)*(h/c.h);return {x,y,w,h};});
   }
-  useEffect(()=>{function key(ev:KeyboardEvent){if(ev.key==='Escape'){setDraft([]);pointer.current=null;setDrag(null);}if(ev.key==='Enter'&&draft.length>=2&&(tool==='hatch'||tool==='polyline')){finish(draft,tool);}}
+  useEffect(()=>{function key(ev:KeyboardEvent){if(ev.key==='Escape'){setDraft([]);setPending(null);pointer.current=null;setDrag(null);}if(ev.key==='Enter'&&draft.length>=2&&(tool==='hatch'||tool==='polyline')){finish(draft,tool);}}
     window.addEventListener('keydown',key);return ()=>window.removeEventListener('keydown',key);},[draft,tool]);
   const zoom=(f:number)=>setCamera(c=>{const w=c.w*f,h=c.h*f;return {x:c.x+(c.w-w)/2,y:c.y+(c.h-h)/2,w,h};});
   return <div className="viewport" ref={frame}>
@@ -87,5 +130,6 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
     {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
+    {pending&&<div className="hint">Выбран опорный отрезок · Укажите второй отрезок · Esc — отмена</div>}
   </div>;
 }
