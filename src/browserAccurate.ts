@@ -35,6 +35,7 @@ function duplicate(a:Entity,b:Entity):boolean {
       &&dist(a.center,b.center)<=2&&Math.abs(a.radius-b.radius)<=2;
   }
   if(a.kind==='line'&&a.points.length===2&&b.points.length===2){
+    if(a.lineStyle!==b.lineStyle)return false;
     const [x,y]=a.points,[u,v]=b.points;
     return (dist(x,u)<=.75&&dist(y,v)<=.75)||
       (dist(x,v)<=.75&&dist(y,u)<=.75);
@@ -72,7 +73,7 @@ export function uniqueCandidates(existing:Entity[],proposals:Entity[]):Entity[]{
     const cx=Math.floor(a.x/cell)+x,cy=Math.floor(a.y/cell)+y;
     const radial=e.kind==='circle'?':'+(Math.floor((e.radius||0)/4)+r):'';
     const txt=e.kind==='text'?':'+(e.text||'').trim():'';
-    return e.kind+':'+cx+':'+cy+radial+txt;
+    return e.kind+':'+(e.kind==='line'?e.lineStyle||'solid':'')+':'+cx+':'+cy+radial+txt;
   };
   const index=(e:Entity)=>{
     const k=bucketKey(e),items=buckets.get(k)||[];

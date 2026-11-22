@@ -21,6 +21,15 @@ describe('W3 pixel-evidence Hough vote consolidation',()=>{
     expect(out.lines).toHaveLength(1);
     expect(out.lines[0].confidence).toBe(.8);
   });
+  it('never discards a dashed or centre line because an unstyled line overlaps',()=>{
+    const m=white();m.paint(10,40,180,42);
+    const solid=line(10,41,180,41);
+    const dashed={...solid,lineStyle:'dashed' as const,confidence:.72};
+    const center={...solid,lineStyle:'center' as const,confidence:.68};
+    const result=deduplicateInkStrokeVotes([solid,dashed,center],m.rgba,m.width,m.height);
+    expect(result.removed).toBe(0);
+    expect(new Set(result.lines.map(x=>x.lineStyle||'solid')).size).toBe(3);
+  });
   it('preserves TWO parallel strokes separated by WHITE paper',()=>{
     const m=white();m.paint(10,19,180,20);m.paint(10,24,180,25);
     // Gap 3px, separation 4px: inside deduplicator's 5.25px search

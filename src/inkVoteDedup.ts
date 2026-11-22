@@ -40,6 +40,9 @@ export function deduplicateInkStrokeVotes(
     return .299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2]<175;
   };
   function coveredBy(candidate:StrokeSegment,reference:StrokeSegment):boolean{
+    // A marked DASHED/CENTER line is a distinct hypothesis from a SOLID
+    // stroke, even at the same finite coordinates. Never delete it as a vote.
+    if(candidate.lineStyle!==reference.lineStyle)return false;
     const ac=delta(candidate.b,candidate.a),bc=delta(reference.b,reference.a);
     const na=dist(candidate.a,candidate.b),nb=dist(reference.a,reference.b);
     if(na<8||nb<8||nb<na*.95)return false;

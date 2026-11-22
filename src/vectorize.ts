@@ -40,9 +40,15 @@ export async function traceImage(
   const warnings:string[]=[];
   if(factor<.999)warnings.push('Исходный скан уменьшен для памяти: '+img.naturalWidth+'×'+img.naturalHeight+' → '+fullWidth+'×'+fullHeight+' пикселей. Мелкие элементы могут быть потеряны.');
   const sx=sheet.width/fullWidth,sy=sheet.height/fullHeight;
-  function lineKey(a:{x:number;y:number},b:{x:number;y:number}){
+  function lineKey(a:{x:number;y:number},b:{x:number;y:number},style?:'dashed'|'center'){
     const first=a.x<b.x||(a.x===b.x&&a.y<b.y)?a:b,second=first===a?b:a;
-    return [first.x,first.y,second.x,second.y].map(n=>Math.round(n/3)).join(':');
+    // Former 3-unit bucket silently discarded genuine close lines and could
+    // swallow a dashed/CENTER proposal as a SOLID duplicate across tiles.
+    // 0.5 input pixels preserves close outlines; actual tile duplicates may
+    // still be handled by the conservative overlap reconciler below.
+    const quant=Math.max(.05,.5*Math.min(sx,sy));
+    return (style||'solid')+':'+
+      [first.x,first.y,second.x,second.y].map(n=>Math.round(n/quant)).join(':');
   }
   try{
     for(let k=0;k<finalTiles.length;k++){
@@ -82,7 +88,7 @@ export async function traceImage(
       for(const l of data.lines||[]){
         const a={x:(t.x+l.a.x)*sx,y:(t.y+l.a.y)*sy};
         const b={x:(t.x+l.b.x)*sx,y:(t.y+l.b.y)*sy};
-        const key=lineKey(a,b);if(seen.has(key))continue;seen.add(key);
+        const key=lineKey(a,b,l.lineStyle);if(seen.has(key))continue;seen.add(key);
         const e=entity('line',[a,b],'Автообводка','trace');e.confidence=l.confidence;
         if(l.lineStyle)e.lineStyle=l.lineStyle;
         e.reason='Обводка: эвристический балл, опора на исходный штрих '+(l.inkSupport===undefined?'не измерена':Math.round(l.inkSupport*100)+'%')+
