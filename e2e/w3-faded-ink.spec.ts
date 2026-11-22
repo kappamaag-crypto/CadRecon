@@ -35,7 +35,7 @@ test('W3 adaptive recognition preserves pale-grey scan lines and dashed marks wi
     e.points.some(p=>Math.abs(p.y-152)<7));
   console.log('W3_FADED_INK '+JSON.stringify({all:lines.length,solid:faintSolid.length,dashed:fadedDashes.length}));
   expect(faintSolid.length).toBeGreaterThan(0);
-  expect(dashedDashes.length).toBeGreaterThan(0);
+  expect(fadedDashes.length).toBeGreaterThan(0);
   expect(lines.every(e=>!e.verified)).toBe(true);
   expect(lines.some(e=>e.scanEvidence&&e.scanEvidence.inkSupport>.35)).toBe(true);
 });
