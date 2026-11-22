@@ -136,7 +136,7 @@ test('W4 JOIN connects exact shared endpoints to editable LINE, with one Undo an
   await putProject(page,project);
   await page.getByRole('button',{name:'Соединить линии и полилинии (JOIN)'}).click();
   await worldClick(page,{x:80,y:100});
-  await expect(page.getByText(/JOIN: выбран первый объект/)).toBeVisible();
+  await expect(page.locator('.statusbar').getByText(/JOIN: выбран первый объект/)).toBeVisible();
   page.once('dialog',d=>d.accept());
   await worldClick(page,{x:200,y:100});
   await expect(page.getByText(/CAD: изменено 1 объектов, добавлено 0, удалено 1/)).toBeVisible();
