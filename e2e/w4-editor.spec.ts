@@ -36,7 +36,7 @@ test('W4 point and rectangle create editable DXF and can be undone',async ({page
   await putProject(page,project);
   await page.getByRole('button',{name:'Точка',exact:true}).click();
   await worldClick(page,{x:80,y:80});
-  await page.getByRole('button',{name:'Прямоугольник'}).click();
+  await page.getByRole('button',{name:'Прямоугольник',exact:true}).click();
   await worldClick(page,{x:110,y:80});
   await worldClick(page,{x:220,y:160});
   await expect(page.getByText('Добавлено объектов: 1')).toBeVisible();
