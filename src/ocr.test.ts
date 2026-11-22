@@ -2,6 +2,7 @@ import {describe,it,expect,vi} from 'vitest';
 import {createWorker} from 'tesseract.js';
 import {preloadOcrModels,recognizeText} from './ocr';
 import {newProject} from './model';
+import {planOcrTiles} from './ocrTiles';
 
 vi.mock('tesseract.js',()=>({
   createWorker:vi.fn(),
@@ -36,6 +37,40 @@ describe('browser OCR language pack preparation',()=>{
       expect(result.entities.every(e=>!e.verified)).toBe(true);
       expect(terminate).toHaveBeenCalledOnce();
     }finally{Object.defineProperty(globalThis,'Image',{configurable:true,value:originalImage});}
+  });
+  it('runs a 3500x2500 page in bounded canvas tiles without losing coordinate offsets',async ()=>{
+    const originalImage=globalThis.Image,originalDocument=globalThis.document;
+    class LargeImage {
+      naturalWidth=3500;naturalHeight=2500;
+      src='';
+      async decode(){return;}
+    }
+    const canvas={width:0,height:0,getContext:()=>({drawImage:vi.fn()})};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:LargeImage});
+    Object.defineProperty(globalThis,'document',{configurable:true,
+      value:{createElement:()=>canvas}});
+    const recognize=vi.fn().mockResolvedValue({data:{text:'R20',blocks:[{paragraphs:[{lines:[{
+      text:'R20',confidence:91,bbox:{x0:30,y0:30,x1:80,y1:50}
+    }]}]}]}});
+    const terminate=vi.fn().mockResolvedValue(undefined);
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate,setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];
+      sheet.image='data:image/png;base64,fixture';sheet.width=3500;sheet.height=2500;
+      const tiles=planOcrTiles(3500,2500);
+      expect(tiles.length).toBeGreaterThan(1);
+      const out=await recognizeText(sheet);
+      expect(recognize).toHaveBeenCalledTimes(tiles.length);
+      expect(out.entities).toHaveLength(tiles.length);
+      expect(out.entities.map(e=>e.points[0].x)).toContain(30);
+      expect(out.entities.some(e=>e.points[0].x>1400)).toBe(true);
+      expect(out.entities.every(e=>e.confidence===.91&&!e.verified)).toBe(true);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:originalImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:originalDocument});
+    }
   });
   it('does not create a worker or emit candidates when already cancelled',async ()=>{
     const controller=new AbortController();controller.abort();
