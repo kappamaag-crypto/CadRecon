@@ -31,6 +31,21 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(recognizeText).not.toHaveBeenCalled();
     expect(result.note).toContain('Исходный чертёж не отправлялся');
   });
+  it('can explicitly trace a mixed vector+raster PDF without losing native geometry',async ()=>{
+    const sheet=newProject().sheets[0];sheet.sourceType='pdf';sheet.image='data:image/png;base64,fixture';
+    const native=entity('line',[{x:0,y:0},{x:100,y:0}],'PDF векторы','pdf');
+    const label=entity('text',[{x:10,y:20}],'Текст','pdf');label.text='5000';
+    sheet.entities=[native,label];
+    vi.mocked(traceImage).mockResolvedValue({entities:[line(0,30,100,30)],note:'scan'});
+    vi.mocked(recognizeText).mockResolvedValue({entities:[ocr('R20',20,20)],text:'R20'});
+    const result=await recognizeBrowserAccurate(sheet,undefined,undefined,'hybrid');
+    expect(traceImage).toHaveBeenCalledOnce();
+    expect(recognizeText).toHaveBeenCalledOnce();
+    expect(result.entities.filter(e=>e.kind==='line')).toHaveLength(1);
+    expect(result.entities.some(e=>e.kind==='text'&&e.text==='R20')).toBe(true);
+    expect(result.warnings.join(' ')).toContain('Гибридный PDF');
+    expect(sheet.entities).toHaveLength(2);
+  });
   it('traces and OCRs scanned pages locally with unknown mm scale',async ()=>{
     const sheet=newProject().sheets[0];
     sheet.sourceType='image';
