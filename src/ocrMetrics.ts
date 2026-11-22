@@ -44,12 +44,18 @@ export function evaluateOcrAccuracy(
   if(groundTruth.length>2000||predicted.length>2000)
     throw new Error('OCR metric: maximum 2000 labels per run');
   if([...groundTruth,...predicted].some(x=>![x.x0,x.y0,x.x1,x.y1].every(Number.isFinite)||
-    x.x1<=x.x0||x.y1<=x.y0||x.text.length>1000))
+    x.x1<=x.x0||x.y1<=x.y0||x.text.length>400))
     throw new Error('OCR metric: malformed bbox or oversized text');
+  // Keep user-imported benchmark data from exhausting a browser tab.
+  const totalChars=[...groundTruth,...predicted].reduce((s,r)=>s+r.text.length,0);
+  if(totalChars>30000)throw new Error('OCR metric: more than 30000 annotation characters');
   const pairs:Array<{i:number;j:number;score:number}>=[];
   for(let i=0;i<groundTruth.length;i++)for(let j=0;j<predicted.length;j++){
     const score=iou(groundTruth[i],predicted[j]);
-    if(score>=threshold)pairs.push({i,j,score});
+    if(score>=threshold){
+      if(pairs.length>=30000)throw new Error('OCR metric: too many overlapping ground-truth boxes');
+      pairs.push({i,j,score});
+    }
   }
   pairs.sort((a,b)=>b.score-a.score||a.i-b.i||a.j-b.j);
   const refs=new Set<number>(),used=new Set<number>();

@@ -37,5 +37,8 @@ describe('Independently annotated OCR quality reporting',()=>{
    expect(()=>evaluateOcrAccuracy([],[p('A',0)],2)).toThrow();
    expect(()=>evaluateOcrAccuracy(Array.from({length:2001},(_,i)=>g(String(i),'x',i)),[])).toThrow();
    expect(()=>evaluateOcrAccuracy([{...g('1','A',0),x0:NaN}],[])).toThrow();
+   expect(()=>evaluateOcrAccuracy([g('1','x'.repeat(401),0)],[])).toThrow();
+   const crowded=Array.from({length:180},(_,i)=>g(String(i),'A',0));
+   expect(()=>evaluateOcrAccuracy(crowded,crowded)).toThrow(/overlapping/);
  });
 });
