@@ -74,6 +74,43 @@ function circleFromQuarterCurves(parts:Segment[]):{center:Point;radius:number}|n
   return {center,radius};
 }
 
+/** Distinguish a true four-cubic PDF ellipse from a generic 4-curve loop.
+ * PDF approximates elliptical quarters with four cubic curves. Accept only
+ * opposite, perpendicular axes and low normalized radial residual. Under
+ * skew/shear or arbitrary paths retain original editable Bezier segments.
+ */
+function ellipseFromQuarterCurves(parts:Segment[]):{center:Point;radius:number;axisRatio:number;majorTip:Point}|null{
+  if(parts.length!==4||parts.some(s=>s.kind!=='bezier'))return null;
+  const paths=parts.map(s=>s.points);
+  for(let i=0;i<4;i++)if(!near(paths[i][3],paths[(i+1)%4][0]))return null;
+  const verts=paths.map(s=>s[0]);
+  const center={x:verts.reduce((sum,p)=>sum+p.x,0)/4,
+    y:verts.reduce((sum,p)=>sum+p.y,0)/4};
+  const u={x:verts[0].x-center.x,y:verts[0].y-center.y},
+    v={x:verts[1].x-center.x,y:verts[1].y-center.y};
+  const lu=Math.hypot(u.x,u.y),lv=Math.hypot(v.x,v.y);
+  const major=Math.max(lu,lv),minor=Math.min(lu,lv);
+  if(!Number.isFinite(major)||major<=1e-6||minor/major<.02||minor/major>.985)return null;
+  const oppositeTol=Math.max(1e-4,major*.003);
+  if(dist({x:verts[0].x+verts[2].x,y:verts[0].y+verts[2].y},
+    {x:2*center.x,y:2*center.y})>oppositeTol||
+    dist({x:verts[1].x+verts[3].x,y:verts[1].y+verts[3].y},
+      {x:2*center.x,y:2*center.y})>oppositeTol)return null;
+  if(Math.abs(u.x*v.x+u.y*v.y)/(lu*lv)>.012)return null;
+  const axis=lu>=lv?u:v,other=lu>=lv?v:u;
+  const ux=axis.x/major,uy=axis.y/major,
+    vx=other.x/minor,vy=other.y/minor;
+  const ratio=minor/major;
+  // Normalized conic ellipse equation x^2/a^2+y^2/b^2=1;
+  // this rejects rounded rectangles and arbitrary cubic loops.
+  for(const segment of paths)for(const t of [0,.125,.25,.375,.5,.625,.75,.875,1]){
+    const p=bezierPoint(segment,t),dx=p.x-center.x,dy=p.y-center.y;
+    const s=(dx*ux+dy*uy)/major,r=(dx*vx+dy*vy)/minor;
+    if(!Number.isFinite(s)||!Number.isFinite(r)||Math.abs(s*s+r*r-1)>.004)return null;
+  }
+  return {center,radius:major,axisRatio:ratio,majorTip:{x:center.x+axis.x,y:center.y+axis.y}};
+}
+
 type ClipRect={x0:number;y0:number;x1:number;y1:number};
 function clipStraightLine(a:Point,b:Point,clip:ClipRect):Point[]|null{
   const dx=b.x-a.x,dy=b.y-a.y;
@@ -212,6 +249,11 @@ export function extractPdfPaths(list:OpList,vp:Viewport,ops:Ops,limit=30000):Pdf
       if(circular){
         const e=entity('circle',[circular.center],'PDF векторы','pdf');
         e.center=circular.center;e.radius=circular.radius;push(e,i);
+      }else if(ellipseFromQuarterCurves(segments)){
+        const ellipse=ellipseFromQuarterCurves(segments)!;
+        const e=entity('ellipse',[ellipse.center,ellipse.majorTip],'PDF векторы','pdf');
+        e.center=ellipse.center;e.radius=ellipse.radius;e.axisRatio=ellipse.axisRatio;
+        push(e,i);
       }else if(segments.length>=3&&segments.every(s=>s.kind==='line')
         &&near(segments[0].points[0],segments[segments.length-1].points[1])){
         const pts=segments.map(s=>s.points[0]);

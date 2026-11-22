@@ -54,6 +54,36 @@ describe('W1 PDF.js 5.x packed path decoding',()=>{
     expect(out.entities[0].radius).toBeCloseTo(40,2);
     expect(out.entities[0].center).toEqual({x:325,y:215});
   });
+  it('extracts four cubic quarters of a noncircular PDF ellipse as native editable ELLIPSE',()=>{
+    const x=180,y=120,rx=80,ry=32;
+    const packed=[0,x+rx,y,
+      2,x+rx,y+k*ry,x+k*rx,y+ry,x,y+ry,
+      2,x-k*rx,y+ry,x-rx,y+k*ry,x-rx,y,
+      2,x-rx,y-k*ry,x-k*rx,y-ry,x,y-ry,
+      2,x+k*rx,y-ry,x+rx,y-k*ry,x+rx,y,4];
+    const out=extract([91],[[20,[Float32Array.from(packed)],null]]);
+    expect(out.entities).toHaveLength(1);
+    const ell=out.entities[0];
+    expect(ell.kind).toBe('ellipse');
+    expect(ell.center).toEqual({x:180,y:230});
+    expect(ell.radius).toBeCloseTo(80,2);
+    expect(ell.axisRatio).toBeCloseTo(.4,3);
+    expect(ell.verified).toBe(false);
+    const project=newProject();project.sheets[0].entities=out.entities;
+    const dx=createDxf(project.sheets[0],project);
+    expect(dx).toContain('\n0\nELLIPSE\n');
+    expect(dx).toContain('\n40\n0.4\n');
+  });
+  it('keeps arbitrary four Bezier loop as splines, not a fabricated ellipse',()=>{
+    const packed=[0,0,0,
+      2,10,0,50,0,60,0,
+      2,70,10,70,20,60,30,
+      2,40,40,20,40,0,30,
+      2,-10,20,-10,10,0,0,4];
+    const out=extract([91],[[20,[Float32Array.from(packed)],null]]);
+    expect(out.entities.every(e=>e.kind!=='ellipse')).toBe(true);
+    expect(out.entities.some(e=>e.kind==='bezier')).toBe(true);
+  });
   it('preserves noncircular cubic as editable DXF SPLINE with 4 control points',()=>{
     const packed=[0,0,0,2,20,20,40,20,60,0];
     const out=extract([91],[[20,[Float32Array.from(packed)],null]]);
