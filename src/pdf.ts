@@ -4,6 +4,7 @@ import * as UTIF from 'utif';
 import {entity,newId,type Entity,type Sheet} from './model';
 import {repairPdfText,suspiciousText} from './textRepair';
 import {extractPdfPaths} from './pdfPaths';
+import {preservePdfRaster} from './pdfRasterPolicy';
 pdfjs.GlobalWorkerOptions.workerSrc=pdfWorker;
 async function imagePages(file:File,onProgress?:(s:string)=>void):Promise<Sheet[]>{
   // Multi-page TIFF is common for scanner archives; never silently discard
@@ -70,6 +71,15 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
       if(!Number.isFinite(initial.width)||!Number.isFinite(initial.height)||initial.width<=0||initial.height<=0)throw new Error('Недопустимые размеры страницы PDF');
       const list=await page.getOperatorList();
       const paths=list.fnArray.filter(fn=>fn===pdfjs.OPS.constructPath).length;
+      // A PDF with one native line and a large embedded scan is *mixed*.
+      // Presence of a native path alone must not hide a raster-quality warning.
+      const codes=pdfjs.OPS as unknown as Record<string,number>;
+      const imageCodes=new Set([
+        'paintImageXObject','paintInlineImageXObject','paintImageMaskXObject',
+        'paintJpegXObject','paintImageXObjectRepeat','paintInlineImageXObjectGroup',
+        'paintImageMaskXObjectRepeat',
+      ].map(name=>codes[name]).filter(Number.isFinite));
+      const embeddedImages=Array.from(list.fnArray).filter(fn=>imageCodes.has(fn)).length;
       const longest=paths>25?3200:4800;
       const pixelLimit=22000000;
       // A huge PDF MediaBox must be allowed to render below 1x; forcing
@@ -106,9 +116,15 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
         entities.push(e);
       }
       const warnings=[...vectorResult.warnings];
+      if(embeddedImages)warnings.push('В PDF обнаружено '+embeddedImages+
+        ' растровых графических элементов. Если они содержат линии/надписи чертежа, используйте «Гибридный» режим: даже наличие отдельных PDF-векторов НЕ означает, что весь чертёж цифровой.');
+      // Do not turn a crisp PDF-sourced scan into lossy JPEG before OCR.
+      // Fallback is explicit if lossless data would exceed client memory.
+      const raster=preservePdfRaster(canvas,pixels);
+      if(raster.warning)warnings.push(raster.warning);
       if(scale<.999)warnings.push('Масштаб растровой подложки PDF уменьшен до '+Number(scale.toFixed(4))+' из-за больших размеров страницы. Векторные объекты сохраняют координаты листа, но мелкие детали подложки могут быть утрачены.');
       if(pageIndex===40&&pdf.numPages>40)warnings.push('В PDF '+pdf.numPages+' страниц; импортированы только первые 40. Оставшиеся НЕ обработаны.');
-      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.985),entities,calibrated:false,importWarnings:warnings,sourceType:'pdf'});
+      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:raster.image,entities,calibrated:false,importWarnings:warnings,sourceType:'pdf'});
       page.cleanup();
     }
     return sheets;
