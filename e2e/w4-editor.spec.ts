@@ -349,3 +349,36 @@ test('W4 precise coordinate LINE is created through the searchable CAD sidebar w
   await page.getByRole('button',{name:/Отмена/}).click();
   expect((await exportProject(page)).sheets[0].entities).toHaveLength(0);
 });
+
+
+test('W4 two intersecting lines produce a non-associative angular ARC and editable degree text in one Undo',async ({page})=>{
+  const project=newProject(),s=project.sheets[0];s.width=300;s.height=200;
+  s.entities=[entity('line',[{x:150,y:40},{x:150,y:160}]),
+    entity('line',[{x:100,y:100},{x:200,y:100}])];
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Угловой размер по двум LINE (дуга и текст)'}).click();
+  await worldClick(page,{x:150,y:65});
+  await worldClick(page,{x:185,y:100});
+  const data=await exportProject(page);
+  expect(data.sheets[0].entities.filter(e=>e.kind==='arc')).toHaveLength(1);
+  const label=data.sheets[0].entities.find(e=>e.kind==='text');
+  expect(label?.text).toBe('90°');
+  expect(label?.verified).toBe(false);
+  expect(label?.reason).toContain('параметрическому');
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(2);
+});
+test('W4 chain dimensions are suggestions, not automatic mm when polyline uncalibrated',async ({page})=>{
+  const project=newProject(),s=project.sheets[0];s.width=300;s.height=200;
+  s.entities=[entity('polyline',[{x:50,y:100},{x:120,y:100},{x:180,y:100}])];
+  await putProject(page,project);
+  await worldClick(page,{x:80,y:100});
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
+  page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:'↔ Цепные размеры по вершинам'}).click();
+  const data=await exportProject(page);
+  const dims=data.sheets[0].entities.filter(e=>e.kind==='dimension');
+  expect(dims).toHaveLength(2);
+  expect(dims.map(e=>e.text)).toEqual(['?','?']);
+  expect(dims.every(e=>!e.verified)).toBe(true);
+});
