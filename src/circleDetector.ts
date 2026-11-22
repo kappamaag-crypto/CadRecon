@@ -60,19 +60,29 @@ export function detectOverlappedCircles(
       }
     }
   }
+  // Stroke gradients and the radius sampling grid can place strong votes
+  // around (not exactly at) the true center. A local 7x7 vote aggregation
+  // recovers the center without guessing dimensions or widening final fits.
+  const smoothed=new Uint32Array(counts.length);
+  for(let y=3;y<ch-3;y++)for(let x=3;x<cw-3;x++){
+    let votes=0;
+    for(let dy=-3;dy<=3;dy++)for(let dx=-3;dx<=3;dx++)
+      votes+=counts[(y+dy)*cw+x+dx];
+    smoothed[y*cw+x]=votes;
+  }
   const peaks:Array<{x:number;y:number;votes:number}>=[];
-  for(let y=2;y<ch-2;y++)for(let x=2;x<cw-2;x++){
-    const at=y*cw+x,votes=counts[at];
-    if(votes<Math.max(14,Math.floor(samples.length*.006)))continue;
+  for(let y=4;y<ch-4;y++)for(let x=4;x<cw-4;x++){
+    const at=y*cw+x,votes=smoothed[at];
+    if(votes<Math.max(70,Math.floor(samples.length*.06)))continue;
     let maximum=true;
     for(let dy=-1;dy<=1&&maximum;dy++)for(let dx=-1;dx<=1;dx++){
       if(!dx&&!dy)continue;
-      if(counts[(y+dy)*cw+x+dx]>votes){maximum=false;break;}
+      if(smoothed[(y+dy)*cw+x+dx]>votes){maximum=false;break;}
     }
     if(maximum)peaks.push({x,y,votes});
   }
   peaks.sort((a,b)=>b.votes-a.votes);
-  if(debug){debug.centerPeaks=peaks.length;debug.maxCenterVotes=Math.max(...counts);debug.topCenters=peaks.slice(0,12).map(p=>({x:(p.x+.5)*cell,y:(p.y+.5)*cell,votes:p.votes}));debug.maxCoverage=0;}
+  if(debug){debug.centerPeaks=peaks.length;debug.maxCenterVotes=Math.max(...smoothed);debug.topCenters=peaks.slice(0,12).map(p=>({x:(p.x+.5)*cell,y:(p.y+.5)*cell,votes:p.votes}));debug.maxCoverage=0;}
   const output:CircleProposal[]=[];
   // Confirm candidate using 48 independent angular arcs. A coincident
   // straight line or a small disconnected arc cannot imitate a full circle.
