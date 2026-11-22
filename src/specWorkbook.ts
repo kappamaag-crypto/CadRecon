@@ -83,7 +83,7 @@ function parseXml(bytes:Uint8Array):Document{
   const xml=decoder.decode(bytes);
   // OOXML does not require DTD. Reject entity expansion and external resource
   // declarations rather than parsing a potentially hostile Excel document.
-  if(/<!\\s*(?:DOCTYPE|ENTITY)/i.test(xml))throw new Error('Excel: запрещены DTD и XML-сущности');
+  if(/<!\s*(?:DOCTYPE|ENTITY)/i.test(xml))throw new Error('Excel: запрещены DTD и XML-сущности');
   const doc=new DOMParser().parseFromString(xml,'application/xml');
   if(doc.getElementsByTagName('parsererror').length)
     throw new Error('Excel: повреждённый XML');
