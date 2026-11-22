@@ -40,6 +40,7 @@ function table(e:Entity,layer:string){
 function entityDxf(e:Entity){
   const layer=e.layer,pts=e.points;
   switch(e.kind){
+    case 'point':return pts.length?emit(0,'POINT',100,'AcDbEntity',8,layer,100,'AcDbPoint')+v(pts[0]):'';
     case 'line':case 'axis':return pts.length>=2?dxfLine(pts[0],pts[1],layer,e.kind==='axis'?'CENTER':''):'';
     case 'polyline':return polygon(pts,layer,!!e.closed);
     case 'bezier':return cubicSpline(pts,layer);
