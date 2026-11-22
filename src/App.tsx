@@ -7,8 +7,9 @@ import {createZip,downloadZip} from './zip';
 import {createBackup,downloadFile,exportProject,importProject,loadProject,listBackups,restoreBackup,saveProject} from './storage';
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
-import {recognizeText} from './ocr';
-import {recognizeAdvanced,validateAdvancedEndpoint} from './advanced';
+import {recognizeText,preloadOcrModels} from './ocr';
+import {recognizeBrowserAccurate} from './browserAccurate';
+import {validateAdvancedEndpoint} from './advanced';
 import {recognizeOnline} from './online';
 import type {OperationResult} from './cadOperations';
 import {repairPdfText} from './textRepair';
@@ -36,8 +37,8 @@ export default function App(){
  const [project,setProject]=useState<CadProject>(newProject);
  const [sheetIndex,setSheetIndex]=useState(0),[tool,setTool]=useState<Tool>('select'),[selected,setSelected]=useState<string|null>(null),[panel,setPanel]=useState<Panel>('tools');
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
- const [advancedUrl,setAdvancedUrl]=useState('http://127.0.0.1:8765'),[advancedToken,setAdvancedToken]=useState('');
- const [onlineUrl,setOnlineUrl]=useState(''),[onlineToken,setOnlineToken]=useState('');
+ const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
+ const [modelsReady,setModelsReady]=useState(false);
  const onlineController=useRef<AbortController|null>(null);
  const [source,setSource]=useState(true),[compare,setCompare]=useState(false),[snap,setSnap]=useState(true),[grid,setGrid]=useState(false),[busy,setBusy]=useState(''),[status,setStatus]=useState('Загрузите PDF или скан, чтобы начать.'),[ocrText,setOcrText]=useState('');
  const [backups,setBackups]=useState<{key:string;time:number;name:string}[]>([]),[loaded,setLoaded]=useState(false);
@@ -69,37 +70,42 @@ export default function App(){
  }catch(e){setStatus('Ошибка импорта: '+String(e));}finally{setBusy('');if(input.current)input.current.value='';}}
  async function handleProject(files:FileList|null){if(!files?.length)return;setBusy('Открытие проекта…');try{const p=await importProject(files[0]);await createBackup(project);setProject(p);undo.current=[];redo.current=[];setSheetIndex(0);setSelected(null);setStatus('Проект открыт: '+p.name);}catch(e){setStatus('Ошибка проекта: '+String(e));}finally{setBusy('');if(jsonInput.current)jsonInput.current.value='';}}
  async function vectorize(){setBusy('Обработка скана в полном разрешении…');try{const r=await traceImage(sheet,12,setBusy,'detailed');addEntities(r.entities);setStatus(r.note);}catch(e){setStatus('Обводка: '+String(e));}finally{setBusy('');}}
- async function advancedProcessing(){
-  if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
-  let url:string;
-  try{url=validateAdvancedEndpoint(advancedUrl);}catch(e){setStatus('Адрес сервиса: '+e);return;}
-  if(!window.confirm('Текущий лист будет передан в выбранный OCR-сервис: '+url+
-    '\nДля удалённого сервера это выход за пределы браузера. Продолжить?'))return;
-  setBusy('PaddleOCR + OpenCV: распознавание на выбранном компьютере…');
-  try{
-    const result=await recognizeAdvanced(sheet,url,advancedToken);
-    addEntities(result.entities);setStatus(result.note);setPanel('recognition');
-  }catch(e){setStatus('Усиленное распознавание не выполнено: '+String(e)+
-    '. Проверьте запуск локального backend и доступность CORS/HTTPS.');}
-  finally{setBusy('');}
+ async function prepareBrowserOcr(){
+   setBusy('Загрузка OCR-моделей RU/EN на компьютер пользователя…');
+   try{
+     await preloadOcrModels(setBusy);
+     setModelsReady(true);
+     setStatus('Языковые модели RU/EN готовы в браузере. Сохранение на будущие сеансы зависит от кэша браузера.');
+   }catch(e){setStatus('Не удалось загрузить языковые модели OCR: '+String(e)+'. Проверьте интернет и настройки браузера.');}
+   finally{setBusy('');}
+ }
+ async function browserAccurateProcessing(){
+   if(!sheet.image){setStatus('Сначала загрузите PDF или скан.');return;}
+   setBusy('Точная реконструкция непосредственно в браузере…');
+   try{
+     const result=await recognizeBrowserAccurate(sheet,setBusy);
+     if(result.entities.length)addEntities(result.entities);
+     if(result.ocrText)setOcrText(result.ocrText);
+     setPanel('recognition');
+     setStatus(result.note+(result.warnings.length?' Предупреждения: '+result.warnings.slice(0,2).join('; '):''));
+   }catch(e){setStatus('Браузерное распознавание: '+String(e)+'. Попробуйте обводку и OCR по отдельности.');}
+   finally{setBusy('');}
  }
  async function onlineProcessing(){
-  if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
-  let url:string;
-  try{url=validateAdvancedEndpoint(onlineUrl);}catch(e){setStatus('Online Accurate: адрес сервера: '+e);return;}
-  if(!onlineToken.trim()){setStatus('Online Accurate: укажите токен сервера');return;}
-  if(!window.confirm('Текущий чертёж будет передан на отдельно запущенный сервер: '+url+
-      '\nЭто экспериментальный однопользовательский режим; он не является готовым облачным SaaS. '
-      +'Файл не должен содержать закрытую документацию без разрешения владельца. Продолжить?'))return;
-  const controller=new AbortController();
-  onlineController.current=controller;
-  setBusy('Online Accurate: отправка на сервер...');
-  try{
-    const result=await recognizeOnline(sheet,url,onlineToken,setBusy,controller.signal);
-    addEntities(result.entities);setStatus(result.note);
-    setPanel('recognition');
-  }catch(e){setStatus('Online Accurate: '+String(e)+'. Проверьте сервер, HTTPS, токен и параметры обработки.');}
-  finally{onlineController.current=null;setBusy('');}
+   if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
+   let url:string;
+   try{url=validateAdvancedEndpoint(onlineUrl);}catch(e){setStatus('Ultra: '+e);return;}
+   if(!onlineToken.trim()){setStatus('Ultra: введите токен локального модуля.');return;}
+   if(!window.confirm('Усиленная обработка на ЭТОМ компьютере: '+url+
+     '\nЭто дополнительный локальный пакет, который пользователь устанавливает самостоятельно. '
+     +'Внешний сервер CadRecon не используется. Продолжить?'))return;
+   const controller=new AbortController();onlineController.current=controller;
+   setBusy('Ultra локально: обработка на этом компьютере…');
+   try{
+     const result=await recognizeOnline(sheet,url,onlineToken,setBusy,controller.signal);
+     addEntities(result.entities);setStatus(result.note);setPanel('recognition');
+   }catch(e){setStatus('Ultra локально: '+String(e)+'. Проверьте установку локального пакета, токен и доступ к 127.0.0.1.');}
+   finally{onlineController.current=null;setBusy('');}
  }
  function repairImportedPdfText(){
   let changed=0;
@@ -167,7 +173,7 @@ export default function App(){
  const counts=useMemo(()=>sheet.entities.reduce((acc,e)=>(acc[e.kind]=(acc[e.kind]||0)+1,acc),{} as Record<string,number>),[sheet]);
  return <div className="app">
   <header className="topbar">
-    <div className="brand"><span className="brandicon">⌗</span><div><strong>CadRecon</strong><small>ИНЖЕНЕРНЫЙ 2D РЕДАКТОР</small></div></div>
+    <div className="brand"><span className="brandicon">⌗</span><div><strong>CadRecon</strong><small>PDF → CAD · ВАШ БРАУЗЕР</small></div></div>
     <div className="project-name"><input aria-label="Название проекта" title="Название проекта" value={project.name} onChange={e=>apply(p=>({...p,name:e.target.value}))}/><span className="save-mark">● локально</span></div>
     <div className="top-actions">
       <input ref={input} type="file" accept=".pdf,.png,.jpg,.jpeg,.tif,.tiff,application/pdf,image/*" multiple hidden onChange={e=>handleDrawing(e.target.files)}/>
@@ -205,29 +211,35 @@ export default function App(){
       </label>
       <label className="selector-label">Значение / надпись<input value={symbolText} onChange={e=>setSymbolText(e.target.value)}/></label>
       <button className="action" onClick={()=>setTool('eskd')}>⌗ Установить обозначение</button>
-      <h3>Обработка документа</h3><p className="muted">Векторный PDF импортируется со штрихами. Для скана доступны автоматическая обводка и OCR; результат требует проверки.</p><div className="stack"><button className="action" onClick={vectorize} disabled={!sheet.image||!!busy}>⌁ Детальная обводка (исходное разрешение)</button>
-      <button className="action" onClick={repairImportedPdfText} disabled={!!busy}>АЯ Исправить кодировку PDF-текста</button><button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Объединить короткие линии</button><button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
-      <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button><button className="action" onClick={()=>setTool('calibrate')}>⊞ Калибровать по размеру</button><button className="action" onClick={()=>setTool('measure')}>↔ Измерить расстояние</button></div><h3>Усиленная модель распознавания</h3>
-      <p className="muted">PaddleOCR PP-OCRv5 (русский) + OpenCV LSD/Hough на вашем ПК или сервере. Требуется отдельно запустить бесплатный Python-модуль. GitHub Pages сам по себе его не запускает.</p>
-      <label className="selector-label">Адрес локального или HTTPS-сервиса
-        <input aria-label="Адрес усиленного OCR-сервиса" value={advancedUrl} onChange={e=>setAdvancedUrl(e.target.value)} placeholder="http://127.0.0.1:8765"/>
-      </label>
-      <label className="selector-label">Токен доступа (не сохраняется)
-        <input aria-label="Токен усиленного OCR" type="password" autoComplete="off" value={advancedToken} onChange={e=>setAdvancedToken(e.target.value)}/>
-      </label>
-      <button className="action" disabled={!sheet.image||!!busy} onClick={advancedProcessing}>◈ Распознать через PaddleOCR + OpenCV</button>
-      <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/backend/README.md" target="_blank" rel="noreferrer">Инструкция по установке локального сервера</a></p>
-      <h3>Online Accurate — серверный пилот</h3>
-      <p className="muted">Обработка с очередью и возможностью удаления результата. Сервер нужно развернуть отдельно; это не публичная облачная услуга. Отправка листа — только после подтверждения.</p>
-      <label className="selector-label">HTTPS адрес сервера
-        <input aria-label="Адрес Online Accurate" value={onlineUrl} onChange={e=>setOnlineUrl(e.target.value)} placeholder="https://ваш-сервер"/>
-      </label>
-      <label className="selector-label">Токен Online Accurate (не сохраняется)
-        <input aria-label="Токен Online Accurate" type="password" autoComplete="off" value={onlineToken} onChange={e=>setOnlineToken(e.target.value)}/>
-      </label>
-      <button className="action" disabled={!sheet.image||!!busy||!onlineUrl||!onlineToken} onClick={onlineProcessing}>◈ Online Accurate: распознать лист</button>
-      {onlineController.current&&<button className="action" onClick={()=>onlineController.current?.abort()}>× Отменить онлайн-задачу</button>}
-      <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/backend/ONLINE_PILOT.md" target="_blank" rel="noreferrer">Установка и ограничения серверного пилота</a></p>
+      <h3>Точная обработка — прямо в браузере</h3>
+      <p className="muted">GitHub Pages — единственный хостинг. Файл чертежа не передаётся на сервер. Обработка PDF, сканов, OCR и CAD выполняется на вашем устройстве. Для OCR браузер при первом запуске скачает языковые модели.</p>
+      <button className="action primary" onClick={browserAccurateProcessing} disabled={!sheet.image||!!busy}>◎ Точное распознавание в браузере</button>
+      <p className="muted">Цифровой PDF: исходные векторы без повторной растровой обводки. Скан: детальная обводка + OCR RU/EN + проверка размерных цепочек и ЕСКД. Результат необходимо проверить по оригиналу.</p>
+      <button className="action" onClick={prepareBrowserOcr} disabled={!!busy}>↓ Подготовить языковые модели OCR (RU/EN)</button>
+      <p className="muted">{modelsReady?'✓ Языковые модели подготовлены для текущего сеанса.':'Дополнительные пакеты скачиваются на устройство пользователя при необходимости; использование после очистки кэша потребует повторной загрузки.'}</p>
+      <h3>Отдельные инструменты</h3>
+      <div className="stack">
+        <button className="action" onClick={vectorize} disabled={!sheet.image||!!busy}>⌁ Детальная обводка (исходное разрешение)</button>
+        <button className="action" onClick={runOcr} disabled={!sheet.image||!!busy}>Aa Распознать текст (RU/EN)</button>
+        <button className="action" onClick={runSemanticRecognition} disabled={!!busy}>▤ Восстановить размерные цепочки и ЕСКД</button>
+        <button className="action" onClick={repairImportedPdfText} disabled={!!busy}>АЯ Исправить кодировку PDF-текста</button>
+        <button className="action" onClick={mergeLines} disabled={!!busy}>⇄ Объединить короткие линии</button>
+        <button className="action" onClick={()=>setTool('calibrate')}>⊞ Калибровать по размеру</button>
+        <button className="action" onClick={()=>setTool('measure')}>↔ Измерить расстояние</button>
+      </div>
+      <details className="local-ultra">
+        <summary>Дополнительно: Ultra на своём компьютере (необязательно)</summary>
+        <p className="muted">Для тяжёлых сканов можно самостоятельно установить дополнительный пакет PaddleOCR + OpenCV на этот же ПК. Он работает на localhost и не требует хостинга или платного сервера. Основная онлайн-версия работает без него.</p>
+        <label className="selector-label">Локальный адрес Ultra
+          <input aria-label="Локальный адрес Ultra" value={onlineUrl} onChange={e=>setOnlineUrl(e.target.value)} placeholder="http://127.0.0.1:8766"/>
+        </label>
+        <label className="selector-label">Токен Ultra (из локального установщика)
+          <input aria-label="Токен Ultra" type="password" autoComplete="off" value={onlineToken} onChange={e=>setOnlineToken(e.target.value)}/>
+        </label>
+        <button className="action" disabled={!sheet.image||!!busy||!onlineToken} onClick={onlineProcessing}>◈ Распознать локальным Ultra</button>
+        {onlineController.current&&<button className="action" onClick={()=>onlineController.current?.abort()}>× Отменить локальную задачу</button>}
+        <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/docs/ULTRA_WINDOWS_INSTALLER.md" target="_blank" rel="noreferrer">Как установить Ultra на свой ПК</a></p>
+      </details>
       <h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
