@@ -185,14 +185,23 @@ export default function App(){
  }
  function exportAllDxf(){
    const uncalibrated=project.sheets.filter(s=>!s.calibrated);
-   if(uncalibrated.length&&!window.confirm('Есть некалиброванные листы: '+uncalibrated.length+'. Выгрузить их с условными единицами?'))return;
+   const unverified=project.sheets.reduce((n,s)=>n+s.entities.filter(e=>!e.verified).length,0);
+   const warnings:string[]=[];
+   if(uncalibrated.length)warnings.push('Некалиброванных листов: '+uncalibrated.length+'. Экспорт с условными единицами.');
+   if(unverified)warnings.push('Непроверенных геометрических, текстовых и ЕСКД-объектов: '+unverified+'. Инженерная точность не подтверждена.');
+   if(warnings.length&&!window.confirm(warnings.join('\n')+'\nВыгрузить DXF для проверки в CAD?'))return;
    try{
      const files=project.sheets.map((s,i)=>({name:String(i+1).padStart(2,'0')+'_'+slug(s.name)+'.dxf',data:createDxf(s,project)}));
      downloadZip(createZip(files),slug(project.name)+'_all_DXF.zip');
      setStatus('Архив '+files.length+' DXF-листов сохранён');
    }catch(e){setStatus('Ошибка пакетного DXF: '+e);}
  }
- function exportDxf(){if(!sheet.calibrated&&!window.confirm('Масштаб листа не подтверждён. Экспортировать DXF с условными единицами?'))return;
+ function exportDxf(){
+  const unverified=sheet.entities.filter(e=>!e.verified).length;
+  const warnings:string[]=[];
+  if(!sheet.calibrated)warnings.push('Масштаб листа не подтверждён: DXF будет экспортирован в условных единицах.');
+  if(unverified)warnings.push('Непроверенных объектов: '+unverified+'. Проверьте их по оригиналу и контрольным размерам.');
+  if(warnings.length&&!window.confirm(warnings.join('\n')+'\nПродолжить экспорт DXF?'))return;
   try{downloadFile(createDxf(sheet,project),slug(project.name)+'_'+slug(sheet.name)+'.dxf','application/dxf');setStatus('DXF экспортирован. Проверьте его в целевой CAD-системе.');}catch(e){setStatus('Ошибка DXF: '+e);}}
  async function showBackups(){try{setBackups(await listBackups());setPanel('backups');}catch(e){setStatus('Резервные копии: '+e);}}
  async function restore(key:string){if(!window.confirm('Восстановить эту копию? Текущий проект предварительно будет сохранён.'))return;try{await createBackup(project);const p=await restoreBackup(key);setProject(p);setSheetIndex(0);setSelected(null);setStatus('Резервная копия восстановлена');}catch(e){setStatus('Восстановление: '+e);}}
