@@ -91,6 +91,9 @@ function Setup {
       & $python -m pip install --disable-pip-version-check -r (Join-Path $appDir "backend\requirements.txt")
     } else {
       & $python -m pip install --disable-pip-version-check -r (Join-Path $appDir "backend\requirements-test.txt")
+      if ($LASTEXITCODE -eq 0) {
+        & $python -m pip install --disable-pip-version-check "uvicorn>=0.32,<1"
+      }
     }
     if ($LASTEXITCODE -ne 0) { Stop-Setup "Python dependencies could not be installed." }
     & $python -c "import fastapi, uvicorn, cv2, numpy; print('Runtime imports: OK')"
