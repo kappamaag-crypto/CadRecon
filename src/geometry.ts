@@ -49,7 +49,7 @@ export function snapPoint(p:Point,entities:Entity[],tolerance:number,grid=0):Poi
 export function translateEntity(e:Entity,d:Point):Entity {return {...e,points:e.points.map(p=>add(p,d)),center:e.center?add(e.center,d):undefined};}
 export function scaleSheet(sheet:Sheet,factor:number):Sheet {
   if(!Number.isFinite(factor)||factor<=0)throw new Error('Неверный масштаб');
-  return {...sheet,width:sheet.width*factor,height:sheet.height*factor,calibrated:true,entities:sheet.entities.map(e=>({...e,points:e.points.map(p=>mul(p,factor)),center:e.center?mul(e.center,factor):undefined,radius:e.radius===undefined?undefined:e.radius*factor,size:e.size===undefined?undefined:e.size*factor,offset:e.offset===undefined?undefined:e.offset*factor,width:e.width===undefined?undefined:e.width*factor,height:e.height===undefined?undefined:e.height*factor,bbox:e.bbox?{x0:e.bbox.x0*factor,y0:e.bbox.y0*factor,x1:e.bbox.x1*factor,y1:e.bbox.y1*factor}:undefined}))};
+  return {...sheet,width:sheet.width*factor,height:sheet.height*factor,calibrated:true,entities:sheet.entities.map(e=>({...e,verified:false,reason:'Масштаб листа изменён: требуется повторная проверка геометрии',points:e.points.map(p=>mul(p,factor)),center:e.center?mul(e.center,factor):undefined,radius:e.radius===undefined?undefined:e.radius*factor,size:e.size===undefined?undefined:e.size*factor,offset:e.offset===undefined?undefined:e.offset*factor,width:e.width===undefined?undefined:e.width*factor,height:e.height===undefined?undefined:e.height*factor,bbox:e.bbox?{x0:e.bbox.x0*factor,y0:e.bbox.y0*factor,x1:e.bbox.x1*factor,y1:e.bbox.y1*factor}:undefined}))};
 }
 export function dimensionLength(e:Entity) {return e.points.length<2?0:dist(e.points[0],e.points[1]);}
 export interface AuditItem {severity:'warning'|'info';message:string;id?:string}
@@ -83,7 +83,7 @@ export function auditSheet(sheet:Sheet, project:CadProject):AuditItem[] {
   if(!issues.length)issues.push({severity:'info',message:'Базовые проверки пройдены. Для выпуска КМ/КМД необходима инженерная экспертиза.'});
   return issues;
 }
-export function measure(p:Point,q:Point) {return dist(p,q).toFixed(2)+' мм';}
+export function measure(p:Point,q:Point,calibrated=false) {return dist(p,q).toFixed(2)+(calibrated?' мм':' усл. ед. (масштаб не подтверждён)');}
 
 /** Merge only automatically imported, nearly collinear and contiguous LINE objects.
  * This is deliberately conservative and preserves all manual CAD geometry. */
