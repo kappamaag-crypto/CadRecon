@@ -8,7 +8,7 @@ function crc32(bytes:Uint8Array):number{
   for(const x of bytes){crc^=x;for(let j=0;j<8;j++)crc=(crc>>>1)^((crc&1)?0xedb88320:0);}
   return (crc^0xffffffff)>>>0;
 }
-interface ZipEntry {name:string;data:string;}
+interface ZipEntry {name:string;data:string|Uint8Array;}
 export function createZip(files:ZipEntry[]):Uint8Array{
   if(files.length>65535)throw new Error('Too many ZIP files');
   const parts:Uint8Array[]=[];const central:Uint8Array[]=[];let offset=0;
@@ -18,7 +18,7 @@ export function createZip(files:ZipEntry[]):Uint8Array{
     const relative=f.name.replace(/\\/g,'/').split('/').filter(x=>x&&x!=='.'&&x!=='..')
       .map(x=>x.replace(/[<>:"|?*\x00-\x1f]/g,'_')).join('/');
     if(!relative||relative.length>220)throw new Error('Invalid ZIP entry name');
-    const name=encoder.encode(relative),data=encoder.encode(f.data);
+    const name=encoder.encode(relative),data=typeof f.data==='string'?encoder.encode(f.data):f.data;
     const crc=crc32(data),local=new Uint8Array(30+name.length),lv=new DataView(local.buffer);
     u32(lv,0,0x04034b50);u16(lv,4,20);u16(lv,6,0x0800);u16(lv,8,0);u16(lv,10,0);u16(lv,12,0);
     u32(lv,14,crc);u32(lv,18,data.length);u32(lv,22,data.length);u16(lv,26,name.length);u16(lv,28,0);local.set(name,30);
