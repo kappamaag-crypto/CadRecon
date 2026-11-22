@@ -5,20 +5,52 @@ import {entity,newId,type Entity,type Sheet} from './model';
 import {repairPdfText,suspiciousText} from './textRepair';
 import {extractPdfPaths} from './pdfPaths';
 pdfjs.GlobalWorkerOptions.workerSrc=pdfWorker;
-async function imagePage(file:File):Promise<Sheet>{
-  let url:string;
+async function imagePages(file:File,onProgress?:(s:string)=>void):Promise<Sheet[]>{
+  // Multi-page TIFF is common for scanner archives; never silently discard
+  // all pages except the first. Decode one frame at a time on the user device.
   if(/\.tiff?$/i.test(file.name)||file.type==='image/tiff'){
-    const buf=await file.arrayBuffer();const pages=UTIF.decode(buf);if(!pages.length)throw new Error('TIFF пуст');
-    UTIF.decodeImage(buf,pages[0]);const rgba=UTIF.toRGBA8(pages[0]);const c=document.createElement('canvas');c.width=pages[0].width;c.height=pages[0].height;
-    const ctx=c.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');
-    ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba),c.width,c.height),0,0);url=c.toDataURL('image/png');
-  } else {url=await new Promise<string>((res,rej)=>{const r=new FileReader();r.onload=()=>res(String(r.result));r.onerror=()=>rej(r.error);r.readAsDataURL(file);});}
+    const buf=await file.arrayBuffer(),pages=UTIF.decode(buf);
+    if(!pages.length)throw new Error('TIFF пуст');
+    const limit=20,sheets:Sheet[]=[];
+    for(let i=0;i<Math.min(pages.length,limit);i++){
+      onProgress?.('Импорт TIFF: страница '+(i+1)+' / '+pages.length);
+      const page=pages[i],width=page.width,height=page.height;
+      if(!Number.isInteger(width)||!Number.isInteger(height)||width<2||height<2||
+         width*height>24_000_000)
+        throw new Error('Страница TIFF '+(i+1)+' превышает безопасный предел 24 Мп. Разбейте скан или уменьшите разрешение.');
+      UTIF.decodeImage(buf,page);
+      const rgba=UTIF.toRGBA8(page);
+      const canvas=document.createElement('canvas');canvas.width=width;canvas.height=height;
+      const ctx=canvas.getContext('2d');if(!ctx)throw new Error('Canvas недоступен');
+      ctx.putImageData(new ImageData(new Uint8ClampedArray(rgba),width,height),0,0);
+      const warnings=pages.length>limit&&i===0?[
+        'TIFF содержит '+pages.length+' страниц. Загружены только первые '+limit+
+        ' из-за ограничения памяти браузера; оставшиеся страницы НЕ обработаны.',
+      ]:[];
+      sheets.push({id:newId(),name:file.name+' — '+(i+1),width,height,
+        image:canvas.toDataURL('image/png'),entities:[],calibrated:false,
+        importWarnings:warnings,sourceType:'image'});
+      canvas.width=0;canvas.height=0;
+    }
+    return sheets;
+  }
+  const url=await new Promise<string>((res,rej)=>{
+    const reader=new FileReader();
+    reader.onload=()=>res(String(reader.result));
+    reader.onerror=()=>rej(reader.error);
+    reader.readAsDataURL(file);
+  });
   const img=new Image();img.src=url;await img.decode();
-  return {id:newId(),name:file.name,width:img.naturalWidth,height:img.naturalHeight,image:url,entities:[],calibrated:false,sourceType:'image'};
+  if(!Number.isFinite(img.naturalWidth)||!Number.isFinite(img.naturalHeight)||
+     img.naturalWidth<2||img.naturalHeight<2||
+     img.naturalWidth*img.naturalHeight>80_000_000)
+    throw new Error('Изображение слишком велико для безопасной работы браузера (более 80 Мп). Разбейте на несколько фрагментов.');
+  return [{id:newId(),name:file.name,width:img.naturalWidth,height:img.naturalHeight,
+    image:url,entities:[],calibrated:false,sourceType:'image'}];
 }
 export async function importDrawing(file:File,onProgress?:(s:string)=>void):Promise<Sheet[]>{
   if(file.size>90*1024*1024)throw new Error('Файл более 90 МБ: уменьшите разрешение или разбейте PDF');
-  if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf')return [await imagePage(file)];
+  if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf')return imagePages(file,onProgress);
   const src=new Uint8Array(await file.arrayBuffer());const pdf=await pdfjs.getDocument({data:src,useSystemFonts:true}).promise;
   try {
     const sheets:Sheet[]=[];if(pdf.numPages>40)onProgress?.('Будут загружены первые 40 листов, чтобы не переполнить память браузера.');
