@@ -1,6 +1,7 @@
 import {useState,useEffect,useRef,useMemo} from 'react';
 import Editor from './Editor';
 import ArchivePanel from './ArchivePanel';
+import {projectReportXlsx} from './xlsxExport';
 import {newProject,newSheet,newId,validateProject,type CadProject,type Entity,type Tool} from './model';
 import {auditSheet,scaleSheet,translateEntity,mergeAutoLines} from './geometry';
 import {createDxf} from './dxf';
@@ -200,7 +201,7 @@ export default function App(){
    if(unverified)warnings.push('Непроверенных геометрических, текстовых и ЕСКД-объектов: '+unverified+'. Инженерная точность не подтверждена.');
    if(warnings.length&&!window.confirm(warnings.join('\n')+'\nВыгрузить DXF для проверки в CAD?'))return;
    try{
-     const files=project.sheets.map((s,i)=>({name:String(i+1).padStart(2,'0')+'_'+slug(s.name)+'.dxf',data:createDxf(s,project)}));
+     const files:Array<{name:string;data:string|Uint8Array}>=project.sheets.map((s,i)=>({name:String(i+1).padStart(2,'0')+'_'+slug(s.name)+'.dxf',data:createDxf(s,project)}));
      downloadZip(createZip(files),slug(project.name)+'_all_DXF.zip');
      setStatus('Архив '+files.length+' DXF-листов сохранён');
    }catch(e){setStatus('Ошибка пакетного DXF: '+e);}
@@ -241,6 +242,7 @@ export default function App(){
      data:createDxf(s,project),
    }));
    files.push({name:'Отчеты/Объекты.csv',data:inventoryCSV(project)});
+   files.push({name:'Отчеты/Сводный_отчет.xlsx',data:projectReportXlsx(project)});
    files.push({name:'Отчеты/Сварные_обозначения.csv',data:weldsCSV(project)});
    if(project.specification?.length){
      files.push({name:'Отчеты/Спецификация.csv',data:specificationCSV(project.specification)});
