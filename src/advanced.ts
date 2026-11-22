@@ -10,8 +10,8 @@ export interface AdvancedResult {entities:Entity[];note:string;}
 export function validateAdvancedEndpoint(value:string):string {
   const url=new URL(value.trim());
   const local=['127.0.0.1','localhost','[::1]'].includes(url.hostname);
-  if(url.protocol!=='https:'&&!(local&&url.protocol==='http:'))throw new Error('Для удалённого сервера обязательно HTTPS. HTTP допускается только на localhost.');
-  if(url.username||url.password||url.hash||url.search)throw new Error('Укажите URL сервиса без пароля или параметров.');
+  if(!local||!['http:','https:'].includes(url.protocol))throw new Error('Подключение разрешено только к модулю на этом компьютере: localhost/127.0.0.1. Внешних серверов CadRecon нет.');
+  if(url.username||url.password||url.hash||url.search||url.pathname!=='/')throw new Error('Введите только локальный адрес и порт, без пути, пароля или параметров.');
   return url.href.replace(/\/$/,'');
 }
 export function decodeAdvancedResponse(sheet:Sheet,result:AdvancedResponse):AdvancedResult{
@@ -52,7 +52,7 @@ export function decodeAdvancedResponse(sheet:Sheet,result:AdvancedResponse):Adva
 export async function recognizeAdvanced(sheet:Sheet,endpoint:string,token=''):Promise<AdvancedResult>{
   if(!sheet.image)throw new Error('На листе нет растровой подложки');
   const base=validateAdvancedEndpoint(endpoint);
-  // The sheet image is transmitted ONLY after an explicit user interaction and confirmation.
+  // The sheet image may only reach a loopback service on the user's own PC.
   const resp=await fetch(sheet.image);
   const file=await resp.blob();
   const form=new FormData();form.append('image',file,'cadrecon-page.png');
