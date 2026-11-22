@@ -74,6 +74,24 @@ export default function App(){
   setStatus('CAD: изменено '+result.replacements.length+' объектов, добавлено '+result.additions.length+
     ', удалено '+deleted.size+'. Проверьте размеры и геометрию.');
  }
+ async function closeSheet(index:number){
+   if(busy){setStatus('Дождитесь завершения обработки перед закрытием листа.');return;}
+   const target=project.sheets[index];if(!target)return;
+   const last=project.sheets.length===1;
+   const question='Закрыть лист «'+target.name+'»?\n'+
+     (last?'Будет открыт новый пустой лист.':'Лист будет удалён из текущего проекта.')+
+     '\nПеред закрытием создаётся резервная копия; действие можно отменить (Ctrl+Z).';
+   if(!window.confirm(question))return;
+   try{await createBackup(project);}
+   catch(e){setStatus('Лист НЕ закрыт: резервное копирование не удалось: '+String(e));return;}
+   apply(p=>{
+     const sheets=p.sheets.filter(s=>s.id!==target.id);
+     return sheets.length?{...p,sheets}:{...p,sheets:[newSheet()]};
+   });
+   setSheetIndex(current=>index<current?current-1:Math.min(current,Math.max(0,project.sheets.length-2)));
+   setSelected(null);setFocusTarget(undefined);
+   setStatus('Лист «'+target.name+'» закрыт. Ctrl+Z — вернуть. Резервная копия сохранена.');
+ }
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);
  useEffect(()=>{if(!loaded)return;const t=setTimeout(()=>saveProject(project).catch(e=>setStatus('Не удалось сохранить проект локально: '+e)),1400);return()=>clearTimeout(t);},[project,loaded]);
@@ -321,7 +339,11 @@ export default function App(){
   <div className="workspace">
     <aside className="toolrail">{TOOLS.map(t=><button key={t.id} className={tool===t.id?'active':''} onClick={()=>setTool(t.id)} title={t.title+(t.hotkey?' ['+t.hotkey+']':'')} aria-label={t.title}>{t.icon}</button>)}</aside>
     <section className="drawing">
-      <div className="sheetnav"><div className="sheet-tabs">{project.sheets.map((s,i)=><button key={s.id} className={sheetIndex===i?'active':''} onClick={()=>{setSheetIndex(i);setSelected(null);}} title={s.name}>{s.name.length>26?s.name.slice(0,24)+'…':s.name}</button>)}</div><span className="meta">{sheet.entities.length.toLocaleString('ru-RU')} объектов · {Math.round(sheet.width)} × {Math.round(sheet.height)} {sheet.calibrated?'мм':'ед.'}</span></div>
+      <div className="sheetnav"><div className="sheet-tabs">{project.sheets.map((s,i)=><div className={'sheet-tab'+(sheetIndex===i?' active':'')} key={s.id}>
+        <button className="sheet-select" onClick={()=>{setSheetIndex(i);setSelected(null);}} title={s.name}>{s.name.length>26?s.name.slice(0,24)+'…':s.name}</button>
+        <button className="sheet-close" disabled={!!busy} onClick={()=>void closeSheet(i)}
+          title={'Закрыть лист '+s.name} aria-label={'Закрыть лист '+s.name}>×</button>
+      </div>)}</div><span className="meta">{sheet.entities.length.toLocaleString('ru-RU')} объектов · {Math.round(sheet.width)} × {Math.round(sheet.height)} {sheet.calibrated?'мм':'ед.'}</span></div>
       <Editor key={sheet.id} focusTarget={focusTarget} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
       <div className="statusbar"><span className={busy?'pulse':''}>{busy||status}</span><span className="status-right">Esc — отмена · Enter — завершить контур · Del — удалить · Ctrl+Z — назад</span></div>
     </section>

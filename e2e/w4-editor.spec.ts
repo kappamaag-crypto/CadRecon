@@ -150,3 +150,38 @@ test('W4 JOIN connects exact shared endpoints to editable LINE, with one Undo an
   expect(undone.sheets[0].entities).toHaveLength(2);
   expect(undone.sheets[0].entities.map(e=>e.id)).toEqual([a.id,b.id]);
 });
+
+
+test('sheet tab has visible close control, confirmation, indexed backup and Undo restoration',async ({page})=>{
+  const project=newProject(),first=project.sheets[0];
+  first.name='Лист теста';first.entities=[entity('line',[{x:10,y:10},{x:60,y:10}])];
+  project.sheets.push({...first,id:'second-sheet',name:'Второй лист',entities:[]});
+  await putProject(page,project);
+  await expect(page.getByRole('button',{name:'Закрыть лист Лист теста'})).toBeVisible();
+  page.once('dialog',d=>d.dismiss());
+  await page.getByRole('button',{name:'Закрыть лист Лист теста'}).click();
+  expect((await exportProject(page)).sheets).toHaveLength(2);
+  page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:'Закрыть лист Лист теста'}).click();
+  await expect(page.getByText(/Лист «Лист теста» закрыт/)).toBeVisible();
+  const remaining=await exportProject(page);
+  expect(remaining.sheets).toHaveLength(1);
+  expect(remaining.sheets[0].name).toBe('Второй лист');
+  await page.getByRole('button',{name:/Отмена/}).click();
+  const restored=await exportProject(page);
+  expect(restored.sheets).toHaveLength(2);
+  expect(restored.sheets[0].entities).toHaveLength(1);
+});
+test('closing the last drawing tab leaves a safe blank sheet instead of breaking editor',async ({page})=>{
+  const project=newProject();project.sheets[0].name='Последний';
+  project.sheets[0].entities.push(entity('line',[{x:1,y:1},{x:15,y:15}]));
+  await putProject(page,project);
+  page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:'Закрыть лист Последний'}).click();
+  await expect(page.getByRole('button',{name:'Закрыть лист Лист 1'})).toBeVisible();
+  const remaining=await exportProject(page);
+  expect(remaining.sheets).toHaveLength(1);
+  expect(remaining.sheets[0].entities).toHaveLength(0);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].name).toBe('Последний');
+});
