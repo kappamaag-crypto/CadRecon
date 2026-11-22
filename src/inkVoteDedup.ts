@@ -16,6 +16,12 @@ const dot=(a:Point2D,b:Point2D)=>a.x*b.x+a.y*b.y;
 const delta=(a:Point2D,b:Point2D)=>({x:a.x-b.x,y:a.y-b.y});
 const mix=(a:Point2D,b:Point2D,t:number)=>({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t});
 
+/** Endpoints must coincide in BOTH dimensions. Comparing only first.x and
+ * last.y, as the old Hough worker did, discards distinct diagonal strokes. */
+export function sameFiniteLine(a:StrokeSegment,b:StrokeSegment,tolerance=2.5):boolean{
+  return (dist(a.a,b.a)<=tolerance&&dist(a.b,b.b)<=tolerance)||
+    (dist(a.a,b.b)<=tolerance&&dist(a.b,b.a)<=tolerance);
+}
 export function deduplicateInkStrokeVotes(
   strokes:StrokeSegment[],rgba:Uint8ClampedArray,width:number,height:number
 ):InkDedupResult{
