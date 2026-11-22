@@ -1,5 +1,6 @@
 import {useState,useEffect,useRef,useMemo} from 'react';
 import Editor from './Editor';
+import CadPalette from './CadPalette';
 import ArchivePanel from './ArchivePanel';
 import {projectReportXlsx} from './xlsxExport';
 import {auditScanGeometry,scanReviewCSV} from './scanReview';
@@ -69,6 +70,7 @@ export default function App(){
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
  const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
  const [modelsReady,setModelsReady]=useState(false);
+ const [sidebarWide,setSidebarWide]=useState(false),[sidebarCollapsed,setSidebarCollapsed]=useState(false);
  const [reviewType,setReviewType]=useState<'geometry'|'text'|'semantic'>('semantic');
  const [reviewPage,setReviewPage]=useState(0);
  const [focusTarget,setFocusTarget]=useState<{id:string;token:number}|undefined>();
@@ -152,7 +154,14 @@ export default function App(){
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);
  useEffect(()=>{if(!loaded)return;const t=setTimeout(()=>saveProject(project).catch(e=>setStatus('Не удалось сохранить проект локально: '+e)),1400);return()=>clearTimeout(t);},[project,loaded]);
- useEffect(()=>{function key(ev:KeyboardEvent){const el=ev.target as HTMLElement;if(['INPUT','TEXTAREA','SELECT'].includes(el?.tagName)||busy)return;if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();undoAction();}else if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='y'){ev.preventDefault();redoAction();}else if((ev.key==='Delete'||ev.key==='Backspace')&&selected){ev.preventDefault();deleteSelected();}else if(!ev.ctrlKey&&!ev.metaKey){const found=TOOLS.find(t=>t.hotkey?.toLowerCase()===ev.key.toLowerCase());if(found)setTool(found.id);}}
+ useEffect(()=>{function key(ev:KeyboardEvent){
+    if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='k'&&!busy){
+      ev.preventDefault();setPanel('tools');setSidebarCollapsed(false);
+      requestAnimationFrame(()=>document.getElementById('cad-command-search')?.focus());
+      return;
+    }
+    const el=ev.target as HTMLElement;
+    if(['INPUT','TEXTAREA','SELECT'].includes(el?.tagName)||busy)return;if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='z'){ev.preventDefault();undoAction();}else if((ev.ctrlKey||ev.metaKey)&&ev.key.toLowerCase()==='y'){ev.preventDefault();redoAction();}else if((ev.key==='Delete'||ev.key==='Backspace')&&selected){ev.preventDefault();deleteSelected();}else if(!ev.ctrlKey&&!ev.metaKey){const found=TOOLS.find(t=>t.hotkey?.toLowerCase()===ev.key.toLowerCase());if(found)setTool(found.id);}}
  window.addEventListener('keydown',key);return()=>window.removeEventListener('keydown',key);},[project,selected,busy]);
  async function handleDrawing(files:FileList|null){if(!files?.length)return;const pendingFiles=Array.from(files);const firstName=pendingFiles[0].name;setBusy('Импорт документа…');try{const nextSheets:CadProject['sheets']=[];for(const f of pendingFiles){const parts=await importDrawing(f,setBusy);nextSheets.push(...parts);}await createBackup(project);apply(p=>({...p,name:p.name==='Новый проект'?firstName:p.name,sheets:[...(p.sheets.length===1&&!p.sheets[0].entities.length&&!p.sheets[0].image?[]:p.sheets),...nextSheets]}));setSheetIndex(project.sheets.length===1&&!project.sheets[0].entities.length&&!project.sheets[0].image?0:project.sheets.length);setSelected(null);
   const warnings=nextSheets.flatMap(sheet=>sheet.importWarnings||[]);
@@ -491,10 +500,26 @@ export default function App(){
       <Editor key={sheet.id} focusTarget={focusTarget} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onOcrRegion={rect=>{void recognizeArea(rect);}} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
       <div className="statusbar"><span className={busy?'pulse':''}>{busy||status}</span><span className="status-right">Esc — отмена · Enter — завершить контур · Del — удалить · Ctrl+Z — назад</span></div>
     </section>
-    <aside className="sidebar">
-      <div className="panel-tabs">{(['tools','archive','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Поиск и аудит','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>x==='backups'?showBackups():setPanel(x)} className={panel===x?'active':''}>{['⌘','⌕','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
+    <aside className={'sidebar'+(sidebarWide?' wide':'')+(sidebarCollapsed?' is-collapsed':'')}>
+      <div className="sidebar-header">
+        <strong>{panel==='tools'?'Команды CAD':panel==='layers'?'Слои':
+          panel==='properties'?'Свойства':panel==='audit'?'Аудит':
+          panel==='recognition'?'Распознавание':panel==='archive'?'Поиск и архив':'Резервные копии'}</strong>
+        <span className="sidebar-header-actions">
+          {!sidebarCollapsed&&<button type="button" aria-label={sidebarWide?'Стандартная ширина панели':'Расширить боковую панель'}
+            title={sidebarWide?'Обычная ширина':'Увеличить панель'} onClick={()=>setSidebarWide(x=>!x)}>
+            {sidebarWide?'⇤':'⇥'}</button>}
+          <button type="button" aria-label={sidebarCollapsed?'Развернуть боковую панель':'Свернуть боковую панель'}
+            title={sidebarCollapsed?'Показать панель':'Скрыть панель'} onClick={()=>setSidebarCollapsed(x=>!x)}>
+            {sidebarCollapsed?'⟵':'⟶'}</button>
+        </span>
+      </div>
+      <div className="panel-tabs">{(['tools','archive','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Поиск и аудит','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>{setSidebarCollapsed(false);if(x==='backups')void showBackups();else setPanel(x);}} className={panel===x?'active':''}>{['⌘','⌕','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
       <div className="panelcontent">
       {panel==='tools'&&<>
+      <CadPalette tools={TOOLS} active={tool} onSelect={next=>{setTool(next);
+        setStatus('Инструмент: '+(TOOLS.find(x=>x.id===next)?.title||next)+'. Укажите точки на чертеже.');}}
+        selection={!!selected}/>
       <h3>Размеры и авторазмеры</h3>
       <p className="muted">Как в CAD: две точки задают размер, третья размещает размерную линию. Авторазмеры — только кандидаты по текущей геометрии, не аттестованные размеры изделия.</p>
       <div className="stack">
