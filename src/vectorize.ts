@@ -3,7 +3,7 @@ import {consolidateScanLines} from './scanTopology';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
 type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
-type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];error?:string};
+type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];circleStrokeDuplicates?:number;error?:string};
 
 /**
  * Detail mode processes the ORIGINAL scan in overlapping tiles. Previously every page
@@ -36,6 +36,7 @@ export async function traceImage(
   const cv=document.createElement('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
   if(!ctx){worker.terminate();throw new Error('Canvas недоступен');}
   const lines:Entity[]=[],circles:Entity[]=[],seen=new Set<string>();
+  let circularDuplicates=0;
   const warnings:string[]=[];
   if(factor<.999)warnings.push('Исходный скан уменьшен для памяти: '+img.naturalWidth+'×'+img.naturalHeight+' → '+fullWidth+'×'+fullHeight+' пикселей. Мелкие элементы могут быть потеряны.');
   const sx=sheet.width/fullWidth,sy=sheet.height/fullHeight;
@@ -75,6 +76,7 @@ export async function traceImage(
       });
       assertActive();
       if(data.error)throw new Error(data.error);
+      circularDuplicates+=data.circleStrokeDuplicates||0;
       for(const l of data.lines||[]){
         const a={x:(t.x+l.a.x)*sx,y:(t.y+l.a.y)*sy};
         const b={x:(t.x+l.b.x)*sx,y:(t.y+l.b.y)*sy};
@@ -98,7 +100,8 @@ export async function traceImage(
     if(reconciled.entities.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
     return {entities:[...reconciled.entities,...circles].slice(0,30000),warnings,sampledScale:factor,
       note:'Детальная обводка: '+reconciled.entities.length+' отрезков ('+
-      reconciled.removed+' повторов объединено) и '+circles.length+
+      reconciled.removed+' перекрывающихся объединено, '+circularDuplicates+
+      ' круговых повторов исключено) и '+circles.length+
       ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'+
       (warnings.length?' ВНИМАНИЕ: '+warnings.join('; '):'')};
   }finally{worker.terminate();}
