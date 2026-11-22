@@ -27,6 +27,15 @@ describe('CadRecon model and export',()=>{
   const p=newProject();const z=createZip([{name:'лист_01.dxf',data:createDxf(p.sheets[0],p)},{name:'02.dxf',data:'test'}]);
   expect(z[0]).toBe(0x50);expect(z[1]).toBe(0x4b);writeFileSync('/tmp/cadrecon-test.zip',z);
  });
+ it('writes a unitless native cubic SPLINE for an uncalibrated PDF import',()=>{
+  const project=newProject(),s=project.sheets[0];
+  const c=entity('bezier',[{x:0,y:0},{x:20,y:40},{x:40,y:40},{x:60,y:0}],'PDF векторы','pdf');
+  c.verified=false;s.entities.push(c);
+  const dxf=createDxf(s,project);
+  expect(dxf).toContain('\n0\nSPLINE\n');
+  expect(dxf).toContain('\n$INSUNITS\n70\n0\n');
+  writeFileSync('/tmp/cadrecon-spline-test.dxf',dxf,'utf8');
+ });
  it('emits native LINE, DIMENSION, TEXT and CIRCLE in DXF',()=>{
   const p=newProject(),s=p.sheets[0];
   const line=entity('line',[{x:0,y:0},{x:6000,y:0}]);
