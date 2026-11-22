@@ -1,12 +1,15 @@
 import {describe,it,expect} from 'vitest';
 import {newProject} from './model';
 import {decodeAdvancedResponse,validateAdvancedEndpoint} from './advanced';
-describe('optional private high-quality OCR backend',()=>{
-  it('requires HTTPS except local loopback',()=>{
+describe('optional user-owned localhost Ultra backend',()=>{
+  it('accepts only this machine loopback and rejects remote HTTPS too',()=>{
     expect(validateAdvancedEndpoint('http://127.0.0.1:8765/')).toBe('http://127.0.0.1:8765');
-    expect(validateAdvancedEndpoint('https://cad.example.org/')).toBe('https://cad.example.org');
+    expect(validateAdvancedEndpoint('http://localhost:8766/')).toBe('http://localhost:8766');
+    expect(()=>validateAdvancedEndpoint('https://cad.example.org/')).toThrow(/только/);
     expect(()=>validateAdvancedEndpoint('http://public.example.org')).toThrow();
+    expect(()=>validateAdvancedEndpoint('http://localhost.attacker.example')).toThrow();
     expect(()=>validateAdvancedEndpoint('https://u:password@cad.example.org')).toThrow();
+    expect(()=>validateAdvancedEndpoint('http://127.0.0.1:8766/path')).toThrow();
   });
   it('translates model boxes and segments to sheet coordinates and preserves review flags',()=>{
     const s=newProject().sheets[0];s.width=200;s.height=100;
