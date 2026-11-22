@@ -3,7 +3,7 @@ import {consolidateScanLines} from './scanTopology';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
 type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number;inkSupport?:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
-type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];circleStrokeDuplicates?:number;inkStrokeDuplicates?:number;error?:string};
+type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];circleStrokeDuplicates?:number;inkStrokeDuplicates?:number;centerlineAdjusted?:number;error?:string};
 
 /**
  * Detail mode processes the ORIGINAL scan in overlapping tiles. Previously every page
@@ -36,7 +36,7 @@ export async function traceImage(
   const cv=document.createElement('canvas'),ctx=cv.getContext('2d',{willReadFrequently:true});
   if(!ctx){worker.terminate();throw new Error('Canvas недоступен');}
   const lines:Entity[]=[],circles:Entity[]=[],seen=new Set<string>();
-  let circularDuplicates=0,inkDuplicates=0;
+  let circularDuplicates=0,inkDuplicates=0,centerlineAdjusted=0;
   const warnings:string[]=[];
   if(factor<.999)warnings.push('Исходный скан уменьшен для памяти: '+img.naturalWidth+'×'+img.naturalHeight+' → '+fullWidth+'×'+fullHeight+' пикселей. Мелкие элементы могут быть потеряны.');
   const sx=sheet.width/fullWidth,sy=sheet.height/fullHeight;
@@ -78,6 +78,7 @@ export async function traceImage(
       if(data.error)throw new Error(data.error);
       circularDuplicates+=data.circleStrokeDuplicates||0;
       inkDuplicates+=data.inkStrokeDuplicates||0;
+      centerlineAdjusted+=data.centerlineAdjusted||0;
       for(const l of data.lines||[]){
         const a={x:(t.x+l.a.x)*sx,y:(t.y+l.a.y)*sy};
         const b={x:(t.x+l.b.x)*sx,y:(t.y+l.b.y)*sy};
@@ -104,7 +105,8 @@ export async function traceImage(
     return {entities:[...reconciled.entities,...circles].slice(0,30000),warnings,sampledScale:factor,
       note:'Детальная обводка: '+reconciled.entities.length+' отрезков ('+
       reconciled.removed+' перекрывающихся объединено, '+circularDuplicates+
-      ' круговых повторов и '+inkDuplicates+' повторов штриха исключено) и '+circles.length+
+      ' круговых повторов и '+inkDuplicates+' повторов штриха исключено; '+centerlineAdjusted+
+      ' гипотез смещены на центр исходной краски) и '+circles.length+
       ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'+
       (warnings.length?' ВНИМАНИЕ: '+warnings.join('; '):'')};
   }finally{worker.terminate();}

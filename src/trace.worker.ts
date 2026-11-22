@@ -3,6 +3,7 @@ import {detectOverlappedCircles} from './circleDetector';
 import {suppressRedundantCircleStrokes} from './circleStrokeFilter';
 import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 import {rankLineByInkEvidence} from './lineEvidence';
+import {refineStrokeCenters} from './inkCenterline';
 type P={x:number;y:number};type Segment={a:P;b:P;confidence:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
@@ -99,10 +100,12 @@ self.onmessage=(ev:MessageEvent<Msg>)=>{try{
   }
   const traced=trace(msg);
   const filtered=suppressRedundantCircleStrokes(traced,circles);
-  const dedup=deduplicateInkStrokeVotes(filtered.lines,msg.rgba,msg.width,msg.height);
+  const centered=refineStrokeCenters(filtered.lines,msg.rgba,msg.width,msg.height);
+  const dedup=deduplicateInkStrokeVotes(centered.lines,msg.rgba,msg.width,msg.height);
   (self as unknown as Worker).postMessage({
     lines:dedup.lines.map(line=>{const rank=rankLineByInkEvidence(line,msg.rgba,msg.width,msg.height);return {...line,confidence:rank.adjustedScore,inkSupport:rank.support};}),circles:circles.slice(0,300),
     circleStrokeDuplicates:filtered.removed,inkStrokeDuplicates:dedup.removed,
+    centerlineAdjusted:centered.adjusted,
   });
 }catch(e){(self as unknown as Worker).postMessage({error:String(e)});}};
 export {};
