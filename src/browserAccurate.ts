@@ -109,8 +109,11 @@ const hasDigitalText=(e:Entity)=>e.origin==='pdf'&&e.kind==='text'&&!!e.text?.tr
 export async function recognizeBrowserAccurate(
   sheet:Sheet,
   onProgress?:(status:string)=>void,
+  signal?:AbortSignal,
 ):Promise<BrowserAccurateResult>{
   if(!sheet.image)throw new Error('Для распознавания нужен загруженный PDF или скан');
+  const assertActive=()=>{if(signal?.aborted)throw new DOMException('Обработка чертежа отменена','AbortError');};
+  assertActive();
   const warnings:string[]=[];
   let candidates:Entity[]=[],ocrText='';
   const native=sheet.sourceType==='pdf'&&sheet.entities.some(hasNativeGeometry);
@@ -119,7 +122,9 @@ export async function recognizeBrowserAccurate(
 
   if(scanned){
     onProgress?.('Браузер: подробная векторизация по фрагментам...');
-    const lines=await traceImage(sheet,12,onProgress,'detailed');
+    const lines=await traceImage(sheet,12,onProgress,'detailed',signal);
+    assertActive();
+    if(lines.warnings?.length)warnings.push(...lines.warnings);
     candidates=uniqueCandidates(sheet.entities,lines.entities);
     warnings.push('Поиск линий в скане не гарантирует восстановление их исходной топологии.');
     if(/×/.test(lines.note)){
@@ -130,12 +135,14 @@ export async function recognizeBrowserAccurate(
   }
   if(!digitalText){
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
-    const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress);
+    const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal);
+    assertActive();
     ocrText=ocr.text;
     candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));
   }else {
     warnings.push('Цифровой текст PDF уже импортирован. Дополнительный OCR можно запустить отдельно для поиска пропущенных надписей.');
   }
+  assertActive();
   const source=[...sheet.entities,...candidates];
   onProgress?.('Браузер: проверяем размерные цепи и условные обозначения...');
   const chains=reconstructDimensionChains({...sheet,entities:source});
@@ -150,6 +157,7 @@ export async function recognizeBrowserAccurate(
     dimensions:added.filter(e=>e.kind==='dimension').length,
     eskd:added.filter(e=>e.kind==='eskd').length,
   };
+  assertActive();
   return {entities:added,ocrText,warnings,scanned,
     note:'Браузерное распознавание: геометрия '+counts.geometry+', текст '+counts.texts+
       ', размеры '+counts.dimensions+', ЕСКД '+counts.eskd+
