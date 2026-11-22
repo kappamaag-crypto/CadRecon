@@ -48,7 +48,7 @@ describe('W4 browser CAD transforms: MIRROR / ARRAY / vertex STRETCH',()=>{
  it('rejects zero-length and self-crossing edits',()=>{
    const e=entity('polyline',[p(0,0),p(50,0),p(50,50),p(0,50)]);
    expect(stretchVertex(e,1,p(0,0))).toBeNull();
-   expect(stretchVertex(e,1,p(-10,60))).toBeNull();
+   expect(stretchVertex(e,1,p(70,80))).toBeNull();
    expect(stretchVertex(e,15,p(10,10))).toBeNull();
  });
 });
