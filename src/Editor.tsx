@@ -7,12 +7,13 @@ import {trimLine,extendLine,offsetLine,breakLine,chamferLines,filletLines,type O
 import type {EskdType} from './model';
 interface Props {
   sheet:Sheet;project:CadProject;tool:Tool;selected:string|null;onSelect:(v:string|null)=>void;
+  focusTarget?:{id:string;token:number};
   onCreate:(e:Entity)=>void;onMove:(e:Entity,delta:Point)=>void;
   onOperation:(result:OperationResult)=>void;onCalibrate:(factor:number)=>void;
   onMessage:(message:string)=>void;source:boolean;compare:boolean;grid:boolean;snap:boolean;
   symbolType:EskdType;symbolText:string;
 }
-export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onOperation,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText}:Props){
+export default function Editor({sheet,project,tool,selected,onSelect,onCreate,onMove,onOperation,onCalibrate,onMessage,source,compare,grid,snap,symbolType,symbolText,focusTarget}:Props){
   const canvas=useRef<HTMLCanvasElement>(null),frame=useRef<HTMLDivElement>(null);
   const [size,setSize]=useState({w:1000,h:700}),[camera,setCamera]=useState<Camera>({x:0,y:0,w:1200,h:850});
   const [image,setImage]=useState<HTMLImageElement|undefined>(),[draft,setDraft]=useState<Point[]>([]),[cursor,setCursor]=useState<Point|null>(null),[drag,setDrag]=useState<Point|null>(null);
@@ -21,7 +22,27 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
   useEffect(()=>{camRef.current=camera;},[camera]);
   useEffect(()=>{setPending(null);},[tool,sheet.id]);
   useEffect(()=>{const r=frame.current;if(!r)return;const obs=new ResizeObserver(()=>setSize({w:Math.max(250,r.clientWidth),h:Math.max(250,r.clientHeight)}));obs.observe(r);return ()=>obs.disconnect();},[]);
-  useEffect(()=>{const aspect=size.w/size.h;const w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});setDraft([]);onSelect(null);},[sheet.id,sheet.width,sheet.height,size.w,size.h]);
+  useEffect(()=>{const aspect=size.w/size.h;const w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});setDraft([]);},[sheet.id,sheet.width,sheet.height,size.w,size.h]);
+  useEffect(()=>{
+    if(!focusTarget)return;
+    const target=sheet.entities.find(e=>e.id===focusTarget.id);
+    if(!target)return;
+    const raw=target.bbox?[
+      {x:target.bbox.x0,y:target.bbox.y0},{x:target.bbox.x1,y:target.bbox.y1},
+    ]:[...target.points,...(target.center?[target.center]:[])];
+    if(!raw.length)return;
+    const xs=raw.map(p=>p.x),ys=raw.map(p=>p.y);
+    if(target.center&&target.radius){
+      xs.push(target.center.x-target.radius,target.center.x+target.radius);
+      ys.push(target.center.y-target.radius,target.center.y+target.radius);
+    }
+    const cx=(Math.min(...xs)+Math.max(...xs))/2,cy=(Math.min(...ys)+Math.max(...ys))/2;
+    const aspect=Math.max(.1,size.w/Math.max(1,size.h));
+    const w=Math.max(25,Math.min(sheet.width*1.07,
+      Math.max(sheet.width*.24,(Math.max(...xs)-Math.min(...xs))*3,
+        (Math.max(...ys)-Math.min(...ys))*3*aspect)));
+    setCamera({x:cx-w/2,y:cy-w/(2*aspect),w,h:w/aspect});
+  },[focusTarget?.token,sheet.id]);
   useEffect(()=>{if(sheet.image===imageRef.current&&image)return;imageRef.current=sheet.image;let cancelled=false;if(!sheet.image){setImage(undefined);return;}const img=new Image();img.src=sheet.image;img.decode().then(()=>{if(!cancelled)setImage(img);}).catch(()=>{if(!cancelled)setImage(undefined);});return()=>{cancelled=true;};},[sheet.image]);
   useEffect(()=>{const cv=canvas.current;if(!cv)return;const dpr=Math.min(window.devicePixelRatio||1,2);cv.width=Math.round(size.w*dpr);cv.height=Math.round(size.h*dpr);const ctx=cv.getContext('2d');if(!ctx)return;drawScene(ctx,size.w,size.h,dpr,sheet,project.layers,camera,image,{source,compare,grid,selected,draft,cursor,drag});},[size,sheet,project.layers,camera,image,source,compare,grid,selected,draft,cursor,drag]);
   const toWorld=useCallback((ev:PointerEvent<HTMLCanvasElement>|WheelEvent<HTMLCanvasElement>):Point=>{
