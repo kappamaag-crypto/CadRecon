@@ -266,6 +266,42 @@ describe('browser OCR language pack preparation',()=>{
       Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
+  it('rechecks high-confidence dimension 8O0 but never silently changes it to 800',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img{naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const cv={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      imageSmoothingEnabled:true,imageSmoothingQuality:'high',filter:'',
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>cv}});
+    const data=(text:string,confidence:number)=>({data:{text,confidence,
+      blocks:[{paragraphs:[{lines:[{text,confidence,
+        bbox:{x0:20,y0:10,x1:80,y1:35}}]}]}]}});
+    const recognize=vi.fn().mockResolvedValueOnce(data('8O0',95))
+      .mockResolvedValueOnce(data('800',96));
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        recognize,setParameters:vi.fn().mockResolvedValue(undefined),
+        terminate:vi.fn().mockResolvedValue(undefined),
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const s=newProject().sheets[0];s.image='data:image/png;base64,fixture';
+      s.width=200;s.height=100;
+      const out=await recognizeText(s,undefined,undefined,
+        {mode:'enhanced',maxRetries:1});
+      expect(recognize).toHaveBeenCalledTimes(2);
+      expect(out.diagnostics?.retried).toBe(1);
+      expect(out.diagnostics?.conflicts).toBe(1);
+      expect(out.entities).toHaveLength(1);
+      expect(out.entities[0].text).toBe('8O0');
+      expect(out.entities[0].reason).toContain('800');
+      expect(out.entities[0].reason).toContain('ПОДОЗРЕНИЕ OCR');
+      expect(out.entities[0].verified).toBe(false);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
   it('supports a single English OCR language model instead of always forcing Russian',async()=>{
     const oldImage=globalThis.Image;
     class Img{naturalWidth=200;naturalHeight=100;src='';async decode(){}}
