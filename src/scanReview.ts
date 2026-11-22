@@ -62,7 +62,8 @@ export function auditScanGeometry(project:CadProject):ScanReview {
       if(!ends.length)continue;
       examinedLines++;
       const evidence=/опора на исходный штрих\s+(\d{1,3})%/i.exec(e.reason||'');
-      const ink=evidence?Number(evidence[1]):null;
+      const ink=e.scanEvidence?e.scanEvidence.inkSupport*100:
+        evidence?Number(evidence[1]):null;
       const weak=ink!==null?ink<35:typeof e.confidence==='number'&&e.confidence<.20;
       if(weak){
         weakInk++;
@@ -72,8 +73,9 @@ export function auditScanGeometry(project:CadProject):ScanReview {
       }
       // A long white interval may also be an intentional dashed stroke.
       const run=/неподтверждённый интервал\s+(\d{1,3})%/i.exec(e.reason||'');
-      const pct=run?Number(run[1]):null;
-      if(pct!==null&&pct>=20&&pct<=100){
+      const pct=e.scanEvidence?e.scanEvidence.blankRunRatio*100:run?Number(run[1]):null;
+      if(pct!==null&&pct>=20&&pct<=100&&
+        e.lineStyle!=='dashed'&&e.lineStyle!=='center'){
         longGaps++;
         push({kind:'long-gap',sheetIndex:si,sheetName:sheet.name,entityId:e.id,
           description:'Длинный участок без опоры на исходные пиксели: '+pct+

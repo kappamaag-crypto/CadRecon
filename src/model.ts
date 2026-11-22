@@ -8,6 +8,8 @@ export interface Entity {
   closed?:boolean; text?:string; size?:number; offset?:number; dimMode?:'aligned'|'horizontal'|'vertical';
   rows?:number; cols?:number; width?:number; height?:number;
   confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
+  /** Measured scan ink evidence, not probability of a correct CAD object. */
+  scanEvidence?:{inkSupport:number;blankRunRatio:number;patternMarks?:number};
   reason?:string; sourceId?:string; chainId?:string;
   hatchPattern?:'solid'|'diagonal'|'cross'; hatchSpacing?:number;
   bbox?:{x0:number;y0:number;x1:number;y1:number};
@@ -89,6 +91,16 @@ export function validateProject(value:unknown):CadProject {
         (e.kind==='ellipse'&&(!e.center||!e.radius||!e.axisRatio))||
         (e.size!==undefined&&(!Number.isFinite(e.size)||e.size<0))||
         (e.confidence!==undefined&&!Number.isFinite(e.confidence))||
+        (e.scanEvidence!==undefined&&(
+          e.origin!=='trace'||e.kind!=='line'||
+          !Number.isFinite(e.scanEvidence.inkSupport)||e.scanEvidence.inkSupport<0||
+          e.scanEvidence.inkSupport>1||
+          !Number.isFinite(e.scanEvidence.blankRunRatio)||e.scanEvidence.blankRunRatio<0||
+          e.scanEvidence.blankRunRatio>1||
+          (e.scanEvidence.patternMarks!==undefined&&
+            (!Number.isInteger(e.scanEvidence.patternMarks)||e.scanEvidence.patternMarks<1||
+              e.scanEvidence.patternMarks>1000))
+        ))||
         (e.lineStyle!==undefined&&(e.kind!=='line'||!['dashed','center'].includes(e.lineStyle)))||
         (e.text!==undefined&&(typeof e.text!=='string'||e.text.length>10000))||
         (e.rows!==undefined&&(!Number.isInteger(e.rows)||e.rows<1||e.rows>250))||

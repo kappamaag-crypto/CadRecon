@@ -5,7 +5,7 @@ import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 import {rankLineByInkEvidence} from './lineEvidence';
 import {refineStrokeCenters} from './inkCenterline';
 import {classifyLinePattern} from './linePattern';
-type P={x:number;y:number};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center'};
+type P={x:number;y:number};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   const gray=new Uint8Array(width*height);const histogram=new Uint32Array(256);
@@ -60,7 +60,7 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
       if(pattern){
         const candidate:Segment={a:{x:full.a.x*scale,y:full.a.y*scale},
           b:{x:full.b.x*scale,y:full.b.y*scale},
-          confidence:Math.min(full.confidence,.75),lineStyle:pattern.style};
+          confidence:Math.min(full.confidence,.75),lineStyle:pattern.style,patternMarks:pattern.marks};
         if(!found.some(previous=>previous.lineStyle===candidate.lineStyle&&sameFiniteLine(previous,candidate,2.5*scale))){
           found.push(candidate);
         }
