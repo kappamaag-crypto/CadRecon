@@ -1,6 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {entity,type Entity,type Point} from './model';
-import {intersectLines,trimLine,extendLine,chamferLines,filletLines} from './cadOperations';
+import {intersectLines,trimLine,extendLine,offsetLine,chamferLines,filletLines} from './cadOperations';
 const p=(x:number,y:number):Point=>({x,y});
 function line(a:Point,b:Point):Entity {
   return entity('line',[a,b],'Контуры','manual');
@@ -31,6 +31,28 @@ describe('W4 deterministic 2D editing commands',()=>{
     expect(out?.replacements[0].points).toEqual([p(0,0),p(80,0)]);
     expect(extendLine(cutting,target,p(45,0),.1)).toBeNull();
     expect(extendLine(line(p(10,-10),p(10,10)),target,p(0,0))).toBeNull();
+  });
+  it('OFFSET adds a parallel editable line on the explicitly picked side without moving original',()=>{
+    const original=line(p(0,0),p(100,0));
+    original.verified=true;
+    const upper=offsetLine(original,12,p(50,4));
+    const lower=offsetLine(original,12,p(50,-4));
+    expect(upper?.replacements).toHaveLength(0);
+    expect(upper?.additions).toHaveLength(1);
+    expect(upper!.additions[0].points).toEqual([p(0,12),p(100,12)]);
+    expect(lower!.additions[0].points).toEqual([p(0,-12),p(100,-12)]);
+    expect(upper!.additions[0].verified).toBe(false);
+    expect(original.verified).toBe(true);
+    expect(original.points).toEqual([p(0,0),p(100,0)]);
+    const vertical=line(p(0,0),p(0,100));
+    expect(offsetLine(vertical,5,p(-2,30))?.additions[0].points).toEqual([p(-5,0),p(-5,100)]);
+  });
+  it('OFFSET refuses ambiguous side, invalid distance and degenerate source',()=>{
+    const a=line(p(0,0),p(100,0));
+    expect(offsetLine(a,10,p(50,0))).toBeNull();
+    expect(offsetLine(a,0,p(50,2))).toBeNull();
+    expect(offsetLine(a,Number.POSITIVE_INFINITY,p(50,2))).toBeNull();
+    expect(offsetLine(line(p(0,0),p(0,0)),10,p(5,1))).toBeNull();
   });
   it('chamfer clips two perpendicular rays and adds one editable line',()=>{
     const a=line(p(0,0),p(100,0));
