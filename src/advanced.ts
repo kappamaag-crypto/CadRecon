@@ -60,7 +60,7 @@ export async function recognizeAdvanced(sheet:Sheet,endpoint:string,token=''):Pr
   const timeout=setTimeout(()=>controller.abort(),240000);
   try {
     const request:RequestInit & {targetAddressSpace?:'loopback'}={
-      method:'POST',body:form,
+      method:'POST',body:form,redirect:'error',
       headers:token?{'Authorization':'Bearer '+token}:{},signal:controller.signal
     };
     // Chrome 145+ asks for permission to reach a loopback service from a public HTTPS site.
