@@ -124,23 +124,31 @@ export async function recognizeBrowserAccurate(
 
   if(scanned){
     onProgress?.('Браузер: подробная векторизация по фрагментам...');
-    const lines=await traceImage(sheet,12,onProgress,'detailed',signal);
-    assertActive();
-    if(lines.warnings?.length)warnings.push(...lines.warnings);
-    candidates=uniqueCandidates(sheet.entities,lines.entities);
-    warnings.push('Поиск линий в скане не гарантирует восстановление их исходной топологии.');
-    if(/×/.test(lines.note)){
-      warnings.push('Проверьте разрешение обработанного изображения и масштаб.');
+    try {
+      const lines=await traceImage(sheet,12,onProgress,'detailed',signal);
+      assertActive();
+      if(lines.warnings?.length)warnings.push(...lines.warnings);
+      candidates=uniqueCandidates(sheet.entities,lines.entities);
+      warnings.push('Поиск линий в скане не гарантирует восстановление их исходной топологии.');
+    }catch(error){
+      assertActive();
+      warnings.push('Автообводка не выполнена: '+String(error).slice(0,140)+'. Можно распознать текст и исправить геометрию вручную.');
     }
   }else{
     onProgress?.('Браузер: сохраняем точные векторные объекты исходного PDF...');
   }
   if(!digitalText||mode==='hybrid'){
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
-    const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal);
-    assertActive();
-    ocrText=ocr.text;
-    candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));
+    try {
+      const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal);
+      assertActive();
+      ocrText=ocr.text;
+      candidates.push(...uniqueCandidates([...sheet.entities,...candidates],ocr.entities));
+    }catch(error){
+      assertActive();
+      warnings.push('OCR RU/EN не выполнен: '+String(error).slice(0,140)+
+        '. Проверьте загрузку моделей или используйте локальные CAD-объекты без OCR.');
+    }
   }else {
     warnings.push('Цифровой текст PDF уже импортирован. Дополнительный OCR можно запустить отдельно для поиска пропущенных надписей.');
   }
