@@ -1,6 +1,8 @@
 import {useState,useEffect,useRef,useMemo} from 'react';
 import Editor from './Editor';
 import CadPalette from './CadPalette';
+import ReconstructionPanel from './ReconstructionPanel';
+import {assessRecognitionQuality} from './recognitionQuality';
 import ArchivePanel from './ArchivePanel';
 import {projectReportXlsx} from './xlsxExport';
 import {auditScanGeometry,scanReviewCSV} from './scanReview';
@@ -31,7 +33,7 @@ import {measureCadEntity,inspectCadTopology} from './cadMeasurements';
 import {rotateCadEntity,scaleCadEntity,moveCadEntity,shearCadEntity,
   polarArrayCad,alignCadLine} from './affineCad';
 import type {EskdType} from './model';
-type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
+type Panel='reconstruct'|'tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'select',title:'Выделение / перенос',icon:'↖',hotkey:'V'},{id:'pan',title:'Перемещение полотна',icon:'✋',hotkey:'H'},
   {id:'point',title:'Точка',icon:'·',hotkey:'P'},
@@ -78,7 +80,7 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
 function slug(s:string){return s.replace(/[^\p{L}\p{N}._-]/gu,'_');}
 export default function App(){
  const [project,setProject]=useState<CadProject>(newProject);
- const [sheetIndex,setSheetIndex]=useState(0),[tool,setTool]=useState<Tool>('select'),[selected,setSelected]=useState<string|null>(null),[panel,setPanel]=useState<Panel>('tools');
+ const [sheetIndex,setSheetIndex]=useState(0),[tool,setTool]=useState<Tool>('select'),[selected,setSelected]=useState<string|null>(null),[panel,setPanel]=useState<Panel>('reconstruct');
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
  const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
  const [modelsReady,setModelsReady]=useState(false);
@@ -290,9 +292,9 @@ export default function App(){
  async function handleDrawing(files:FileList|null){if(!files?.length)return;const pendingFiles=Array.from(files);const firstName=pendingFiles[0].name;setBusy('Импорт документа…');try{const nextSheets:CadProject['sheets']=[];for(const f of pendingFiles){const parts=await importDrawing(f,setBusy);nextSheets.push(...parts);}await createBackup(project);apply(p=>({...p,name:p.name==='Новый проект'?firstName:p.name,sheets:[...(p.sheets.length===1&&!p.sheets[0].entities.length&&!p.sheets[0].image?[]:p.sheets),...nextSheets]}));setSheetIndex(project.sheets.length===1&&!project.sheets[0].entities.length&&!project.sheets[0].image?0:project.sheets.length);setSelected(null);
   const warnings=nextSheets.flatMap(sheet=>sheet.importWarnings||[]);
   if(warnings.length){
-    setPanel('audit');
+    setPanel('reconstruct');
     setStatus('Импортировано листов: '+nextSheets.length+'. ⚠ Неполный импорт: '+warnings.slice(0,2).join('; '));
-  }else setStatus('Импортировано листов: '+nextSheets.length+'. Векторные элементы PDF требуют проверки.');
+  }else {setPanel('reconstruct');setStatus('Импортировано листов: '+nextSheets.length+'. Векторные элементы PDF требуют проверки.');}
  }catch(e){setStatus('Ошибка импорта: '+String(e));}finally{setBusy('');if(input.current)input.current.value='';}}
  async function handleProject(files:FileList|null){if(!files?.length)return;setBusy('Открытие проекта…');try{const p=await importProject(files[0]);await createBackup(project);setProject(p);undo.current=[];redo.current=[];setSheetIndex(0);setSelected(null);setStatus('Проект открыт: '+p.name);}catch(e){setStatus('Ошибка проекта: '+String(e));}finally{setBusy('');if(jsonInput.current)jsonInput.current.value='';}}
  async function vectorize(){
@@ -585,6 +587,7 @@ export default function App(){
  const measured=useMemo(()=>selection?measureCadEntity(selection):null,[selection]);
  const topology=useMemo(()=>panel==='audit'?inspectCadTopology(sheet.entities):null,[panel,sheet.entities]);
  const counts=useMemo(()=>sheet.entities.reduce((acc,e)=>(acc[e.kind]=(acc[e.kind]||0)+1,acc),{} as Record<string,number>),[sheet]);
+ const recognitionQuality=useMemo(()=>assessRecognitionQuality(sheet),[sheet]);
  const reviewGroups=useMemo(()=>{
    const fresh=sheet.entities.filter(e=>!e.verified&&e.origin!=='manual');
    const geometry=fresh.filter(e=>['line','polyline','circle','arc','bezier','axis'].includes(e.kind));
@@ -628,7 +631,7 @@ export default function App(){
     </section>
     <aside className={'sidebar'+(sidebarWide?' wide':'')+(sidebarCollapsed?' is-collapsed':'')}>
       <div className="sidebar-header">
-        <strong>{panel==='tools'?'Команды CAD':panel==='layers'?'Слои':
+        <strong>{panel==='reconstruct'?'PDF / скан → DXF':panel==='tools'?'Команды CAD':panel==='layers'?'Слои':
           panel==='properties'?'Свойства':panel==='audit'?'Аудит':
           panel==='recognition'?'Распознавание':panel==='archive'?'Поиск и архив':'Резервные копии'}</strong>
         <span className="sidebar-header-actions">
@@ -640,8 +643,18 @@ export default function App(){
             {sidebarCollapsed?'⟵':'⟶'}</button>
         </span>
       </div>
-      <div className="panel-tabs">{(['tools','archive','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Поиск и аудит','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>{setSidebarCollapsed(false);if(x==='backups')void showBackups();else setPanel(x);}} className={panel===x?'active':''}>{['⌘','⌕','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
+      <div className="panel-tabs">{(['reconstruct','recognition','tools','layers','properties','audit','archive','backups'] as Panel[]).map((x,i)=><button key={x} title={['PDF → DXF','Распознавание','Инструменты','Слои','Свойства','Проверка','Поиск и аудит','Резерв'][i]} onClick={()=>{setSidebarCollapsed(false);if(x==='backups')void showBackups();else setPanel(x);}} className={panel===x?'active':''}>{['◎','✓','⌘','☷','⚙','⚠','⌕','▣'][i]}</button>)}</div>
       <div className="panelcontent">
+      {panel==='reconstruct'&&<ReconstructionPanel
+        quality={recognitionQuality} loaded={!!sheet.image} busy={!!busy}
+        recognitionMode={recognitionMode} onMode={setRecognitionMode}
+        ocrLanguages={ocrLanguages} onLanguages={setOcrLanguages}
+        onImport={()=>input.current?.click()} onRecognize={()=>void browserAccurateProcessing()}
+        onTrace={()=>void vectorize()} onOcr={()=>void runOcr()}
+        onReview={()=>{setPanel('recognition');setReviewPage(0);}}
+        onCompare={()=>{setCompare(true);setSource(true);}}
+        onExport={exportDxf} onCalibrate={()=>setTool('calibrate')}
+        onEdit={()=>setPanel('tools')} onStop={()=>localController.current?.abort()}/>}
       {panel==='tools'&&<>
       <CadPalette tools={TOOLS} active={tool} onSelect={next=>{setTool(next);
         setStatus('Инструмент: '+(TOOLS.find(x=>x.id===next)?.title||next)+'. Укажите точки на чертеже.');}}
