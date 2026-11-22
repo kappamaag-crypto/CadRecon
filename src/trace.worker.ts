@@ -5,14 +5,15 @@ import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 import {rankLineByInkEvidence} from './lineEvidence';
 import {refineStrokeCenters} from './inkCenterline';
 import {classifyLinePattern} from './linePattern';
+import {otsuInkThreshold} from './scanInkThreshold';
 type P={x:number;y:number};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
-function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
+function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];threshold:number}{
   const gray=new Uint8Array(width*height);const histogram=new Uint32Array(256);
   for(let i=0;i<gray.length;i++){const j=i*4;const g=Math.round(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]);gray[i]=g;histogram[g]++;}
-  let n=width*height,total=0;for(let i=0;i<256;i++)total+=i*histogram[i];
-  let wb=0,best=-1,th=128,cnt=0;for(let i=0;i<256;i++){cnt+=histogram[i];if(!cnt)continue;const cf=n-cnt;if(!cf)break;wb+=i*histogram[i];const v=(total/cf-wb*(1/cf+1/cnt));const variance=cnt*cf*v*v;if(variance>best){best=variance;th=i;}}
-  th=Math.max(45,Math.min(210,th));
+  const n=width*height;
+  // Inclusive Otsu ink threshold: equality is common on faded photocopies.
+  const th=otsuInkThreshold(histogram);
   // Evaluate EVERY pixel before sampling. The previous fixed (x,y) grid
   // could hit only the interior of a 3px vertical/horizontal stroke, losing
   // its entire boundary and fabricating a false "nothing detected" result.
@@ -20,7 +21,7 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
   let edgeCount=0;
   for(let y=1;y<height-1;y++)for(let x=1;x<width-1;x++){
     const i=y*width+x;
-    if(gray[i]>=th)continue;
+    if(gray[i]>th)continue;
     if(gray[i-1]>=th||gray[i+1]>=th||gray[i-width]>=th||gray[i+width]>=th){
       edgeMask[i]=1;edgeCount++;
     }
@@ -56,7 +57,7 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
       const start=matches[0],end=matches[matches.length-1];
       const full={a:{x:r*c+start*along.x,y:r*s+start*along.y},
         b:{x:r*c+end*along.x,y:r*s+end*along.y},confidence:Math.min(.80,.35+votes/150)};
-      const pattern=classifyLinePattern(full,rgba,width,height);
+      const pattern=classifyLinePattern(full,rgba,width,height,th);
       if(pattern){
         const candidate:Segment={a:{x:full.a.x*scale,y:full.a.y*scale},
           b:{x:full.b.x*scale,y:full.b.y*scale},
@@ -72,13 +73,13 @@ function trace({rgba,width,height,scale,minLength}:Msg):Segment[]{
     for(let i=1;i<matches.length;i++){if(matches[i]-last>Math.max(7,minLength/3)){push();first=matches[i];}last=matches[i];}
     if(matches.length)push();
   }
-  return found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y)).slice(0,3000);
+  return {lines:found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y)).slice(0,3000),threshold:th};
 }
 
 interface CircleCandidate {x:number;y:number;radius:number;confidence:number;}
-function detectCircles({rgba,width,height,scale}:Msg):CircleCandidate[] {
+function detectCircles({rgba,width,height,scale}:Msg,threshold=145):CircleCandidate[] {
   const count=width*height,mask=new Uint8Array(count),visited=new Uint8Array(count);
-  for(let i=0;i<count;i++){const j=i*4;mask[i]=(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2])<145?1:0;}
+  for(let i=0;i<count;i++){const j=i*4;mask[i]=(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2])<=threshold?1:0;}
   const queue=new Int32Array(count),circles:CircleCandidate[]=[];
   for(let start=0;start<count;start++){
     if(!mask[start]||visited[start])continue;
@@ -110,20 +111,21 @@ function detectCircles({rgba,width,height,scale}:Msg):CircleCandidate[] {
 }
 self.onmessage=(ev:MessageEvent<Msg>)=>{try{
   const msg=ev.data;
-  const circles=detectCircles(msg);
+  const traced=trace(msg);
+  const inkThreshold=traced.threshold;
+  const circles=detectCircles(msg,inkThreshold);
   // Circle+line intersections are a single connected contour; independent
   // gradient voting recovers candidates the contour-only pass cannot see.
-  for(const p of detectOverlappedCircles(msg.rgba,msg.width,msg.height)){
+  for(const p of detectOverlappedCircles(msg.rgba,msg.width,msg.height,25,undefined,inkThreshold)){
     const c={x:p.x*msg.scale,y:p.y*msg.scale,radius:p.radius*msg.scale,confidence:p.confidence};
     if(!circles.some(x=>Math.hypot(x.x-c.x,x.y-c.y)<Math.max(6,c.radius*.12)&&
       Math.abs(x.radius-c.radius)<Math.max(5,c.radius*.1)))circles.push(c);
   }
-  const traced=trace(msg);
-  const filtered=suppressRedundantCircleStrokes(traced,circles);
-  const centered=refineStrokeCenters(filtered.lines,msg.rgba,msg.width,msg.height);
-  const dedup=deduplicateInkStrokeVotes(centered.lines,msg.rgba,msg.width,msg.height);
+  const filtered=suppressRedundantCircleStrokes(traced.lines,circles);
+  const centered=refineStrokeCenters(filtered.lines,msg.rgba,msg.width,msg.height,inkThreshold);
+  const dedup=deduplicateInkStrokeVotes(centered.lines,msg.rgba,msg.width,msg.height,inkThreshold);
   (self as unknown as Worker).postMessage({
-    lines:dedup.lines.map(line=>{const rank=rankLineByInkEvidence(line,msg.rgba,msg.width,msg.height);return {...line,confidence:rank.adjustedScore,inkSupport:rank.support,blankRunRatio:rank.blankRunRatio};}),circles:circles.slice(0,300),
+    lines:dedup.lines.map(line=>{const rank=rankLineByInkEvidence(line,msg.rgba,msg.width,msg.height,80,inkThreshold);return {...line,confidence:rank.adjustedScore,inkSupport:rank.support,blankRunRatio:rank.blankRunRatio};}),circles:circles.slice(0,300),
     circleStrokeDuplicates:filtered.removed,inkStrokeDuplicates:dedup.removed,
     centerlineAdjusted:centered.adjusted,
   });
