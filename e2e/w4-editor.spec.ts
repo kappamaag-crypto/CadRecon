@@ -257,3 +257,23 @@ test('W4 selected LINE linetype is editable and persists to JSON and DXF',async 
   ]);
   expect(await readFile((await download.path())!,'utf8')).toContain('\n6\nCENTER\n');
 });
+
+
+test('W4 searchable command palette, hotkey and adjustable/collapsible sidebar',async ({page})=>{
+  await page.goto('/CadRecon/');
+  const search=page.getByLabel('Поиск CAD-команды');
+  await expect(search).toBeVisible();
+  await page.keyboard.press('Control+k');
+  await expect(search).toBeFocused();
+  await search.fill('многоугольник');
+  const palette=page.locator('.cad-palette');
+  const command=palette.getByRole('button',{name:/Команда: Правильный многоугольник — вписанный/});
+  await expect(command).toBeVisible();
+  await command.click();
+  await page.getByRole('button',{name:'Расширить боковую панель'}).click();
+  await expect(page.locator('.sidebar')).toHaveClass(/wide/);
+  await page.getByRole('button',{name:'Свернуть боковую панель'}).click();
+  await expect(page.locator('.sidebar')).toHaveClass(/is-collapsed/);
+  await page.getByRole('button',{name:'Развернуть боковую панель'}).click();
+  await expect(search).toBeVisible();
+});
