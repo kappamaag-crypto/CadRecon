@@ -24,6 +24,21 @@ describe('semantic OCR and ESKD CAD reconstruction',()=>{
   expect(r.dimensions.every(x=>!x.verified&&!!x.sourceId&&(x.confidence||0)>.6)).toBe(true);
   expect(r.chains).toHaveLength(1);expect(r.chains[0].sum).toBe(12000);
  });
+ it('accepts normalized browser OCR confidence and rejects low-confidence signs',()=>{
+  const s=newProject().sheets[0];s.entities=[
+    line(0,100,100,100),line(0,80,0,115),line(100,80,100,115),
+  ];
+  const text=label('6000',42,57);text.confidence=.93;s.entities.push(text);
+  const found=reconstructDimensionChains(s);
+  expect(found.dimensions).toHaveLength(1);
+  expect(found.dimensions[0].confidence).toBeGreaterThan(.2);
+  const signs=label('R20',10,35);signs.confidence=.86;
+  expect(detectESKDLabels([signs])).toHaveLength(1);
+  signs.confidence=.3;
+  expect(detectESKDLabels([signs])).toHaveLength(0);
+  text.confidence=.3;
+  expect(reconstructDimensionChains(s).dimensions).toHaveLength(0);
+ });
  it('does not fabricate dimensions without extension-line evidence',()=>{
   const s=newProject().sheets[0];s.entities=[line(0,100,100,100),label('6000',47,57)];
   expect(reconstructDimensionChains(s).dimensions).toHaveLength(0);
