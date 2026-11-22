@@ -31,7 +31,7 @@ export const DEFAULT_LAYERS:Layer[] = [
 export const newId = () => typeof crypto!=='undefined' && 'randomUUID' in crypto ? crypto.randomUUID() : Math.random().toString(36).slice(2)+Date.now();
 export function newSheet(name='Лист 1',width=1189,height=841):Sheet {return {id:newId(),name,width,height,entities:[],calibrated:false,sourceType:'blank'};}
 export function newProject():CadProject {const now=new Date().toISOString();return {version:1,id:newId(),name:'Новый проект',created:now,updated:now,layers:DEFAULT_LAYERS.map(l=>({...l})),sheets:[newSheet()]};}
-export function entity(kind:Kind,points:Point[],layer='Контуры',origin:Origin='manual'):Entity {return {id:newId(),kind,layer,origin,verified:origin==='manual',points};}
+export function entity(kind:Kind,points:Point[],layer='Контуры',origin:Origin='manual'):Entity {return {id:newId(),kind,layer,origin,verified:false,points,reason:origin==='manual'?'Создано вручную; не означает проверку по оригиналу':undefined};}
 export function isPoint(p:unknown):p is Point {return !!p && typeof p==='object' && Number.isFinite((p as Point).x) && Number.isFinite((p as Point).y);}
 export function validateProject(value:unknown):CadProject {
   if(!value || typeof value!=='object') throw new Error('Неверный формат проекта');
