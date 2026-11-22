@@ -39,6 +39,7 @@ export default function App(){
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
  const [onlineUrl,setOnlineUrl]=useState('http://127.0.0.1:8766'),[onlineToken,setOnlineToken]=useState('');
  const [modelsReady,setModelsReady]=useState(false);
+ const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
  const [localBusy,setLocalBusy]=useState(false);
@@ -99,7 +100,7 @@ export default function App(){
    localController.current=ctrl;setLocalBusy(true);
    setBusy('Точная реконструкция непосредственно в браузере…');
    try{
-     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal);
+     const result=await recognizeBrowserAccurate(sheet,setBusy,ctrl.signal,recognitionMode);
      if(ctrl.signal.aborted)return;
      addToOriginalSheet(sheetId,result.entities);
      if(result.ocrText)setOcrText(result.ocrText);
@@ -241,9 +242,16 @@ export default function App(){
       <button className="action" onClick={()=>setTool('eskd')}>⌗ Установить обозначение</button>
       <h3>Точная обработка — прямо в браузере</h3>
       <p className="muted">GitHub Pages — единственный хостинг. Файл чертежа не передаётся на сервер. Обработка PDF, сканов, OCR и CAD выполняется на вашем устройстве. Для OCR браузер при первом запуске скачает языковые модели.</p>
+      <label className="selector-label">Режим анализа
+        <select aria-label="Режим анализа PDF" value={recognitionMode} disabled={!!busy}
+          onChange={e=>setRecognitionMode(e.target.value as 'auto'|'hybrid')}>
+          <option value="auto">Автоматический: исходные векторы PDF в приоритете</option>
+          <option value="hybrid">Гибридный: дополнительно обвести встроенные сканы и OCR</option>
+        </select>
+      </label>
       <button className="action primary" onClick={browserAccurateProcessing} disabled={!sheet.image||!!busy}>◎ Точное распознавание в браузере</button>
       {localBusy&&<button className="action" onClick={()=>localController.current?.abort()}>× Остановить обработку на устройстве</button>}
-      <p className="muted">Цифровой PDF: исходные векторы без повторной растровой обводки. Скан: детальная обводка + OCR RU/EN + проверка размерных цепочек и ЕСКД. Результат необходимо проверить по оригиналу.</p>
+      <p className="muted">Обычный PDF: исходные векторы без повторной обводки. Для PDF со встроенными изображениями и неполной векторизацией выберите гибридный режим — он дополнительно анализирует растр и может создать дубли. Скан: обводка + OCR RU/EN + проверка размеров и ЕСКД. Результат необходимо сверить с оригиналом.</p>
       <button className="action" onClick={prepareBrowserOcr} disabled={!!busy}>↓ Подготовить языковые модели OCR (RU/EN)</button>
       <p className="muted">{modelsReady?'✓ Языковые модели подготовлены для текущего сеанса.':'Дополнительные пакеты скачиваются на устройство пользователя при необходимости; использование после очистки кэша потребует повторной загрузки.'}</p>
       <h3>Отдельные инструменты</h3>
