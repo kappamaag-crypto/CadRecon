@@ -49,7 +49,7 @@ export default function App(){
  function redoAction(){if(!redo.current.length)return;const next=redo.current.pop()!;undo.current.push(project);setProject(next);setSelected(null);}
  function changeSheet(fn:(s:typeof sheet)=>typeof sheet){apply(p=>({...p,sheets:p.sheets.map((s,i)=>i===sheetIndex?fn(s):s)}));}
  function addEntities(es:Entity[]){if(!es.length)return;changeSheet(s=>({...s,entities:[...s.entities,...es]}));setStatus('Добавлено объектов: '+es.length);}
- function modifyEntity(e:Entity){changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?e:x)}));}
+ function modifyEntity(e:Entity,explicitReview=false){const edited=explicitReview?e:{...e,verified:false,reason:'Объект изменён: требуется повторная проверка по оригиналу'};changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?edited:x)}));}
  function applyOperation(result:OperationResult){
   const ids=new Set(result.replacements.map(e=>e.id));
   changeSheet(s=>({...s,entities:[...s.entities.map(e=>ids.has(e.id)?result.replacements.find(x=>x.id===e.id)!:e),...result.additions]}));
@@ -261,7 +261,7 @@ export default function App(){
         <div className="property-type"><span>Тип</span><strong>{selection.kind}</strong></div>
         <label>Слой<select value={selection.layer} onChange={e=>modifyEntity({...selection,layer:e.target.value})}>{project.layers.map(l=><option key={l.name}>{l.name}</option>)}</select></label>
         <label>Источник <input value={selection.origin} disabled/></label>
-        <label className="check"><input type="checkbox" checked={selection.verified} onChange={e=>modifyEntity({...selection,verified:e.target.checked})}/> Проверен по оригиналу</label>
+        <label className="check"><input type="checkbox" checked={selection.verified} onChange={e=>modifyEntity({...selection,verified:e.target.checked},true)}/> Проверен по оригиналу</label>
         {['text','leader','dimension','table','stamp','eskd'].includes(selection.kind)&&<label>Текст <textarea value={selection.text||''} onChange={e=>modifyEntity({...selection,text:e.target.value})} rows={3}/></label>}
         {selection.kind==='eskd'&&<label>Тип обозначения
           <select value={selection.symbol||'weld'} onChange={e=>modifyEntity({...selection,symbol:e.target.value as EskdType})}>
