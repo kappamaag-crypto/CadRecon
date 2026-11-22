@@ -7,6 +7,7 @@ import {
 } from './archiveFeatures';
 import {downloadFile} from './storage';
 import {projectReportXlsx,downloadReportXlsx} from './xlsxExport';
+import {parseSpecificationWorkbook} from './specWorkbook';
 
 interface Props {
   project:CadProject;
@@ -65,13 +66,17 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   };
   async function importCsv(file:File|undefined){
     if(!file)return;
-    if(file.size>3_000_000){onStatus('CSV спецификации больше 3 МБ');return;}
     setImporting(true);
     try{
-      const rows=parseSpecificationCSV(await file.text());
+      const excel=/\.(?:xlsx|xlsm)$/i.test(file.name);
+      if(!excel&&file.size>3_000_000)throw new Error('CSV спецификации больше 3 МБ');
+      const parsed=excel?await parseSpecificationWorkbook(file):null;
+      const rows=parsed?parsed.rows:parseSpecificationCSV(await file.text());
       if(!rows.length)throw new Error('В файле нет строк спецификации');
       onImportSpec(rows);
-      onStatus('Импортировано '+rows.length+' строк спецификации из CSV/TSV. Сверка по явно обозначенным позициям, не по 3D-сборке.');
+      onStatus('Импортировано '+rows.length+' позиций из '+(excel?'Excel XLSX/XLSM':'CSV/TSV')+
+        '. Только локальное чтение. '+(parsed?parsed.warnings.join(' '):'')+
+        ' Сверка по явно обозначенным позициям, не по связям 3D-сборки.');
     }catch(e){onStatus('Ошибка импорта спецификации: '+String(e));}
     finally{setImporting(false);if(specInput.current)specInput.current.value='';}
   }
@@ -160,11 +165,12 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
     </div>}
     {tab==='specification'&&<div className="stack">
       <p className="muted">Сопоставляются ТОЛЬКО явно обозначенные «Поз. 12» и числа в CAD-выносках. Это не нативная связь с 3D-сборкой. Количество деталей по одному PDF не восстанавливается автоматически.</p>
-      <input hidden ref={specInput} type="file" accept=".csv,.tsv,.txt,text/csv,text/plain"
+      <input hidden ref={specInput} type="file" accept=".csv,.tsv,.txt,.xlsx,.xlsm,text/csv,text/plain"
         onChange={e=>{void importCsv(e.currentTarget.files?.[0]);}}/>
-      <button className="action" disabled={importing} onClick={()=>specInput.current?.click()}>↑ Импорт CSV / TSV спецификации</button>
+      <button className="action" disabled={importing} onClick={()=>specInput.current?.click()}>↑ Импорт CSV / TSV / Excel XLSX / XLSM</button>
       <button onClick={()=>exportCsv(
         '\uFEFF"Позиция";"Обозначение";"Наименование";"Количество";"Материал";"Масса";"Примечание"\r\n"1";"АБВГ.100";"Деталь";"2";"Сталь";"0,5";""\r\n','spec_template')}>↓ Скачать образец CSV</button>
+      <p className="muted">XLSX/XLSM читаются только как таблица: макросы и формулы НЕ запускаются. XLS старого бинарного формата не поддерживается.</p>
       <p className="muted">Загружено позиций: {project.specification?.length||0}. Требуются столбцы «Позиция», «Наименование»; дополнительные — «Обозначение», «Количество», «Материал», «Масса», «Примечание».</p>
       {!!project.specification?.length&&<>
         <button className="action" onClick={()=>exportCsv(findingsCSV(findings),'bom_audit')}>↓ Отчёт расхождений CSV</button>
