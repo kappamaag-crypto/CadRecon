@@ -92,8 +92,8 @@ export async function recognizeText(
           confidence:NORMALIZE_CONF(line.confidence),pass});
       }
     };
-    const cv=document.createElement('canvas');
-    const ctx=cv.getContext('2d',{willReadFrequently:true});
+    const cv=tiled||enhanced?document.createElement('canvas'):null;
+    const ctx=cv?.getContext('2d',{willReadFrequently:true})||null;
     // Do not require Canvas when the whole image is already a usable data URL.
     if(tiled&&!ctx)throw new Error('OCR: Canvas недоступен для тайлов');
     for(let k=0;k<tiles.length;k++){
@@ -102,10 +102,10 @@ export async function recognizeText(
       progress?.('OCR: основной анализ '+(k+1)+' / '+tiles.length);
       let image:string|HTMLCanvasElement=sheet.image;
       if(tiled){
-        cv.width=tile.width;cv.height=tile.height;
+        cv!.width=tile.width;cv!.height=tile.height;
         ctx!.drawImage(img,tile.x,tile.y,tile.width,tile.height,
           0,0,tile.width,tile.height);
-        image=cv;
+        image=cv!;
       }
       const result=await worker.recognize(image,{}, {blocks:true,text:true});
       assertActive();
@@ -135,16 +135,16 @@ export async function recognizeText(
           // Skip huge stamps and hostile/degenerate boxes.
           if(cw<3||ch<3||cw>850||ch>300)continue;
           const zoom=Math.min(3,Math.max(1.5,28/Math.max(1,ch)));
-          cv.width=Math.ceil(cw*zoom);cv.height=Math.ceil(ch*zoom);
-          if(cv.width*cv.height>1_500_000)continue;
+          cv!.width=Math.ceil(cw*zoom);cv!.height=Math.ceil(ch*zoom);
+          if(cv!.width*cv!.height>1_500_000)continue;
           ctx.save();
           ctx.filter='grayscale(1) contrast(1.6)';
           ctx.imageSmoothingEnabled=true;
           ctx.imageSmoothingQuality='high';
-          ctx.drawImage(img,x,y,cw,ch,0,0,cv.width,cv.height);
+          ctx.drawImage(img,x,y,cw,ch,0,0,cv!.width,cv!.height);
           ctx.restore();
           progress?.('OCR: повторная проверка мелких надписей '+(retried+1)+' / '+order.length);
-          const result=await worker.recognize(cv,{}, {blocks:true,text:true});
+          const result=await worker.recognize(cv!,{}, {blocks:true,text:true});
           assertActive();retried++;
           const data=result.data as unknown as TesseractText;
           const found=linesFromData(data).filter(l=>l.text?.trim());
@@ -168,14 +168,14 @@ export async function recognizeText(
       }else{
         for(const angle of [90,-90] as const){
           assertActive();
-          cv.width=height;cv.height=width;
+          cv!.width=height;cv!.height=width;
           ctx.save();
           if(angle===90){ctx.translate(height,0);ctx.rotate(Math.PI/2);}
           else{ctx.translate(0,width);ctx.rotate(-Math.PI/2);}
           ctx.drawImage(img,0,0,width,height);
           ctx.restore();
           progress?.('OCR: вертикальные надписи, поворот '+angle+'°');
-          const result=await worker.recognize(cv,{}, {blocks:true,text:true});
+          const result=await worker.recognize(cv!,{}, {blocks:true,text:true});
           assertActive();rotations++;
           const transform=(b:OcrBox):OcrBox=>angle===90?
             {text:b.text,x0:b.y0,y0:height-b.x1,x1:b.y1,y1:height-b.x0}:
@@ -185,7 +185,7 @@ export async function recognizeText(
         }
       }
     }
-    cv.width=0;cv.height=0;
+    if(cv){cv.width=0;cv.height=0;}
     const merged=reconcileOcrReadings(readings);
     const entities=merged.readings.map(r=>{
       const e=entity('text',[{x:r.x0*sx,y:r.y1*sy}],'OCR','ocr');
