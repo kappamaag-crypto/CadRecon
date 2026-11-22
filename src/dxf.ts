@@ -2,7 +2,7 @@ import type {CadProject,Entity,Point,Sheet} from './model';
 import {dimensionLength,mid,add,mul,sub} from './geometry';
 import {eskdParts} from './eskd';
 type Pair=string|number;
-const emit=(...pairs:Pair[])=>pairs.map(String).join('\n')+'\n';
+const emit=(...pairs:Pair[])=>pairs.map(value=>String(value).replace(/[\r\n\u0000\u2028\u2029]/g,' ')).join('\n')+'\n';
 const v=(p:Point)=>emit(10,p.x,20,-p.y,30,0);
 const p2=(code:number,p:Point)=>emit(code,p.x,code+10,-p.y,code+20,0);
 const unicode=(s:string)=>[...s].map(ch=>{const c=ch.codePointAt(0)!;return c>127?'\\U+'+c.toString(16).toUpperCase().padStart(4,'0'):ch;}).join('');
