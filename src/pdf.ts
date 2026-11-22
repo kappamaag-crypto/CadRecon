@@ -53,7 +53,8 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
   if(!/\.pdf$/i.test(file.name)&&file.type!=='application/pdf')return imagePages(file,onProgress);
   const src=new Uint8Array(await file.arrayBuffer());const pdf=await pdfjs.getDocument({data:src,useSystemFonts:true}).promise;
   try {
-    const sheets:Sheet[]=[];if(pdf.numPages>40)onProgress?.('Будут загружены первые 40 листов, чтобы не переполнить память браузера.');
+    const sheets:Sheet[]=[];const maxTotalPixels=65_000_000;let renderedPixels=0;
+    if(pdf.numPages>40)onProgress?.('Будут загружены первые 40 листов, чтобы не переполнить память браузера.');
     for(let pageIndex=1;pageIndex<=Math.min(pdf.numPages,40);pageIndex++){
       onProgress?.('Обработка страницы '+pageIndex+' из '+pdf.numPages);
       const page=await pdf.getPage(pageIndex);
@@ -62,9 +63,19 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
       const paths=list.fnArray.filter(fn=>fn===pdfjs.OPS.constructPath).length;
       const longest=paths>25?3200:4800;
       const pixelLimit=22000000;
-      const scale=Math.min(5,Math.max(1,Math.min(longest/Math.max(initial.width,initial.height),
-        Math.sqrt(pixelLimit/(initial.width*initial.height)))));
+      // A huge PDF MediaBox must be allowed to render below 1x; forcing
+      // scale>=1 can allocate hundreds of megapixels and crash mobile Chrome.
+      const scale=Math.max(.02,Math.min(5,longest/Math.max(initial.width,initial.height),
+        Math.sqrt(pixelLimit/(initial.width*initial.height))));
       const vp=page.getViewport({scale});
+      const pixels=Math.ceil(vp.width)*Math.ceil(vp.height);
+      if(sheets.length&&renderedPixels+pixels>maxTotalPixels){
+        sheets[0].importWarnings=[...(sheets[0].importWarnings||[]),
+          'Достигнут лимит памяти импорта PDF (65 Мп суммарно). Загружено '+sheets.length+
+          ' из '+pdf.numPages+' страниц. Остальные НЕ импортированы; разделите PDF на части.'];
+        page.cleanup();break;
+      }
+      renderedPixels+=pixels;
       // Decode BEFORE render: PDF.js may reuse/cache mutable operator-list path buffers.
       const vectorResult=extractPdfPaths(list,vp,pdfjs.OPS);
       const canvas=document.createElement('canvas');canvas.width=Math.ceil(vp.width);canvas.height=Math.ceil(vp.height);
@@ -85,7 +96,10 @@ export async function importDrawing(file:File,onProgress?:(s:string)=>void):Prom
         e.bbox={x0:pos[0],y0:pos[1]-e.size,x1:pos[0]+Math.abs(item.width||0)*scale,y1:pos[1]};
         entities.push(e);
       }
-      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.985),entities,calibrated:false,importWarnings:vectorResult.warnings,sourceType:'pdf'});
+      const warnings=[...vectorResult.warnings];
+      if(scale<.999)warnings.push('Масштаб растровой подложки PDF уменьшен до '+Number(scale.toFixed(4))+' из-за больших размеров страницы. Векторные объекты сохраняют координаты листа, но мелкие детали подложки могут быть утрачены.');
+      if(pageIndex===40&&pdf.numPages>40)warnings.push('В PDF '+pdf.numPages+' страниц; импортированы только первые 40. Оставшиеся НЕ обработаны.');
+      sheets.push({id:newId(),name:file.name+' — '+pageIndex,width:canvas.width,height:canvas.height,image:canvas.toDataURL('image/jpeg',.985),entities,calibrated:false,importWarnings:warnings,sourceType:'pdf'});
       page.cleanup();
     }
     return sheets;
