@@ -72,7 +72,7 @@ function categories(e:Entity):Exclude<SearchCategory,'all'>[]{
   if(e.kind==='table')list.push('tables');
   if(e.kind==='stamp')list.push('stamps');
   if((e.kind==='eskd'&&e.symbol==='weld')||
-    (e.kind==='leader'&&/\b(?:шов|сварн)/iu.test(e.text||'')))list.push('welds');
+    (e.kind==='leader'&&/(?:^|[^\p{L}])(?:шов|сварн)/iu.test(e.text||'')))list.push('welds');
   return [...new Set(list)];
 }
 export function searchDrawings(project:CadProject,options:SearchOptions):DrawingHit[]{
@@ -250,7 +250,7 @@ export function weldSchedule(project:CadProject):WeldGroup[]{
   const groups=new Map<string,WeldGroup>();
   for(let si=0;si<project.sheets.length;si++)for(const e of project.sheets[si].entities){
     if(!(e.kind==='eskd'&&e.symbol==='weld')&&
-      !(e.kind==='leader'&&/\b(?:шов|сварн)/iu.test(e.text||'')))continue;
+      !(e.kind==='leader'&&/(?:^|[^\p{L}])(?:шов|сварн)/iu.test(e.text||'')))continue;
     const designation=normalize(e.text||'Шов без обозначения').slice(0,120);
     const key=designation.toLocaleLowerCase('ru-RU');
     let g=groups.get(key);
