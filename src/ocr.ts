@@ -2,6 +2,7 @@ import {createWorker,PSM} from 'tesseract.js';
 import {entity,type Entity,type Sheet} from './model';
 import {planOcrTiles,planVerticalOcrTiles,unrotateOcrBox,type OcrBox} from './ocrTiles';
 import {reconcileOcrReadings,type OcrReading} from './ocrConsensus';
+import {assessTechnicalOcr} from './ocrRisk';
 /** Optional explicit download of public RU/EN OCR language packs.
  * Models and worker binaries are fetched to the user's browser. Tesseract.js
  * manages its own browser cache; this does not promise guaranteed offline use
@@ -120,10 +121,14 @@ export async function recognizeText(
     if(enhanced&&readings.length){
       const maxRetries=Math.max(0,Math.min(80,
         Number.isFinite(options.maxRetries)?Math.floor(options.maxRetries!):50));
-      const order=readings.map((reading,i)=>({reading,i}))
-        .filter(({reading})=>
-          reading.confidence<.76||(reading.y1-reading.y0)<15)
-        .sort((a,b)=>a.reading.confidence-b.reading.confidence)
+      const order=readings.map((reading,i)=>({reading,i,
+          risk:assessTechnicalOcr(reading.text)}))
+        .filter(({reading,risk})=>
+          reading.confidence<.76||(reading.y1-reading.y0)<15||risk.needsReread)
+        // A plausible-looking numeric 8O0 / M1l can be more dangerous than a
+        // random low-confidence title word. Give it a bounded second look.
+        .sort((a,b)=>Number(b.risk.needsReread)-Number(a.risk.needsReread)||
+          a.reading.confidence-b.reading.confidence)
         .slice(0,maxRetries);
       if(order.length&&ctx){
         await worker.setParameters({tessedit_pageseg_mode:PSM.SINGLE_LINE});
@@ -211,12 +216,14 @@ export async function recognizeText(
       e.confidence=r.confidence;e.verified=false;
       e.bbox={x0:r.x0*sx,y0:r.y0*sy,x1:r.x1*sx,y1:r.y1*sy};
       const alternatives=r.alternatives||[];
+      const risk=assessTechnicalOcr(r.text);
       e.reason='Браузерный Tesseract RU/EN: надпись не проверена'+
         (tiled?'; обработка по перекрывающимся фрагментам':'')+
         (r.pass==='retry'?'; повторное увеличение слабого текста':
           r.pass==='rotated'?'; поворот исходного скана на ±90°':'')+
         (alternatives.length?'; КОНФЛИКТ OCR: возможны '+alternatives
-          .slice(0,5).join(' / ')+'. Сверьте знаки, размеры и допуски по оригиналу':'');
+          .slice(0,5).join(' / ')+'. Сверьте знаки, размеры и допуски по оригиналу':'')+
+        (risk.needsReview?'; ПОДОЗРЕНИЕ OCR: '+risk.warnings.join('; '):'');
       return e;
     });
     const diagnostics:OcrDiagnostics={tiles:tiles.length,initialReadings,retried,rotations,
