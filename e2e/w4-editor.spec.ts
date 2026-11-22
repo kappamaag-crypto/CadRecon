@@ -185,3 +185,39 @@ test('closing the last drawing tab leaves a safe blank sheet instead of breaking
   await page.getByRole('button',{name:/Отмена/}).click();
   expect((await exportProject(page)).sheets[0].name).toBe('Последний');
 });
+
+test('W4 3-point dimension placement and auto dimension do not invent mm on uncalibrated sheet',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;sheet.calibrated=false;
+  await putProject(page,project);
+  await page.getByRole('button',{name:'Размер с размещением (3 точки)'}).click();
+  await worldClick(page,{x:50,y:50});await worldClick(page,{x:150,y:50});
+  await worldClick(page,{x:100,y:70});
+  await expect(page.getByText('Добавлено объектов: 1')).toBeVisible();
+  const data=await exportProject(page),d=data.sheets[0].entities[0];
+  expect(d.kind).toBe('dimension');
+  expect(d.offset).toBeCloseTo(20,1);
+  expect(d.text).toBe('?');
+  expect(d.verified).toBe(false);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(0);
+});
+test('W4 selected auto-dimension inserts linked unverified dimension and can undo',async ({page})=>{
+  const project=newProject(),sheet=project.sheets[0];
+  sheet.width=300;sheet.height=200;sheet.calibrated=true;
+  const source=entity('line',[{x:50,y:100},{x:150,y:100}]);
+  sheet.entities=[source];await putProject(page,project);
+  await page.getByRole('button',{name:'Выделение / перенос'}).click();
+  await worldClick(page,{x:90,y:100});
+  await page.locator('.panel-tabs button[title="Инструменты"]').click();
+  page.once('dialog',d=>d.accept());
+  await page.getByRole('button',{name:'◎ Авторазмер выбранного объекта'}).click();
+  const data=await exportProject(page);
+  expect(data.sheets[0].entities).toHaveLength(2);
+  const dim=data.sheets[0].entities.find(e=>e.kind==='dimension')!;
+  expect(dim.text).toBe('100');
+  expect(dim.sourceId).toBe(source.id);
+  expect(dim.verified).toBe(false);
+  await page.getByRole('button',{name:/Отмена/}).click();
+  expect((await exportProject(page)).sheets[0].entities).toHaveLength(1);
+});

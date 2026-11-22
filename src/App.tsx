@@ -19,6 +19,7 @@ import type {OperationResult} from './cadOperations';
 import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
+import {proposeAutoDimensions} from './dimensionTools';
 import type {EskdType} from './model';
 type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
@@ -31,7 +32,9 @@ const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'join',title:'Соединить линии и полилинии (JOIN)',icon:'⤴',hotkey:'J'},
   {id:'chamfer',title:'Фаска двух линий',icon:'◩'},{id:'fillet',title:'Сопряжение двух линий',icon:'⌒'},
   {id:'circle',title:'Окружность',icon:'◯',hotkey:'C'},{id:'arc',title:'Дуга (3 точки)',icon:'⌒'},
-  {id:'dimension',title:'Размерный объект',icon:'↔',hotkey:'D'},{id:'axis',title:'Осевая линия',icon:'┈'},
+  {id:'dimension',title:'Размер по двум точкам',icon:'↔',hotkey:'D'},
+  {id:'dimension-3pt',title:'Размер с размещением (3 точки)',icon:'⇤'},
+  {id:'axis',title:'Осевая линия',icon:'┈'},
   {id:'leader',title:'Выноска',icon:'➤'},{id:'hatch',title:'Замкнутый контур / заливка',icon:'▨'},
   {id:'text',title:'Надпись',icon:'T',hotkey:'T'},{id:'table',title:'Таблица',icon:'▦'},
   {id:'stamp',title:'Основная надпись',icon:'▤'},
@@ -91,6 +94,24 @@ export default function App(){
    setSheetIndex(current=>index<current?current-1:Math.min(current,Math.max(0,project.sheets.length-2)));
    setSelected(null);setFocusTarget(undefined);
    setStatus('Лист «'+target.name+'» закрыт. Ctrl+Z — вернуть. Резервная копия сохранена.');
+ }
+ function makeAutoDimensions(mode:'selected'|'all'){
+   const targets=mode==='selected'?
+     sheet.entities.filter(e=>e.id===selected):
+     sheet.entities.filter(e=>e.kind==='line'||e.kind==='circle');
+   const review=proposeAutoDimensions(sheet,targets);
+   if(!review.additions.length){
+     setStatus('Авторазмер: подходящих объектов без готового связанного размера нет.');
+     return;
+   }
+   const message='Создать '+review.additions.length+' неподтверждённых размеров? '+
+     (sheet.calibrated?'Числа основаны только на текущей калиброванной CAD-геометрии.':
+       'Лист НЕ калиброван: числовые значения заменяются знаком «?».')+
+     '\nПроверьте каждый результат по оригиналу. '+(review.limited?'Не более 200 за операцию.':'');
+   if(!window.confirm(message))return;
+   addEntities(review.additions);
+   setStatus('Авторазмер: создано '+review.additions.length+
+     ' кандидатов. '+(sheet.calibrated?'Проверьте геометрию и масштаб.':'Сначала установите масштаб по известному размеру.'));
  }
  function deleteSelected(){if(!selected)return;const e=sheet.entities.find(e=>e.id===selected);const layer=project.layers.find(l=>l.name===e?.layer);if(layer?.locked){setStatus('Слой заблокирован');return;}changeSheet(s=>({...s,entities:s.entities.filter(e=>e.id!==selected)}));setSelected(null);}
  useEffect(()=>{loadProject().then(p=>{if(p){setProject(p);setStatus('Локальный проект восстановлен');}}).catch(e=>setStatus('Хранилище недоступно: '+e)).finally(()=>setLoaded(true));},[]);
@@ -351,6 +372,16 @@ export default function App(){
       <div className="panel-tabs">{(['tools','archive','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Поиск и аудит','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>x==='backups'?showBackups():setPanel(x)} className={panel===x?'active':''}>{['⌘','⌕','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
       <div className="panelcontent">
       {panel==='tools'&&<>
+      <h3>Размеры и авторазмеры</h3>
+      <p className="muted">Как в CAD: две точки задают размер, третья размещает размерную линию. Авторазмеры — только кандидаты по текущей геометрии, не аттестованные размеры изделия.</p>
+      <div className="stack">
+        <button className="action" onClick={()=>setTool('dimension')}>↔ Размер по двум точкам</button>
+        <button className="action" onClick={()=>setTool('dimension-3pt')}>⇤ Размер с размещением (3 точки)</button>
+        <button className="action" disabled={!selected||!!busy} onClick={()=>makeAutoDimensions('selected')}>◎ Авторазмер выбранного объекта</button>
+        <button className="action" disabled={!!busy} onClick={()=>makeAutoDimensions('all')}>◎ Авторазмеры линий и окружностей</button>
+      </div>
+      <p className="muted">{sheet.calibrated?'Калибровка установлена; размеры нужно проверить.':
+        '⚠ Масштаб не подтверждён. Авторазмеры создаются без чисел (?).'} Диаметр окружности предлагается как редактируемая выноска, не как ассоциативный DIMDIAMETER.</p>
       <h3>Обозначения ЕСКД — конструктор</h3>
       <p className="muted">Выберите тип и текст, затем укажите место на чертеже инструментом ⌗. Объект сохраняется единым редактируемым знаком.</p>
       <label className="selector-label">Тип обозначения

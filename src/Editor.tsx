@@ -155,6 +155,20 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
       e.closed=true;e.verified=false;e.reason='Прямоугольник создан вручную: проверьте размеры';
       onCreate(e);return;
     }
+    if(tool==='dimension-3pt'){
+      if(pts.length<3){setDraft(pts);return;}
+      setDraft([]);
+      const [a,b,placement]=pts,length=dist(a,b);
+      if(length<1e-5){onMessage('Размер: две точки не должны совпадать.');return;}
+      const normal={x:-(b.y-a.y)/length,y:(b.x-a.x)/length};
+      const dim=entity('dimension',[a,b],'Размеры','manual');
+      dim.offset=(placement.x-a.x)*normal.x+(placement.y-a.y)*normal.y;
+      dim.size=sheet.calibrated?3.5:Math.max(9,sheet.width/180);
+      dim.text=sheet.calibrated?Number(length.toFixed(2)).toString():'?';
+      dim.reason=sheet.calibrated?'Ручное нанесение размера, требуется сверка с исходным чертежом':
+        'Размер по 3 точкам без калибровки: числовое значение скрыто';
+      onCreate(dim);return;
+    }
     if(tool==='arc'){
       if(pts.length<3){setDraft(pts);return;}
       const [center,a,b]=pts;const e=entity('arc',[center,a,b]);e.center=center;e.radius=dist(center,a);e.startAngle=Math.atan2(a.y-center.y,a.x-center.x);e.endAngle=Math.atan2(b.y-center.y,b.x-center.x);if(e.radius>0)onCreate(e);setDraft([]);return;
@@ -167,7 +181,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     const kind=tool as Entity['kind'],layer=kind==='dimension'?'Размеры':kind==='axis'?'Оси':kind==='leader'?'Текст':'Контуры';
     const e=entity(kind,[a,b],layer);
     if(kind==='circle'){e.center=a;e.radius=dist(a,b);}
-    if(kind==='dimension'){e.offset=Math.max(10,dist(a,b)*.12);e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);}
+    if(kind==='dimension'){e.offset=Math.max(10,dist(a,b)*.12);e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);e.text=sheet.calibrated?Number(dist(a,b).toFixed(2)).toString():'?';}
     if(kind==='leader'){e.text=window.prompt('Текст выноски','')||'';e.size=sheet.calibrated?3.5:Math.max(12,sheet.width/160);}
     onCreate(e);
   }
@@ -194,7 +208,7 @@ export default function Editor({sheet,project,tool,selected,onSelect,onCreate,on
     <canvas ref={canvas} onPointerDown={down} onPointerMove={move} onPointerUp={up} onPointerCancel={up} onDoubleClick={()=>{if(tool==='polyline'||tool==='hatch')finish(draft,tool);}} onWheel={wheel} onContextMenu={e=>e.preventDefault()} style={{cursor:tool==='pan'?'grab':tool==='select'?'default':'crosshair'}} aria-label="Редактор CAD"/>
     <div className="view-controls"><button title="Увеличить" onClick={()=>zoom(.8)}>+</button><button title="Уменьшить" onClick={()=>zoom(1.25)}>−</button><button title="Показать весь лист" onClick={()=>{const aspect=size.w/size.h,w=Math.max(sheet.width*1.07,sheet.height*aspect*1.07);setCamera({x:(sheet.width-w)/2,y:(sheet.height-w/aspect)/2,w,h:w/aspect});}}>⌗</button></div>
     <div className="coords">{cursor?('X '+cursor.x.toFixed(1)+' · Y '+cursor.y.toFixed(1)):'X — · Y —'} <span>{sheet.calibrated?'мм':'ед. скана'}</span></div>
-    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
+    {draft.length>0&&<div className="hint">Точек: {draft.length} · {tool==='dimension-3pt'?'Две точки измерения, затем третья точка размещения размерной линии':tool==='hatch'||tool==='polyline'?'двойной щелчок / Enter — закончить':'выберите следующую точку'} · Esc — отмена</div>}
     {pending&&<div className="hint">{tool==='break'?'BREAK: первая точка · Укажите вторую на той же линии':tool==='join'?'JOIN: выбран первый объект · Укажите второй с общим концом':'Выбран опорный отрезок · Укажите второй отрезок'} · Esc — отмена</div>}
   </div>;
 }
