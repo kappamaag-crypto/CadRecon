@@ -44,6 +44,7 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   const [tab,setTab]=useState<Tab>('search');
   const [query,setQuery]=useState(''),[category,setCategory]=useState<SearchCategory>('all');
   const [caseSensitive,setCaseSensitive]=useState(false),[allSheets,setAllSheets]=useState(true);
+  const [ocrTolerance,setOcrTolerance]=useState(false);
   const [showDuplicates,setShowDuplicates]=useState(false),[inventoryKind,setInventoryKind]=useState('all');
   const [showScanReview,setShowScanReview]=useState(false);
   const [stamp,setStamp]=useState<StampFields>({...DEFAULT_STAMP});
@@ -52,8 +53,8 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   const [fileProposals,setFileProposals]=useState<CadFileProposal[]>([]);
   const specInput=useRef<HTMLInputElement>(null),cadInput=useRef<HTMLInputElement>(null);
   const hits=useMemo(()=>searchDrawings(project,{
-    query,category,caseSensitive,allSheets,currentSheet:sheetIndex,limit:250,
-  }),[project,query,category,caseSensitive,allSheets,sheetIndex]);
+    query,category,caseSensitive,ocrTolerance,allSheets,currentSheet:sheetIndex,limit:250,
+  }),[project,query,category,caseSensitive,ocrTolerance,allSheets,sheetIndex]);
   const duplicates=useMemo(()=>showDuplicates?duplicateTechnicalRequirements(project):[],[project,showDuplicates]);
   const inventory=useMemo(()=>inventoryProject(project),[project]);
   const scanReview=useMemo(()=>showScanReview?auditScanGeometry(project):null,[project,showScanReview]);
@@ -117,11 +118,13 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
         onChange={e=>setAllSheets(e.target.checked)}/> Все листы проекта</label>
       <label className="check"><input type="checkbox" checked={caseSensitive}
         onChange={e=>setCaseSensitive(e.target.checked)}/> Учитывать регистр</label>
+      <label className="check"><input type="checkbox" checked={ocrTolerance}
+        onChange={e=>setOcrTolerance(e.target.checked)}/> OCR-допуск: похожие латинские/кириллические буквы, пробелы в размерах (возможны ложные совпадения)</label>
       <p className="muted">Найдено: {hits.length}{hits.length===250?' (лимит выдачи; уточните поиск)':''}. Ищутся уже извлечённые PDF/OCR и введённые вручную CAD-надписи, новые сканы здесь не распознаются.</p>
       <div className="archive-result-list">
         {hits.map(h=><div className="archive-hit" key={h.sheetIndex+':'+h.entityId}>
           <strong>{h.text.slice(0,180)}</strong>
-          <small>{h.sheetName} · {CATEGORY_NAMES[h.category]} · {h.origin} · {h.verified?'проверено':'НЕ проверено'}</small>
+          <small>{h.sheetName} · {CATEGORY_NAMES[h.category]} · {h.origin} · {h.verified?'проверено':'НЕ проверено'}{h.approximate?' · ВОЗМОЖНОЕ OCR-СОВПАДЕНИЕ':''}</small>
           <div className="archive-actions">
             <button onClick={()=>onFocus(h.sheetIndex,h.entityId)}>◎ Показать</button>
             <button onClick={()=>onFocus(h.sheetIndex,h.entityId,true)}>⚙ Свойства</button>

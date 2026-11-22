@@ -81,3 +81,12 @@ test('ГАЛС inventory, BOM CSV import, stamp preview and ZIP export remain on
  expect(buffer.toString('utf8')).toContain('README.txt');
  expect(buffer.toString('utf8')).toContain('Диагностика_топологии_W3.csv');
 });
+
+test('SearchTextApp opt-in OCR lookalikes find Latin M when drawing has Cyrillic М',async ({page})=>{
+  await imported(page);await openArchive(page);
+  await page.getByLabel('Поиск по чертежам').fill('M16'); // Latin M
+  await expect(page.locator('.archive-hit').filter({hasText:'Крепление М16'})).toHaveCount(0);
+  await page.getByRole('checkbox',{name:/OCR-допуск/}).check();
+  await expect(page.locator('.archive-hit').filter({hasText:'Крепление М16'})).toHaveCount(1);
+  await expect(page.getByText(/ВОЗМОЖНОЕ OCR-СОВПАДЕНИЕ/)).toBeVisible();
+});

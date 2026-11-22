@@ -8,11 +8,11 @@ export type SearchCategory='all'|'positions'|'dimensions'|'text'|'leaders'|'tabl
 export interface DrawingHit {
   sheetIndex:number;sheetName:string;entityId:string;kind:Entity['kind'];
   category:Exclude<SearchCategory,'all'>;text:string;point:Point;
-  verified:boolean;confidence?:number;origin:Entity['origin'];
+  verified:boolean;confidence?:number;origin:Entity['origin'];approximate?:boolean;
 }
 export interface SearchOptions {
   query:string;category?:SearchCategory;caseSensitive?:boolean;allSheets?:boolean;
-  currentSheet?:number;limit?:number;
+  currentSheet?:number;limit?:number;ocrTolerance?:boolean;
 }
 export interface SpecificationRow {
   position:string;designation:string;name:string;quantity:string;
@@ -75,11 +75,25 @@ function categories(e:Entity):Exclude<SearchCategory,'all'>[]{
     (e.kind==='leader'&&/(?:^|[^\p{L}])(?:шов|сварн)/iu.test(e.text||'')))list.push('welds');
   return [...new Set(list)];
 }
+/** Opt-in, deliberately limited OCR homoglyph folding for visual search.
+ * Does not equate digits 0/1 to letters, alter stored CAD text or infer sizes.
+ * Match only existing labels; surface approximate=true for operator review.
+ */
+const lookalikes:Record<string,string>={
+  'А':'A','В':'B','Е':'E','К':'K','М':'M','Н':'H','О':'O',
+  'Р':'P','С':'C','Т':'T','У':'Y','Х':'X','І':'I',
+};
+export function foldOcrSearch(value:string):string {
+  return value.normalize('NFKC').toLocaleUpperCase('ru-RU')
+    .replace(/[АВЕКМНОРСТУХІ]/g,ch=>lookalikes[ch])
+    .replace(/[\s.\u00b7]+/g,'');
+}
 export function searchDrawings(project:CadProject,options:SearchOptions):DrawingHit[]{
   const q=normalize(options.query||'');
   if(!q||q.length>300)return [];
   const limit=Math.min(MAX_SEARCH,Math.max(1,options.limit??250));
   const term=options.caseSensitive?q:q.toLocaleLowerCase('ru-RU');
+  const folded=options.ocrTolerance?foldOcrSearch(q):'';
   const result:DrawingHit[]=[];
   for(let si=0;si<project.sheets.length;si++){
     if(options.allSheets===false&&si!==(options.currentSheet??0))continue;
@@ -89,10 +103,12 @@ export function searchDrawings(project:CadProject,options:SearchOptions):Drawing
       const matched=options.category&&options.category!=='all'?cs.filter(c=>c===options.category):cs.slice(0,1);
       if(!matched.length)continue;
       const text=e.text||'';
-      if(!(options.caseSensitive?text:text.toLocaleLowerCase('ru-RU')).includes(term))continue;
+      const exact=(options.caseSensitive?text:text.toLocaleLowerCase('ru-RU')).includes(term);
+      const loose=!exact&&!!folded&&foldOcrSearch(text).includes(folded);
+      if(!exact&&!loose)continue;
       result.push({sheetIndex:si,sheetName:sheet.name,entityId:e.id,kind:e.kind,
         category:matched[0],text:text.slice(0,1000),point:entityPoint(e),
-        verified:e.verified,confidence:e.confidence,origin:e.origin});
+        verified:e.verified,confidence:e.confidence,origin:e.origin,approximate:loose});
       if(result.length>=limit)return result;
     }
   }

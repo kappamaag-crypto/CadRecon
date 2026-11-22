@@ -1,7 +1,7 @@
 import {describe,it,expect} from 'vitest';
 import {entity,newProject,validateProject} from './model';
 import {
- searchDrawings,duplicateTechnicalRequirements,parseSpecificationCSV,
+ searchDrawings,foldOcrSearch,duplicateTechnicalRequirements,parseSpecificationCSV,
  compareSpecification,inventoryProject,weldSchedule,stampText,applyStampFields,
  exportTableCSV,specificationCSV,inventoryCSV,explicitPosition,analyzeCadFilenames,cadFileProposalsCSV,
  type SpecificationRow,type StampFields,
@@ -26,6 +26,19 @@ describe('SearchTextApp-style local drawing search',()=>{
   expect(searchDrawings(p,{query:'Поз. 12',category:'positions'})).toHaveLength(1);
   expect(searchDrawings(p,{query:'Поз. 12',allSheets:false,currentSheet:0})).toHaveLength(0);
   expect(searchDrawings(p,{query:'12',category:'dimensions'})).toHaveLength(1);
+ });
+ it('supports opt-in Cyrillic/Latin OCR homoglyphs and spaced radii without editing text',()=>{
+  const p=newProject();
+  const bolt=e('text','Болт M16'),radius=e('text','R 20'),digit=e('text','020');
+  p.sheets[0].entities=[bolt,radius,digit];
+  expect(searchDrawings(p,{query:'Болт М16'})).toHaveLength(0);
+  const matches=searchDrawings(p,{query:'Болт М16',ocrTolerance:true});
+  expect(matches).toHaveLength(1);
+  expect(matches[0].approximate).toBe(true);
+  expect(matches[0].text).toBe('Болт M16');
+  expect(searchDrawings(p,{query:'R20',ocrTolerance:true})[0].entityId).toBe(radius.id);
+  expect(foldOcrSearch('О20')).not.toBe(foldOcrSearch('020'));
+  expect(bolt.text).toBe('Болт M16');
  });
  it('does not classify a plain numeric OCR dimension as position',()=>{
   expect(explicitPosition(e('text','12'))).toBeNull();
