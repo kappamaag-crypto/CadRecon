@@ -3,7 +3,7 @@ import type {CadProject} from './model';
 import {
   searchDrawings,duplicateTechnicalRequirements,parseSpecificationCSV,compareSpecification,
   inventoryProject,inventoryCSV,weldSchedule,weldsCSV,findingsCSV,
-  stampText,DEFAULT_STAMP,type SearchCategory,type SpecificationRow,type StampFields
+  stampText,DEFAULT_STAMP,analyzeCadFilenames,cadFileProposalsCSV,type CadFileProposal,type SearchCategory,type SpecificationRow,type StampFields
 } from './archiveFeatures';
 import {downloadFile} from './storage';
 import {projectReportXlsx,downloadReportXlsx} from './xlsxExport';
@@ -18,10 +18,10 @@ interface Props {
   onPackage:()=>void;
   onStatus:(message:string)=>void;
 }
-type Tab='search'|'inventory'|'specification'|'welds'|'stamp'|'package';
+type Tab='search'|'inventory'|'specification'|'welds'|'stamp'|'files'|'package';
 const TAB_NAMES:Record<Tab,string>={
   search:'Поиск',inventory:'Аудит объектов',specification:'Спецификация',
-  welds:'Сварка',stamp:'Основная надпись',package:'Пакет'
+  welds:'Сварка',stamp:'Основная надпись',files:'Файлы КОМПАС',package:'Пакет'
 };
 const CATEGORY_NAMES:Record<SearchCategory,string>={
   all:'Весь текст',positions:'Позиции',dimensions:'Размеры',text:'Надписи',
@@ -47,7 +47,8 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
   const [stamp,setStamp]=useState<StampFields>({...DEFAULT_STAMP});
   const [scope,setScope]=useState<'current'|'all'>('current');
   const [importing,setImporting]=useState(false);
-  const specInput=useRef<HTMLInputElement>(null);
+  const [fileProposals,setFileProposals]=useState<CadFileProposal[]>([]);
+  const specInput=useRef<HTMLInputElement>(null),cadInput=useRef<HTMLInputElement>(null);
   const hits=useMemo(()=>searchDrawings(project,{
     query,category,caseSensitive,allSheets,currentSheet:sheetIndex,limit:250,
   }),[project,query,category,caseSensitive,allSheets,sheetIndex]);
@@ -217,6 +218,32 @@ export default function ArchivePanel({project,sheetIndex,onFocus,onImportSpec,on
         if(window.confirm('Подтвердить изменение текстовых штампов ('+(scope==='all'?'все листы':'текущий лист')+')? Проверка ЕСКД обязательна.'))
           onApplyStamp(stamp,scope);
       }}>✓ Применить после просмотра</button>
+    </div>}
+    {tab==='files'&&<div className="stack">
+      <p className="muted">Пакетный разбор имен по принципу ГАЛС: «Обозначение - Наименование». Пользователь самостоятельно выбирает файлы. Содержимое файлов КОМПАС, STEP и SOLIDWORKS НЕ читается и НЕ изменяется.</p>
+      <input ref={cadInput} hidden type="file" multiple
+        accept=".a3d,.m3d,.cdw,.spw,.step,.stp,.sldprt,.sldasm,.pdf,.dxf,.dwg"
+        onChange={e=>{
+          try{
+            const picked=Array.from(e.currentTarget.files||[]).map(f=>f.webkitRelativePath||f.name);
+            setFileProposals(analyzeCadFilenames(picked));
+            onStatus('Разобрано имён файлов: '+picked.length+'. Это только предложения, не изменения нативных документов.');
+          }catch(err){onStatus('Импорт списка файлов: '+String(err));}
+          if(cadInput.current)cadInput.current.value='';
+        }}/>
+      <button className="action" onClick={()=>cadInput.current?.click()}>↑ Выбрать файлы CAD для анализа имен</button>
+      <p className="muted">Кандидатов: {fileProposals.filter(x=>x.status==='proposed').length},
+      неразобранных: {fileProposals.filter(x=>x.status==='unresolved').length},
+      всего: {fileProposals.length}. Ни один файл не был открыт или отправлен.</p>
+      <button disabled={!fileProposals.length} className="action"
+        onClick={()=>exportCsv(cadFileProposalsCSV(fileProposals),'cad_filenames')}>↓ Предложения по свойствам CSV</button>
+      {fileProposals.slice(0,100).map((f,i)=><div key={i} className="archive-hit">
+        <strong>{f.filename}</strong>
+        <small>{f.documentType} · {f.status==='proposed'?'предложено':'не разобрано'}</small>
+        <span>Обозначение: {f.designation||'не определено'}</span>
+        <span>Наименование: {f.name||'не определено'}</span>
+      </div>)}
+      <p className="notice">Это не пакетное изменение свойств КОМПАС-3D. Для записи в A3D/M3D/CDW необходим установленный КОМПАС-3D, совместимый лицензированный SDK и отдельный локальный коннектор.</p>
     </div>}
     {tab==='package'&&<div className="stack">
       <p className="muted">Локальный ZIP-пакет проекта: DXF по листам, результаты анализа, CSV-ведомости, данные спецификации и README с предупреждениями. Не отправляет чертежи на сервер.</p>
