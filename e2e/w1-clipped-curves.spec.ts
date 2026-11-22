@@ -10,6 +10,22 @@ test.beforeAll(()=>{
 });
 
 test('W1 actual PDF.js import clips circle/cubic as editable SPLINE and does not close hidden rectangle edges',async ({page})=>{
+  // Synthetic fixture only: inspect real PDF.js clipping path encoding.
+  // This diagnostic does not log customer PDFs or ship in browser code.
+  try{
+    const pdfjs=await import('pdfjs-dist');
+    const data=new Uint8Array(await readFile(join(OUT,'native_clipped_curves.pdf')));
+    const doc=await pdfjs.getDocument({data,useSystemFonts:true}).promise;
+    const nativePage=await doc.getPage(1);
+    const ops=await nativePage.getOperatorList();
+    const names=new Map<number,string>(Object.entries(pdfjs.OPS).map(([name,id])=>
+      [id as number,name]));
+    const relevant=Array.from(ops.fnArray,(id,i)=>({
+      name:names.get(id),args:JSON.stringify(ops.argsArray[i]).slice(0,850),
+    })).filter(x=>['constructPath','clip','eoClip','endPath','save','restore'].includes(x.name||''));
+    console.log('W1_CLIP_RAW_OPS '+JSON.stringify(relevant.slice(0,35)));
+    await doc.destroy();
+  }catch(err){console.log('W1_CLIP_RAW_OPS_ERROR '+String(err));}
   await page.goto('/CadRecon/');
   await page.locator('input[type=file][accept*=".pdf"]').setInputFiles({
     name:'native_clipped_curves.pdf',mimeType:'application/pdf',
