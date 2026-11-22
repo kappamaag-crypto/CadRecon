@@ -9,6 +9,7 @@ import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
 import {recognizeText} from './ocr';
 import {recognizeAdvanced,validateAdvancedEndpoint} from './advanced';
+import {recognizeOnline} from './online';
 import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
@@ -32,6 +33,8 @@ export default function App(){
  const [sheetIndex,setSheetIndex]=useState(0),[tool,setTool]=useState<Tool>('select'),[selected,setSelected]=useState<string|null>(null),[panel,setPanel]=useState<Panel>('tools');
  const [symbolType,setSymbolType]=useState<EskdType>('weld'),[symbolText,setSymbolText]=useState('6');
  const [advancedUrl,setAdvancedUrl]=useState('http://127.0.0.1:8765'),[advancedToken,setAdvancedToken]=useState('');
+ const [onlineUrl,setOnlineUrl]=useState(''),[onlineToken,setOnlineToken]=useState('');
+ const onlineController=useRef<AbortController|null>(null);
  const [source,setSource]=useState(true),[compare,setCompare]=useState(false),[snap,setSnap]=useState(true),[grid,setGrid]=useState(false),[busy,setBusy]=useState(''),[status,setStatus]=useState('Загрузите PDF или скан, чтобы начать.'),[ocrText,setOcrText]=useState('');
  const [backups,setBackups]=useState<{key:string;time:number;name:string}[]>([]),[loaded,setLoaded]=useState(false);
  const input=useRef<HTMLInputElement>(null),jsonInput=useRef<HTMLInputElement>(null),undo=useRef<CadProject[]>([]),redo=useRef<CadProject[]>([]);
@@ -63,6 +66,24 @@ export default function App(){
   }catch(e){setStatus('Усиленное распознавание не выполнено: '+String(e)+
     '. Проверьте запуск локального backend и доступность CORS/HTTPS.');}
   finally{setBusy('');}
+ }
+ async function onlineProcessing(){
+  if(!sheet.image){setStatus('Сначала загрузите PDF или скан');return;}
+  let url:string;
+  try{url=validateAdvancedEndpoint(onlineUrl);}catch(e){setStatus('Online Accurate: адрес сервера: '+e);return;}
+  if(!onlineToken.trim()){setStatus('Online Accurate: укажите токен сервера');return;}
+  if(!window.confirm('Текущий чертёж будет передан на отдельно запущенный сервер: '+url+
+      '\nЭто экспериментальный однопользовательский режим; он не является готовым облачным SaaS. '
+      +'Файл не должен содержать закрытую документацию без разрешения владельца. Продолжить?'))return;
+  const controller=new AbortController();
+  onlineController.current=controller;
+  setBusy('Online Accurate: отправка на сервер...');
+  try{
+    const result=await recognizeOnline(sheet,url,onlineToken,setBusy,controller.signal);
+    addEntities(result.entities);setStatus(result.note);
+    setPanel('recognition');
+  }catch(e){setStatus('Online Accurate: '+String(e)+'. Проверьте сервер, HTTPS, токен и параметры обработки.');}
+  finally{onlineController.current=null;setBusy('');}
  }
  function repairImportedPdfText(){
   let changed=0;
@@ -180,6 +201,17 @@ export default function App(){
       </label>
       <button className="action" disabled={!sheet.image||!!busy} onClick={advancedProcessing}>◈ Распознать через PaddleOCR + OpenCV</button>
       <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/backend/README.md" target="_blank" rel="noreferrer">Инструкция по установке локального сервера</a></p>
+      <h3>Online Accurate — серверный пилот</h3>
+      <p className="muted">Обработка с очередью и возможностью удаления результата. Сервер нужно развернуть отдельно; это не публичная облачная услуга. Отправка листа — только после подтверждения.</p>
+      <label className="selector-label">HTTPS адрес сервера
+        <input aria-label="Адрес Online Accurate" value={onlineUrl} onChange={e=>setOnlineUrl(e.target.value)} placeholder="https://ваш-сервер"/>
+      </label>
+      <label className="selector-label">Токен Online Accurate (не сохраняется)
+        <input aria-label="Токен Online Accurate" type="password" autoComplete="off" value={onlineToken} onChange={e=>setOnlineToken(e.target.value)}/>
+      </label>
+      <button className="action" disabled={!sheet.image||!!busy||!onlineUrl||!onlineToken} onClick={onlineProcessing}>◈ Online Accurate: распознать лист</button>
+      {onlineController.current&&<button className="action" onClick={()=>onlineController.current?.abort()}>× Отменить онлайн-задачу</button>}
+      <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/backend/ONLINE_PILOT.md" target="_blank" rel="noreferrer">Установка и ограничения серверного пилота</a></p>
       <h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
