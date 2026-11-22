@@ -1,13 +1,13 @@
 import {test,expect} from '@playwright/test';
 import {newProject} from '../src/model';
 
-test('Online Accurate uses explicit consent, scoped credentials, queue and deletes result',async ({page})=>{
+test('Local Ultra uses consent, scoped credentials and deletes user-owned job',async ({page})=>{
   const project=newProject(),sheet=project.sheets[0];
   sheet.width=300;sheet.height=200;sheet.sourceType='image';
   sheet.image='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVQIHWP4z8DwHwAFgAI/ScL9SAAAAABJRU5ErkJggg==';
   const methods:string[]=[];
   let uploaded=false;
-  await page.route('https://cadrecon-pilot.example.test/v1/**',async route=>{
+  await page.route('http://127.0.0.1:8766/v1/**',async route=>{
     const url=route.request().url();
     const method=route.request().method();
     methods.push(method+' '+new URL(url).pathname);
@@ -42,10 +42,11 @@ test('Online Accurate uses explicit consent, scoped credentials, queue and delet
     name:'online-fixture.cadrecon.json',mimeType:'application/json',
     buffer:Buffer.from(JSON.stringify(project)),
   });
-  await page.getByLabel('Адрес Online Accurate').fill('https://cadrecon-pilot.example.test');
-  await page.getByLabel('Токен Online Accurate').fill('fixture-token');
+  await page.locator('summary').filter({hasText:'Ultra'}).click();
+  await page.getByLabel('Локальный адрес Ultra').fill('http://127.0.0.1:8766');
+  await page.getByLabel('Токен Ultra').fill('fixture-token');
   page.once('dialog',dialog=>dialog.accept());
-  await page.getByRole('button',{name:/Online Accurate: распознать лист/}).click();
+  await page.getByRole('button',{name:/Распознать локальным Ultra/}).click();
   await expect(page.getByText(/fixture Online Accurate: 2 новых элементов/))
     .toBeVisible({timeout:15000});
   expect(uploaded).toBe(true);
