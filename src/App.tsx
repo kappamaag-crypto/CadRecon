@@ -253,6 +253,18 @@ export default function App(){
    if(included)files.push({name:'Проект/Исходные_данные.cadrecon.json',data:json});
    else files.push({name:'Проект/ВАЖНО_размер_проекта.txt',data:
      'JSON с растровыми подложками не включён: размер больше 30 МБ. Скачайте резервную копию JSON отдельно в верхней панели.'});
+   // GALS-inspired archive structure: placeholders only. Browser ZIP never
+   // claims native CAD/STEP files have been generated from a PDF.
+   for(const [folder,description] of [
+     ['Исходники/КОМПАС','Для исходных A3D/M3D/CDW/SPW, если они у вас есть.'],
+     ['Исходники/SOLIDWORKS','Для исходных SLDPRT/SLDASM пользователя.'],
+     ['Обмен/STEP','Для отдельно полученных STEP/STP файлов.'],
+     ['Печать/PDF','Для проверенных PDF, экспортированных в CAD вручную.'],
+     ['Архив','Папка для проверенных версий и истории проекта.'],
+   ]){
+     files.push({name:folder+'/ИНСТРУКЦИЯ.txt',data:description+
+       '\nCadRecon не создавал эти нативные файлы автоматически.\n'});
+   }
    files.push({name:'README.txt',data:[
       'CadRecon — архив локального проекта.','Хостинг: GitHub Pages. Исходная КД на сервер не загружалась.',
       'Проект: '+project.name,'Листов: '+project.sheets.length,'Непроверенных CAD-кандидатов: '+warn,
