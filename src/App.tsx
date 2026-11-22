@@ -1,9 +1,11 @@
 import {useState,useEffect,useRef,useMemo} from 'react';
 import Editor from './Editor';
+import ArchivePanel from './ArchivePanel';
 import {newProject,newSheet,newId,validateProject,type CadProject,type Entity,type Tool} from './model';
 import {auditSheet,scaleSheet,translateEntity,mergeAutoLines} from './geometry';
 import {createDxf} from './dxf';
 import {createZip,downloadZip} from './zip';
+import {applyStampFields,inventoryCSV,weldsCSV,findingsCSV,compareSpecification,specificationCSV,type SpecificationRow,type StampFields} from './archiveFeatures';
 import {createBackup,downloadFile,exportProject,importProject,loadProject,listBackups,restoreBackup,saveProject} from './storage';
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
@@ -16,7 +18,7 @@ import {repairPdfText} from './textRepair';
 import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import type {EskdType} from './model';
-type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition';
+type Panel='tools'|'layers'|'properties'|'audit'|'backups'|'recognition'|'archive';
 const TOOLS:{id:Tool;title:string;icon:string;hotkey?:string}[]=[
   {id:'select',title:'Выделение / перенос',icon:'↖',hotkey:'V'},{id:'pan',title:'Перемещение полотна',icon:'✋',hotkey:'H'},
   {id:'point',title:'Точка',icon:'·',hotkey:'P'},{id:'line',title:'Отрезок',icon:'╱',hotkey:'L'},{id:'polyline',title:'Полилиния',icon:'〽'},
@@ -43,6 +45,7 @@ export default function App(){
  const [modelsReady,setModelsReady]=useState(false);
  const [reviewType,setReviewType]=useState<'geometry'|'text'|'semantic'>('semantic');
  const [reviewPage,setReviewPage]=useState(0);
+ const [focusTarget,setFocusTarget]=useState<{id:string;token:number}|undefined>();
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
@@ -212,6 +215,54 @@ export default function App(){
  async function showBackups(){try{setBackups(await listBackups());setPanel('backups');}catch(e){setStatus('Резервные копии: '+e);}}
  async function restore(key:string){if(!window.confirm('Восстановить эту копию? Текущий проект предварительно будет сохранён.'))return;try{await createBackup(project);const p=await restoreBackup(key);setProject(p);setSheetIndex(0);setSelected(null);setStatus('Резервная копия восстановлена');}catch(e){setStatus('Восстановление: '+e);}}
  function newDocument(){if(!window.confirm('Создать новый проект? Текущий останется в резервной копии.'))return;createBackup(project).catch(()=>{});setProject(newProject());setSheetIndex(0);setSelected(null);undo.current=[];redo.current=[];}
+ function focusEntity(si:number,id:string,edit=false){
+   if(!project.sheets[si]?.entities.some(e=>e.id===id)){
+     setStatus('Объект не найден в текущем проекте');return;
+   }
+   setSheetIndex(si);
+   setSelected(id);
+   setTool('select');
+   setFocusTarget({id,token:Date.now()+Math.random()});
+   if(edit)setPanel('properties');
+ }
+ function importSpecification(rows:SpecificationRow[]){
+   apply(p=>({...p,specification:rows.map(r=>({...r}))}));
+ }
+ function applyStamp(data:StampFields,scope:'current'|'all'){
+   apply(p=>applyStampFields(p,data,scope,sheetIndex));
+   setStatus('Штамп заполнен в '+(scope==='all'?'проекте':'текущем листе')+
+     '. Объекты остались непроверенными; используйте Undo при ошибке.');
+ }
+ function exportPackage(){
+   const safe=(text:string)=>slug(text).slice(0,75)||'CadRecon';
+   const warn=project.sheets.reduce((n,s)=>n+s.entities.filter(e=>!e.verified).length,0);
+   const files=project.sheets.map((s,i)=>({
+     name:'DXF/'+String(i+1).padStart(2,'0')+'_'+safe(s.name)+'.dxf',
+     data:createDxf(s,project),
+   }));
+   files.push({name:'Отчеты/Объекты.csv',data:inventoryCSV(project)});
+   files.push({name:'Отчеты/Сварные_обозначения.csv',data:weldsCSV(project)});
+   if(project.specification?.length){
+     files.push({name:'Отчеты/Спецификация.csv',data:specificationCSV(project.specification)});
+     files.push({name:'Отчеты/Сверка_позиций.csv',data:findingsCSV(compareSpecification(project,project.specification))});
+   }
+   const json=JSON.stringify(project);
+   const included=json.length<30_000_000;
+   if(included)files.push({name:'Проект/Исходные_данные.cadrecon.json',data:json});
+   else files.push({name:'Проект/ВАЖНО_размер_проекта.txt',data:
+     'JSON с растровыми подложками не включён: размер больше 30 МБ. Скачайте резервную копию JSON отдельно в верхней панели.'});
+   files.push({name:'README.txt',data:[
+      'CadRecon — архив локального проекта.','Хостинг: GitHub Pages. Исходная КД на сервер не загружалась.',
+      'Проект: '+project.name,'Листов: '+project.sheets.length,'Непроверенных CAD-кандидатов: '+warn,
+      'Некалиброванных листов: '+project.sheets.filter(s=>!s.calibrated).length,
+      'DXF только для инженерной проверки; без калибровки единицы условные.',
+      'Отчёты об объектах, сварке и позициях не являются автоматическим нормоконтролем.',
+      'Отсутствие позиций не доказывает ошибку PDF: возможны пропуски распознавания.',
+      'Исходные КОМПАС/CDW, STEP и SOLIDWORKS не синтезируются из PDF.',
+     ].join('\n')+'\n'});
+   downloadZip(createZip(files),safe(project.name)+'_CadRecon_пакет.zip');
+   setStatus('Экспортирован локальный ZIP: '+files.length+' файлов. Непроверенных объектов: '+warn);
+ }
  const selection=sheet.entities.find(e=>e.id===selected);
  const issues=useMemo(()=>auditSheet(sheet,project),[sheet,project]);
  const counts=useMemo(()=>sheet.entities.reduce((acc,e)=>(acc[e.kind]=(acc[e.kind]||0)+1,acc),{} as Record<string,number>),[sheet]);
@@ -249,11 +300,11 @@ export default function App(){
     <aside className="toolrail">{TOOLS.map(t=><button key={t.id} className={tool===t.id?'active':''} onClick={()=>setTool(t.id)} title={t.title+(t.hotkey?' ['+t.hotkey+']':'')} aria-label={t.title}>{t.icon}</button>)}</aside>
     <section className="drawing">
       <div className="sheetnav"><div className="sheet-tabs">{project.sheets.map((s,i)=><button key={s.id} className={sheetIndex===i?'active':''} onClick={()=>{setSheetIndex(i);setSelected(null);}} title={s.name}>{s.name.length>26?s.name.slice(0,24)+'…':s.name}</button>)}</div><span className="meta">{sheet.entities.length.toLocaleString('ru-RU')} объектов · {Math.round(sheet.width)} × {Math.round(sheet.height)} {sheet.calibrated?'мм':'ед.'}</span></div>
-      <Editor key={sheet.id} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
+      <Editor key={sheet.id} focusTarget={focusTarget} sheet={sheet} project={project} tool={tool} selected={selected} onSelect={setSelected} onCreate={e=>addEntities([e])} onMove={(e,d)=>modifyEntity(translateEntity(e,d))} onOperation={applyOperation} onCalibrate={factor=>{changeSheet(s=>scaleSheet(s,factor));setStatus('Лист откалиброван. Проверьте дополнительные контрольные размеры.');}} onMessage={setStatus} source={source} compare={compare} grid={grid} snap={snap} symbolType={symbolType} symbolText={symbolText}/>
       <div className="statusbar"><span className={busy?'pulse':''}>{busy||status}</span><span className="status-right">Esc — отмена · Enter — завершить контур · Del — удалить · Ctrl+Z — назад</span></div>
     </section>
     <aside className="sidebar">
-      <div className="panel-tabs">{(['tools','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>x==='backups'?showBackups():setPanel(x)} className={panel===x?'active':''}>{['⌘','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
+      <div className="panel-tabs">{(['tools','archive','layers','properties','recognition','audit','backups'] as Panel[]).map((x,i)=><button key={x} title={['Инструменты','Поиск и аудит','Слои','Свойства','Распознавание','Проверка','Резерв'][i]} onClick={()=>x==='backups'?showBackups():setPanel(x)} className={panel===x?'active':''}>{['⌘','⌕','☷','⚙','⌗','✓','▣'][i]}</button>)}</div>
       <div className="panelcontent">
       {panel==='tools'&&<>
       <h3>Обозначения ЕСКД — конструктор</h3>
@@ -303,6 +354,7 @@ export default function App(){
         <p className="muted"><a href="https://github.com/kappamaag-crypto/CadRecon/blob/main/docs/ULTRA_WINDOWS_INSTALLER.md" target="_blank" rel="noreferrer">Как установить Ultra на свой ПК</a></p>
       </details>
       <h3>Состав листа</h3><div className="statgrid">{Object.entries(counts).map(([key,n])=><div key={key}><strong>{n}</strong><small>{key}</small></div>)}</div>{!!ocrText&&<><h3>Распознанный текст</h3><textarea rows={7} readOnly value={ocrText} aria-label="OCR текст"/><button onClick={()=>navigator.clipboard.writeText(ocrText)}>Копировать OCR</button></>}<p className="notice">Сканированная геометрия и OCR не считаются точными до проверки размеров и объектов.</p></>}
+      {panel==='archive'&&<ArchivePanel project={project} sheetIndex={sheetIndex} onFocus={focusEntity} onImportSpec={importSpecification} onApplyStamp={applyStamp} onPackage={exportPackage} onStatus={setStatus}/>}
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
         <p className="muted">Новые объекты CAD не подтверждаются автоматически. Балл алгоритма — эвристика, а не статистическая вероятность правильности. Сравните с оригиналом, при необходимости исправьте или удалите.</p>
