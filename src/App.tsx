@@ -722,7 +722,7 @@ export default function App(){
           {measured.radius!==undefined&&<p>Радиус: {measured.radius.toFixed(3)} {sheet.calibrated?'мм':'ед. листа'}</p>}
           <p>{measured.note}</p>
           {!sheet.calibrated&&<p>⚠ Масштаб не подтверждён: это не миллиметры.</p>}
-        </div>
+        </div>}
         <label>Слой<select value={selection.layer} onChange={e=>modifyEntity({...selection,layer:e.target.value})}>{project.layers.map(l=><option key={l.name}>{l.name}</option>)}</select></label>
         <label>Источник <input value={selection.origin} disabled/></label>
         {selection.kind==='line'&&<label>Тип линии (DXF)
