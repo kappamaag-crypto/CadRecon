@@ -46,6 +46,14 @@ describe('W2 technical dimension/OCR confusable audit without auto-substitution'
      expect(assessTechnicalOcr(valid).needsReread,valid).toBe(false);
    }
  });
+ it('prioritizes obvious garbled PDF/OCR glyphs for reread even at high confidence',()=>{
+    const replacement=assessTechnicalOcr('Сталь 45 �');
+    expect(replacement.needsReread).toBe(true);
+    expect(replacement.needsReview).toBe(true);
+    expect(assessTechnicalOcr('Сталь 45').needsReread).toBe(false);
+    const privateUse=assessTechnicalOcr('Материал \uE000');
+    expect(privateUse.needsReread).toBe(true);
+ });
  it('is bounded and never edits source text',()=>{
    const source='8O0';
    expect(assessTechnicalOcr(source).warnings.length).toBeGreaterThan(0);
