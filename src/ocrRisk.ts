@@ -28,6 +28,18 @@ export function assessTechnicalOcr(text:string):TechnicalOcrRisk{
   // Keep standalone ordinary measurements outside this semantic heuristic.
   const criticalLabel=/(?:^|[^\p{L}])(?:R[az]\s*\d|[Ø⌀∅Фф]\s*\d|[MМ]\s*\d+\s*[×xхXХ]\s*\d|±\s*\d)/iu.test(text);
   if(criticalLabel)warnings.push('Критичное техническое обозначение: диаметр, резьба с шагом, шероховатость или допуск. Сверить символы и запятую по оригиналу');
-  const needsReread=numericConfusable||(mixed&&/\d/.test(text));
+  // Symbols from real mechanical drawings: an OCR engine can be extremely
+  // confident about Ø2S,4 or Ra O,8 although neither is a valid numeric
+  // dimension/roughness value. Flag for a local re-read, never substitute.
+  // Accept both comma and dot as decimal separators, as printed.
+  const decimal=/^\d+(?:[.,]\d+)?$/u;
+  const stripTerminal=(s:string)=>s.replace(/[;:.)\]]+$/u,'');
+  const roughness=[...text.matchAll(/\bR[az]\s+([^\s;]+)/giu)]
+    .some(m=>!decimal.test(stripTerminal(m[1])));
+  const diameter=[...text.matchAll(/[⌀Ø∅]\s*([^\s;]+)/gu)]
+    .some(m=>!decimal.test(stripTerminal(m[1])));
+  if(roughness)warnings.push('Нечитаемое числовое значение Ra/Rz: проверьте шероховатость по оригиналу');
+  if(diameter)warnings.push('Нечитаемое число после знака диаметра: проверьте Ø/⌀ и цифры');
+  const needsReread=numericConfusable||(mixed&&/\d/.test(text))||roughness||diameter;
   return {needsReread,criticalLabel,needsReview:warnings.length>0,warnings};
 }

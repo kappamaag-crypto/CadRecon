@@ -33,6 +33,19 @@ describe('W2 technical dimension/OCR confusable audit without auto-substitution'
    expect(assessTechnicalOcr(label).needsReread).toBe(false); // readable but important
    expect(label).toBe('Ra 0,8');
  });
+ it('flags malformed diameter or roughness numbers despite high OCR confidence',()=>{
+   for(const bad of ['Ø2S,4','⌀2B','Rz 8O','Ra O,8','Ra 0,B','∅2З']){
+     const result=assessTechnicalOcr(bad);
+     expect(result.needsReread,bad).toBe(true);
+     expect(result.needsReview,bad).toBe(true);
+     expect(result.warnings.length).toBeGreaterThan(0);
+   }
+ });
+ it('does not mislabel legitimate mechanical diameter and roughness values',()=>{
+   for(const valid of ['Ø25,4','⌀25','∅36','Ra 0,8','Rz 40','Ra 0.8','Rz 80']){
+     expect(assessTechnicalOcr(valid).needsReread,valid).toBe(false);
+   }
+ });
  it('is bounded and never edits source text',()=>{
    const source='8O0';
    expect(assessTechnicalOcr(source).warnings.length).toBeGreaterThan(0);
