@@ -4,6 +4,7 @@
  * It may give high support to printed text, table borders and a circle tangent.
  * Therefore low support downgrades, but high support never verifies a line.
  */
+import {scanInkTone} from './scanInkThreshold';
 export type InkPoint={x:number;y:number};
 export type InkLineCandidate={a:InkPoint;b:InkPoint;confidence:number};
 export type Evidence={support:number;samples:number;adjustedScore:number;longestBlankRun:number;blankRunRatio:number;blankRunPixels:number};
@@ -31,7 +32,7 @@ export function rankLineByInkEvidence(
       const xx=Math.round(x+n.x*off),yy=Math.round(y+n.y*off);
       if(xx<0||yy<0||xx>=width||yy>=height)continue;
       const at=(yy*width+xx)*4;
-      const brightness=.299*rgba[at]+.587*rgba[at+1]+.114*rgba[at+2];
+      const brightness=scanInkTone(rgba[at],rgba[at+1],rgba[at+2]);
       if(brightness<=inkThreshold){onInk=true;break;}
     }
     if(onInk){hits++;currentBlank=0;}

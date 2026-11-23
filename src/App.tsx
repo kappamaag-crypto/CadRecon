@@ -16,7 +16,7 @@ import {createBackup,downloadFile,exportProject,importProject,loadProject,listBa
 import {importDrawing} from './pdf';
 import {traceImage} from './vectorize';
 import {recognizeText,preloadOcrModels} from './ocr';
-import {recognizeBrowserAccurate,uniqueCandidates} from './browserAccurate';
+import {recognizeBrowserAccurate,uniqueCandidates,mergeRecognitionEntities} from './browserAccurate';
 import {validateAdvancedEndpoint} from './advanced';
 import {recognizeOnline} from './online';
 import type {OperationResult} from './cadOperations';
@@ -95,7 +95,10 @@ export default function App(){
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
  const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
- const [ocrVertical,setOcrVertical]=useState(false);
+ // Shaft and KOMPAS technical drawings often contain vertical diameters,
+ // threads and section text. Enable bounded +/-90° OCR by default in the
+ // accurate profile; users can disable it for small/simple drawings.
+ const [ocrVertical,setOcrVertical]=useState(true);
  const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;comparison:OcrReferenceComparison}|null>(null);
  const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement;possibleMarkup:boolean}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
@@ -110,7 +113,16 @@ export default function App(){
  function redoAction(){if(!redo.current.length)return;const next=redo.current.pop()!;undo.current.push(project);setProject(next);setSelected(null);}
  function changeSheet(fn:(s:typeof sheet)=>typeof sheet){apply(p=>({...p,sheets:p.sheets.map((s,i)=>i===sheetIndex?fn(s):s)}));}
  function addEntities(es:Entity[]){if(!es.length)return;changeSheet(s=>({...s,entities:[...s.entities,...es]}));setStatus('Добавлено объектов: '+es.length);}
- function addToOriginalSheet(id:string,es:Entity[]){if(!es.length)return;apply(p=>p.sheets.some(x=>x.id===id)?({...p,sheets:p.sheets.map(x=>x.id===id?{...x,entities:[...x.entities,...es]}:x)}):p);}
+ function addToOriginalSheet(id:string,es:Entity[]){
+   if(!es.length)return;
+   apply(p=>{
+     const original=p.sheets.find(x=>x.id===id);
+     if(!original)return p;
+     const merged=mergeRecognitionEntities(original.entities,es);
+     return merged.entities===original.entities?p:
+       {...p,sheets:p.sheets.map(x=>x.id===id?{...x,entities:merged.entities}:x)};
+   });
+ }
  function modifyEntity(e:Entity,explicitReview=false){const edited=explicitReview?e:{...e,verified:false,reason:'Объект изменён: требуется повторная проверка по оригиналу'};changeSheet(s=>({...s,entities:s.entities.map(x=>x.id===e.id?edited:x)}));}
  function applyOperation(result:OperationResult){
   const ids=new Set(result.replacements.map(e=>e.id));
@@ -367,7 +379,7 @@ export default function App(){
    setBusy('Ultra локально: обработка на этом компьютере…');
    try{
      const result=await recognizeOnline(sheet,url,onlineToken,setBusy,controller.signal);
-     addEntities(result.entities);setStatus(result.note);setPanel('recognition');
+     addToOriginalSheet(sheet.id,result.entities);setStatus(result.note);setPanel('recognition');
    }catch(e){setStatus('Ultra локально: '+String(e)+'. Проверьте установку локального пакета, токен и доступ к 127.0.0.1.');}
    finally{onlineController.current=null;setBusy('');}
  }
@@ -418,7 +430,7 @@ export default function App(){
      const existing=new Set(sheet.entities.filter(e=>e.sourceId).map(e=>e.sourceId+'|'+e.kind));
      const newDims=recognized.dimensions.filter(e=>!existing.has(e.sourceId+'|'+e.kind));
      const newSymbols=symbols.filter(e=>!existing.has(e.sourceId+'|'+e.kind));
-     const fresh=[...extracted,...newDims,...newSymbols];
+     const fresh=uniqueCandidates(sheet.entities,[...extracted,...newDims,...newSymbols]);
      if(ctrl.signal.aborted)return;
      if(fresh.length)addToOriginalSheet(sheetId,fresh);
      setReviewType('semantic');setReviewPage(0);setPanel('recognition');
@@ -488,7 +500,7 @@ export default function App(){
         ' LINE и '+result.expectedCircles+' CIRCLE. Область разметки: '+
         (reference.scope==='partial'?'частичная':'полная')+
         '. Пиксельные метрики не являются точностью в мм.'+
-        (possibleMarkup?' ВНИМАНИЕ: на изображении возможна цветная эталонная обводка.':''));
+        (possibleMarkup?' Цветные линии могут быть штатными стилями КОМПАС-3D; цвет не доказывает наложения разметки.':''));
 
     }catch(error){setStatus('Эталон геометрии: '+String(error));}
   }
@@ -508,9 +520,10 @@ export default function App(){
      apply(p=>{
        const original=p.sheets.find(s=>s.id===sheetId);
        if(!original)return p;
-       const fresh=uniqueCandidates(original.entities,shifted);
-       return fresh.length?{...p,sheets:p.sheets.map(s=>s.id===sheetId?
-         {...s,entities:[...s.entities,...fresh]}:s)}:p;
+       const merged=mergeRecognitionEntities(original.entities,shifted);
+       return merged.entities===original.entities?p:
+         {...p,sheets:p.sheets.map(s=>s.id===sheetId?
+           {...s,entities:merged.entities}:s)};
      });
      setOcrText(result.text);setReviewType('text');setReviewPage(0);setPanel('recognition');
      setStatus('OCR области: найдено '+shifted.length+' строк, размер '+
@@ -537,9 +550,10 @@ export default function App(){
      apply(p=>{
        const original=p.sheets.find(s=>s.id===sheetId);
        if(!original)return p;
-       const fresh=uniqueCandidates(original.entities,r.entities);
-       return fresh.length?{...p,sheets:p.sheets.map(s=>s.id===sheetId?
-         {...s,entities:[...s.entities,...fresh]}:s)}:p;
+       const merged=mergeRecognitionEntities(original.entities,r.entities);
+       return merged.entities===original.entities?p:
+         {...p,sheets:p.sheets.map(s=>s.id===sheetId?
+           {...s,entities:merged.entities}:s)};
      });
      setReviewType('text');setReviewPage(0);setPanel('recognition');
      const d=r.diagnostics;
@@ -843,8 +857,8 @@ export default function App(){
         <p className="muted">Новые объекты CAD не подтверждаются автоматически. Балл алгоритма — эвристика, а не статистическая вероятность правильности. Сравните с оригиналом, при необходимости исправьте или удалите.</p>
         <details>
           <summary>Сравнить LINE / CIRCLE с проверенной разметкой (локальный эталон)</summary>
-          <p className="muted">Для сканов с синей обводкой нельзя принимать все цветные линии за доказанную геометрию.
-            Разметьте координаты настоящих LINE/CIRCLE в исходных пикселях изображения; поставьте
+          <p className="muted">Синие и голубые линии могут быть штатными стилями КОМПАС-3D, а не дополнительной обводкой.
+            Учитывайте их как исходную геометрию. Проверьте LINE/CIRCLE в пикселях и поставьте
             reviewed=true только после независимой проверки. Неполный эталон показывает покрытие,
             но не объявляет остальные линии ошибочными.</p>
           <div className="stack">
@@ -855,11 +869,10 @@ export default function App(){
           </div>
           {geometryBenchmark?.sheetId===sheet.id&&<div className="issue" aria-label="Результат проверки геометрии">
             <strong>Сравнение с проверенным эталоном ({geometryBenchmark.result.scope==='complete'?'полная область':'частичная область'})</strong>
-            {geometryBenchmark.possibleMarkup&&<p className="notice" aria-label="Предупреждение о цветной эталонной обводке">
-              ⚠ Обнаружены цветные линии поверх тёмной графики. Возможно, эталонная подсветка
-              находится прямо на исходном скане и распознаётся алгоритмом как настоящий контур.
-              В таком случае результаты НЕ являются независимой оценкой точности. Для приёмки
-              используйте исходное изображение без наложенной разметки и отдельный JSON-эталон.
+            {geometryBenchmark.possibleMarkup&&<p className="notice" aria-label="Информация о цветных линиях КОМПАС-3D">
+              Цветные линии обнаружены. В КОМПАС-3D это могут быть обычные стили исходного чертежа.
+              Наличие синего или голубого цвета не доказывает наложение эталонной обводки.
+              Точность проверяйте по отдельной независимо подтверждённой JSON-разметке.
             </p>}
             <p>Покрытие длины контрольных LINE: {(geometryBenchmark.result.lineCoverage*100).toFixed(1)}%.
               Полностью покрыто (≥90%): {geometryBenchmark.result.coveredLines}/{geometryBenchmark.result.expectedLines}.

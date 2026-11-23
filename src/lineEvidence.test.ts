@@ -1,5 +1,6 @@
 import {describe,it,expect} from 'vitest';
 import {rankLineByInkEvidence} from './lineEvidence';
+import {scanInkTone} from './scanInkThreshold';
 function raster(w=240,h=120){
  const rgba=new Uint8ClampedArray(w*h*4);rgba.fill(255);
  const draw=(x0:number,x1:number,y0:number,y1:number)=>{
@@ -11,6 +12,17 @@ function raster(w=240,h=120){
 }
 const line=(y:number)=>({a:{x:10,y},b:{x:230,y},confidence:.9});
 describe('W3 non-destructive source-ink confidence ranking',()=>{
+ it('supports bright cyan CAD geometry as real source ink rather than white paper',()=>{
+  const im=raster();
+  for(let x=10;x<=230;x++)for(let y=50;y<=52;y++){
+    const i=(y*im.w+x)*4;
+    im.rgba[i]=0;im.rgba[i+1]=220;im.rgba[i+2]=220;
+  }
+  const e=rankLineByInkEvidence(line(51),im.rgba,im.w,im.h,512,
+    Math.max(40,scanInkTone(0,220,220)));
+  expect(e.support).toBe(1);
+  expect(e.adjustedScore).toBeCloseTo(.9);
+ });
  it('retains high support for genuine printed straight ink',()=>{
   const im=raster();im.draw(10,230,50,52);
   const e=rankLineByInkEvidence(line(51),im.rgba,im.w,im.h);

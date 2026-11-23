@@ -6,6 +6,9 @@ test('PDF/scan recognition is first, CAD is secondary and export requires a sour
   await expect(page.locator('.panel-tabs button[title="PDF → DXF"]')).toHaveClass(/active/);
   await expect(page.getByText('PDF / скан → редактируемый 2D DXF')).toBeVisible();
   const vertical=page.getByRole('checkbox',{name:/Искать вертикальные надписи/});
+  // Accurate engineering profile enables bounded 90-degree OCR by default.
+  await expect(vertical).toBeChecked();
+  await vertical.uncheck();
   await expect(vertical).not.toBeChecked();
   await vertical.check();
   await expect(vertical).toBeChecked();

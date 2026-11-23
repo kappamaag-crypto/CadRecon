@@ -5,13 +5,14 @@ import {deduplicateInkStrokeVotes,sameFiniteLine} from './inkVoteDedup';
 import {rankLineByInkEvidence} from './lineEvidence';
 import {refineStrokeCenters} from './inkCenterline';
 import {classifyLinePattern} from './linePattern';
-import {otsuInkThreshold} from './scanInkThreshold';
+import {otsuInkThreshold,scanInkTone} from './scanInkThreshold';
 import {inferStrokeNormal,normalAgrees,type InkNormal} from './edgeOrientation';
+import {recoverThinAxisStrokes} from './axisRunRecovery';
 type P={x:number;y:number};type EdgeP=P&{normal:InkNormal};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];threshold:number}{
   const gray=new Uint8Array(width*height);const histogram=new Uint32Array(256);
-  for(let i=0;i<gray.length;i++){const j=i*4;const g=Math.round(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]);gray[i]=g;histogram[g]++;}
+  for(let i=0;i<gray.length;i++){const j=i*4;const g=scanInkTone(rgba[j],rgba[j+1],rgba[j+2]);gray[i]=g;histogram[g]++;}
   const n=width*height;
   // Inclusive Otsu ink threshold: equality is common on faded photocopies.
   const th=otsuInkThreshold(histogram);
@@ -82,13 +83,22 @@ function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];thresho
     for(let i=1;i<matches.length;i++){if(matches[i]-last>Math.max(7,minLength/3)){push();first=matches[i];}last=matches[i];}
     if(matches.length)push();
   }
+  // A narrow, bounded rescue for 1-pixel straight CAD ink that never
+  // received sufficient Hough votes. No whitespace interpolation.
+  const rescued=recoverThinAxisStrokes(gray,width,height,th,Math.max(24,minLength*1.5));
+  for(const segment of rescued){
+    const candidate={...segment,a:{x:segment.a.x*scale,y:segment.a.y*scale},
+      b:{x:segment.b.x*scale,y:segment.b.y*scale}};
+    if(!found.some(f=>sameFiniteLine(f,candidate,2.5*scale)))
+      found.push(candidate);
+  }
   return {lines:found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y)).slice(0,3000),threshold:th};
 }
 
 interface CircleCandidate {x:number;y:number;radius:number;confidence:number;}
 function detectCircles({rgba,width,height,scale}:Msg,threshold=145):CircleCandidate[] {
   const count=width*height,mask=new Uint8Array(count),visited=new Uint8Array(count);
-  for(let i=0;i<count;i++){const j=i*4;mask[i]=(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2])<=threshold?1:0;}
+  for(let i=0;i<count;i++){const j=i*4;mask[i]=scanInkTone(rgba[j],rgba[j+1],rgba[j+2])<=threshold?1:0;}
   const queue=new Int32Array(count),circles:CircleCandidate[]=[];
   for(let start=0;start<count;start++){
     if(!mask[start]||visited[start])continue;

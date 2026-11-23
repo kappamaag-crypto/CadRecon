@@ -40,7 +40,7 @@ test('browser private geometry reference is local and partial labels do not yiel
   await expect(page.getByText(/Согласованность кандидатов: 66.7%/)).toBeVisible();
 });
 
-test('browser warns when saturated blue reference ink is on the same test image',async({page})=>{
+test('browser treats saturated blue as possible native KOMPAS drawing style',async({page})=>{
   await page.goto('/CadRecon/');
   const image=await page.evaluate(()=>{
     const c=document.createElement('canvas');c.width=200;c.height=120;
@@ -66,6 +66,7 @@ test('browser warns when saturated blue reference ink is on the same test image'
       imageWidth:200,imageHeight:120,scope:'partial',
       lines:[{id:'line-a',a:{x:20,y:30},b:{x:180,y:30}}],circles:[]})),
   });
-  await expect(page.getByLabel('Предупреждение о цветной эталонной обводке')).toBeVisible();
+  await expect(page.getByLabel('Информация о цветных линиях КОМПАС-3D')).toBeVisible();
+  await expect(page.getByText(/не доказывает наложение эталонной обводки/)).toBeVisible();
   await expect(page.getByText(/Покрытие длины контрольных LINE: 100.0%/)).toBeVisible();
 });
