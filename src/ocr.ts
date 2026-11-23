@@ -237,7 +237,10 @@ export async function recognizeText(
           r.pass==='rotated'?'; поворот исходного скана на ±90°':'')+
         (alternatives.length?'; КОНФЛИКТ OCR: возможны '+alternatives
           .slice(0,5).join(' / ')+'. Сверьте знаки, размеры и допуски по оригиналу':'')+
-        (risk.needsReview?'; ПОДОЗРЕНИЕ OCR: '+risk.warnings.join('; '):'');
+        (risk.needsReview?
+          (risk.criticalLabel&&!risk.needsReread&&risk.warnings.length===1?
+            '; КРИТИЧНАЯ НАДПИСЬ OCR: ':'; ПОДОЗРЕНИЕ OCR: ')+
+          risk.warnings.join('; '):'');
       return e;
     });
     const diagnostics:OcrDiagnostics={tiles:tiles.length,initialReadings,retried,rotations,
