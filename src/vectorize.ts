@@ -1,5 +1,6 @@
 import {entity,type Entity,type Sheet} from './model';
 import {consolidateScanLines} from './scanTopology';
+import {remeasureMergedScanLines} from './mergedInkEvidence';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
 type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number;inkSupport?:number;blankRunRatio?:number;blankRunPixels?:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
@@ -117,11 +118,21 @@ export async function traceImage(
     const reconciled=quality==='detailed'
       ?consolidateScanLines(lines,.85*scalePx,.15*scalePx)
       :{entities:lines,removed:0,candidates:lines.length};
-    if(reconciled.warning)warnings.push(reconciled.warning);
-    if(reconciled.entities.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
-    return {entities:[...reconciled.entities,...circles].slice(0,30000),warnings,sampledScale:factor,
-      note:'Детальная обводка: '+reconciled.entities.length+' отрезков ('+
-      reconciled.removed+' перекрывающихся объединено, '+circularDuplicates+
+    // The joined LINE's pixel support must be measured over its WHOLE new
+    // interval. Reusing tile-sample support would falsely imply verified ink.
+    const rechecked=quality==='detailed'&&reconciled.removed>0
+      ?await remeasureMergedScanLines(reconciled.entities,img,
+        {width:sheet.width,height:sheet.height},fullWidth,fullHeight,signal,onProgress,400)
+      :{entities:reconciled.entities,reviewed:0,skipped:0};
+    assertActive();
+    if(rechecked.warning)warnings.push(rechecked.warning);
+    if(reconciled.removed)warnings.push('Объединение не заполняло положительные разрывы: '+reconciled.removed+
+      ' перекрывающихся гипотез, пересчитана опора '+rechecked.reviewed+' итоговых LINE.');
+    if(rechecked.entities.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
+    return {entities:[...rechecked.entities,...circles].slice(0,30000),warnings,sampledScale:factor,
+      note:'Детальная обводка: '+rechecked.entities.length+' отрезков ('+
+      reconciled.removed+' перекрывающихся объединено, повторно проверено '+rechecked.reviewed+
+      ' сшитых LINE по пикселям исходного изображения, '+circularDuplicates+
       ' круговых повторов и '+inkDuplicates+' повторов штриха исключено; '+centerlineAdjusted+
       ' гипотез смещены на центр исходной краски) и '+circles.length+
       ' окружностей ('+finalTiles.length+' участков, '+fullWidth+'×'+fullHeight+' пикс.). Требуется проверка.'+
