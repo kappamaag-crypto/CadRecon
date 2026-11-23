@@ -57,6 +57,8 @@ jobs:
 
 
           PY
+      - name: Independently reserialize and reopen DXF geometry (round-trip)
+        run: python3 scripts/dxf_roundtrip_contract.py
       - name: ZIP archive smoke check
         run: |
           python3 - <<'PY'
