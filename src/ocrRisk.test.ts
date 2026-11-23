@@ -19,6 +19,20 @@ describe('W2 technical dimension/OCR confusable audit without auto-substitution'
    expect(r.warnings.join(' ')).toContain('кириллица');
    expect(assessTechnicalOcr('ГОСТ 2.301 EN 10025').needsReview).toBe(false);
  });
+ it('marks correct special engineering values as review-critical, not OCR errors',()=>{
+   for(const value of ['Ra 0,8','Rz 80','Ø25,4','⌀24','∅36',
+     'M20×1,5','М20x1,5','±0,02','Rz 40']){
+     const r=assessTechnicalOcr(value);
+     expect(r.criticalLabel).toBe(true);
+     expect(r.needsReview).toBe(true);
+   }
+   for(const ordinary of ['ГОСТ 2.301 EN 10025','6000','Сталь 45','Иванов']){
+     expect(assessTechnicalOcr(ordinary).criticalLabel).toBe(false);
+   }
+   const label='Ra 0,8';
+   expect(assessTechnicalOcr(label).needsReread).toBe(false); // readable but important
+   expect(label).toBe('Ra 0,8');
+ });
  it('is bounded and never edits source text',()=>{
    const source='8O0';
    expect(assessTechnicalOcr(source).warnings.length).toBeGreaterThan(0);
