@@ -167,7 +167,10 @@ export function mergeRecognitionEntities(existing:Entity[],proposals:Entity[]):R
             !/\d/u.test(oldText+alternative)&&
             normalizedScore(proposal)>normalizedScore(old)+.10;
           const nextText=safeReplace?alternative:oldText;
-          const reason=[old.reason||'',prefix,
+          // A third run with the same alternative must not append a third
+          // identical warning or create a meaningless Undo entry.
+          const before=old.reason||'';
+          const reason=before.includes(prefix)?before:[before,prefix,
             safeReplace?'Исходный повреждённый OCR: «'+oldText.slice(0,100)+'».':'']
             .filter(Boolean).join('; ');
           if(old.text!==nextText||old.reason!==reason){
