@@ -7,6 +7,7 @@ import {refineStrokeCenters} from './inkCenterline';
 import {classifyLinePattern} from './linePattern';
 import {otsuInkThreshold,scanInkTone} from './scanInkThreshold';
 import {inferStrokeNormal,normalAgrees,type InkNormal} from './edgeOrientation';
+import {recoverThinAxisStrokes} from './axisRunRecovery';
 type P={x:number;y:number};type EdgeP=P&{normal:InkNormal};type Segment={a:P;b:P;confidence:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 interface Msg {rgba:Uint8ClampedArray;width:number;height:number;scale:number;minLength:number;}
 function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];threshold:number}{
@@ -81,6 +82,15 @@ function trace({rgba,width,height,scale,minLength}:Msg):{lines:Segment[];thresho
     const push=()=>{if(last-first<minLength)return;const a={x:(r*c+first*along.x)*scale,y:(r*s+first*along.y)*scale},b={x:(r*c+last*along.x)*scale,y:(r*s+last*along.y)*scale}; const confidence=Math.min(.95,.35+votes/150);if(!found.some(s=>sameFiniteLine(s,{a,b,confidence},2.5*scale)))found.push({a,b,confidence});};
     for(let i=1;i<matches.length;i++){if(matches[i]-last>Math.max(7,minLength/3)){push();first=matches[i];}last=matches[i];}
     if(matches.length)push();
+  }
+  // A narrow, bounded rescue for 1-pixel straight CAD ink that never
+  // received sufficient Hough votes. No whitespace interpolation.
+  const rescued=recoverThinAxisStrokes(gray,width,height,th,Math.max(24,minLength*1.5));
+  for(const segment of rescued){
+    const candidate={...segment,a:{x:segment.a.x*scale,y:segment.a.y*scale},
+      b:{x:segment.b.x*scale,y:segment.b.y*scale}};
+    if(!found.some(f=>sameFiniteLine(f,candidate,2.5*scale)))
+      found.push(candidate);
   }
   return {lines:found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y)).slice(0,3000),threshold:th};
 }
