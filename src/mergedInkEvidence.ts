@@ -20,7 +20,8 @@ export function applyRecheckedLineEvidence(e:Entity,measured:Evidence,lengthPx:n
     return e;
   const support=Math.max(0,Math.min(1,measured.support));
   const blankRunRatio=Math.max(0,Math.min(1,measured.blankRunRatio));
-  const rank=Number.isFinite(e.confidence)?Math.max(0,Math.min(1,e.confidence)):0;
+  const rank=typeof e.confidence==='number'&&Number.isFinite(e.confidence)
+    ?Math.max(0,Math.min(1,e.confidence)):0;
   // Never promote the confidence of a joined Hough proposal.
   const confidence=Math.min(rank,measured.adjustedScore);
   const sourceGapPx=Math.min(lengthPx,lengthPx*blankRunRatio);
