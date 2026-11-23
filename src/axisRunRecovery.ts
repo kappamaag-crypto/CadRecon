@@ -36,6 +36,6 @@ export function recoverThinAxisStrokes(
     }
   }
   found.sort((a,b)=>Math.hypot(b.b.x-b.a.x,b.b.y-b.a.y)-
-    Math.hypot(a.b.x-a.a.x,a.b.y-a.y));
+    Math.hypot(a.b.x-a.a.x,a.b.y-a.a.y));
   return found.slice(0,limit);
 }
