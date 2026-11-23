@@ -8,6 +8,7 @@
  *
  * This does not extrapolate, close gaps or invent any dimensions.
  */
+import {scanInkTone} from './scanInkThreshold';
 export type Point2D={x:number;y:number};
 export interface StrokeSegment {a:Point2D;b:Point2D;confidence:number;lineStyle?:'dashed'|'center'}
 export interface InkDedupResult {lines:StrokeSegment[];removed:number}
@@ -37,7 +38,7 @@ export function deduplicateInkStrokeVotes(
     const x=Math.round(p.x),y=Math.round(p.y);
     if(x<0||y<0||x>=width||y>=height)return false;
     const i=(y*width+x)*4;
-    return .299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2]<=inkThreshold;
+    return scanInkTone(rgba[i],rgba[i+1],rgba[i+2])<=inkThreshold;
   };
   function coveredBy(candidate:StrokeSegment,reference:StrokeSegment):boolean{
     // A marked DASHED/CENTER line is a distinct hypothesis from a SOLID
