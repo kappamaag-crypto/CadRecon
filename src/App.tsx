@@ -95,7 +95,10 @@ export default function App(){
  const [recognitionMode,setRecognitionMode]=useState<'auto'|'hybrid'>('auto');
  const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
  const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
- const [ocrVertical,setOcrVertical]=useState(false);
+ // Shaft and KOMPAS technical drawings often contain vertical diameters,
+ // threads and section text. Enable bounded +/-90° OCR by default in the
+ // accurate profile; users can disable it for small/simple drawings.
+ const [ocrVertical,setOcrVertical]=useState(true);
  const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;comparison:OcrReferenceComparison}|null>(null);
  const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement;possibleMarkup:boolean}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
