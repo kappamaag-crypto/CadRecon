@@ -31,6 +31,22 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(recognizeText).not.toHaveBeenCalled();
     expect(result.note).toContain('Исходный чертёж не отправлялся');
   });
+  it('recovers raster geometry/text automatically if a mixed PDF has only a few native paths',async()=>{
+    const sheet=newProject().sheets[0];sheet.sourceType='pdf';
+    sheet.image='data:image/png;base64,fixture';
+    const native=entity('line',[{x:0,y:0},{x:100,y:0}],'PDF','pdf');
+    const digital=entity('text',[{x:20,y:20}],'PDF','pdf');digital.text='Чертёж';
+    sheet.entities=[native,digital];
+    sheet.importWarnings=['В PDF обнаружено 2 растровых графических элементов'];
+    vi.mocked(traceImage).mockResolvedValue({entities:[line(20,40,180,40)],note:'scan'});
+    vi.mocked(recognizeText).mockResolvedValue({entities:[ocr('Ø28',50,70)],text:'Ø28'});
+    const out=await recognizeBrowserAccurate(sheet,undefined,undefined,'auto');
+    expect(out.scanned).toBe(true);
+    expect(out.entities.some(e=>e.kind==='line')).toBe(true);
+    expect(out.entities.some(e=>e.text==='Ø28')).toBe(true);
+    expect(out.warnings.join(' ')).toContain('Смешанный PDF');
+    expect(sheet.entities).toHaveLength(2);
+  });
   it('can explicitly trace a mixed vector+raster PDF without losing native geometry',async ()=>{
     const sheet=newProject().sheets[0];sheet.sourceType='pdf';sheet.image='data:image/png;base64,fixture';
     const native=entity('line',[{x:0,y:0},{x:100,y:0}],'PDF векторы','pdf');
