@@ -25,7 +25,8 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
   const styledDashed=trace.filter(e=>e.lineStyle==='dashed').length;
   const styledCenter=trace.filter(e=>e.lineStyle==='center').length;
   const weakInk=trace.filter(e=>e.scanEvidence&&e.scanEvidence.inkSupport<.35).length;
-  const brokenSolid=trace.filter(e=>!e.lineStyle&&e.scanEvidence&&e.scanEvidence.blankRunRatio>=.20).length;
+  const brokenSolid=trace.filter(e=>!e.lineStyle&&e.scanEvidence&&
+    (e.scanEvidence.blankRunRatio>=.20||(e.scanEvidence.blankRunPixels??0)>=8)).length;
   // A tile-reconciled line may be longer than either original sampled stroke.
   // Missing evidence must be exposed, not counted as a fully supported line.
   const unmeasuredInk=trace.filter(e=>!e.scanEvidence).length;
