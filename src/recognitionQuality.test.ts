@@ -35,6 +35,16 @@ describe('W1-W3 non-deceptive 2D recognition risk report',()=>{
    expect(q.unverified).toBe(2);
    expect(sheet.entities.every(e=>!e.verified)).toBe(true);
  });
+ it('finds a short absolute ink gap in a very long solid auto-line',()=>{
+   const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';
+   const line=entity('line',[pt(0,0),pt(1600,0)],'Автообводка','trace');
+   line.scanEvidence={inkSupport:.99,blankRunRatio:.0075,blankRunPixels:12};
+   sheet.entities=[line];
+   expect(assessRecognitionQuality(sheet).brokenSolid).toBe(1);
+   line.lineStyle='center';
+   expect(assessRecognitionQuality(sheet).brokenSolid).toBe(0);
+   expect(line.verified).toBe(false);
+ });
  it('never reports merged unmeasured Hough segments as strong pixel evidence',()=>{
    const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';
    const merged=entity('line',[pt(0,0),pt(200,0)],'Автообводка','trace');

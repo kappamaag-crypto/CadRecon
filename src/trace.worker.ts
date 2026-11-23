@@ -134,7 +134,7 @@ self.onmessage=(ev:MessageEvent<Msg>)=>{try{
   const centered=refineStrokeCenters(filtered.lines,msg.rgba,msg.width,msg.height,inkThreshold);
   const dedup=deduplicateInkStrokeVotes(centered.lines,msg.rgba,msg.width,msg.height,inkThreshold);
   (self as unknown as Worker).postMessage({
-    lines:dedup.lines.map(line=>{const rank=rankLineByInkEvidence(line,msg.rgba,msg.width,msg.height,80,inkThreshold);return {...line,confidence:rank.adjustedScore,inkSupport:rank.support,blankRunRatio:rank.blankRunRatio};}),circles:circles.slice(0,300),
+    lines:dedup.lines.map(line=>{const rank=rankLineByInkEvidence(line,msg.rgba,msg.width,msg.height,512,inkThreshold);return {...line,confidence:rank.adjustedScore,inkSupport:rank.support,blankRunRatio:rank.blankRunRatio,blankRunPixels:rank.blankRunPixels};}),circles:circles.slice(0,300),
     circleStrokeDuplicates:filtered.removed,inkStrokeDuplicates:dedup.removed,
     centerlineAdjusted:centered.adjusted,
   });

@@ -42,6 +42,21 @@ describe('W3 non-destructive source-ink confidence ranking',()=>{
   expect(b.adjustedScore).toBeLessThan(a.adjustedScore);
   expect(b.longestBlankRun).toBeGreaterThan(0);
  });
+ it('detects a real 12px hole on a 1600px line that the old 80-point sample missed',()=>{
+  const im=raster(1650,100);
+  im.draw(10,1610,50,52);
+  // Former 80 samples at x=20,40... never visited x=127..138.
+  for(let x=127;x<=138;x++)for(let y=50;y<=52;y++){
+    const i=(y*im.w+x)*4;
+    im.rgba[i]=im.rgba[i+1]=im.rgba[i+2]=255;
+  }
+  const e=rankLineByInkEvidence({a:{x:10,y:51},b:{x:1610,y:51},confidence:.9},
+    im.rgba,im.w,im.h);
+  expect(e.samples).toBeGreaterThan(80);
+  expect(e.blankRunPixels).toBeGreaterThan(8);
+  expect(e.blankRunRatio).toBeLessThan(.03);
+  expect(e.support).toBeLessThan(1);
+ });
  it('keeps evidence in [0,1] and never auto-approves or increases votes',()=>{
   const im=raster();im.draw(10,230,50,52);
   const e=rankLineByInkEvidence({...line(51),confidence:.42},im.rgba,im.w,im.h);

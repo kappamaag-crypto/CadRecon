@@ -1,7 +1,7 @@
 import {entity,type Entity,type Sheet} from './model';
 import {consolidateScanLines} from './scanTopology';
 export interface TraceResult {entities:Entity[];note:string;warnings?:string[];sampledScale?:number;}
-type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number;inkSupport?:number;blankRunRatio?:number;lineStyle?:'dashed'|'center';patternMarks?:number};
+type VecLine={a:{x:number;y:number};b:{x:number;y:number};confidence:number;inkSupport?:number;blankRunRatio?:number;blankRunPixels?:number;lineStyle?:'dashed'|'center';patternMarks?:number};
 type VecCircle={x:number;y:number;radius:number;confidence:number};
 type WorkerResponse={lines?:VecLine[];circles?:VecCircle[];circleStrokeDuplicates?:number;inkStrokeDuplicates?:number;centerlineAdjusted?:number;error?:string};
 
@@ -95,11 +95,12 @@ export async function traceImage(
         const e=entity('line',[a,b],'Автообводка','trace');e.confidence=l.confidence;
         if(l.inkSupport!==undefined&&l.blankRunRatio!==undefined)
           e.scanEvidence={inkSupport:l.inkSupport,blankRunRatio:l.blankRunRatio,
-            patternMarks:l.patternMarks};
+            blankRunPixels:l.blankRunPixels,patternMarks:l.patternMarks};
         if(l.lineStyle)e.lineStyle=l.lineStyle;
         e.reason='Обводка: эвристический балл, опора на исходный штрих '+(l.inkSupport===undefined?'не измерена':Math.round(l.inkSupport*100)+'%')+
           '; неподтверждённый интервал '+(l.blankRunRatio===undefined?'не измерен':Math.round(l.blankRunRatio*100)+'%')+
-          ' длины. '+(l.lineStyle==='center'?'Кандидат осевой (штрихпунктирной) линии. ':l.lineStyle==='dashed'?'Кандидат штриховой линии. ':'')+
+          ' длины'+(l.blankRunPixels===undefined?'':', ≈'+l.blankRunPixels.toFixed(1)+
+          ' пикс. обработанного растра')+'. '+(l.lineStyle==='center'?'Кандидат осевой (штрихпунктирной) линии. ':l.lineStyle==='dashed'?'Кандидат штриховой линии. ':'')+
           'Проверить по оригиналу.';
         lines.push(e);
       }

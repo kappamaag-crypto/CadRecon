@@ -59,6 +59,17 @@ describe('W3 raster topology review (diagnostic, never auto-connect)',()=>{
     expect(scanReviewCSV(r)).toContain('Протяжённый белый участок');
     expect(a.points).toEqual([p(0,10),p(150,10)]);
   });
+  it('flags an absolute 12px source hole even when it occupies under 1% of a line',()=>{
+    const project=newProject(),a=l(p(0,20),p(1600,20));
+    a.scanEvidence={inkSupport:.99,blankRunRatio:.0075,blankRunPixels:12};
+    project.sheets[0].entities=[a];
+    const report=auditScanGeometry(project);
+    expect(report.longGaps).toBe(1);
+    expect(report.findings[0].description).toContain('12.0 пикселей');
+    expect(a.points).toEqual([p(0,20),p(1600,20)]);
+    a.lineStyle='dashed';
+    expect(auditScanGeometry(project).longGaps).toBe(0);
+  });
   it('ignores malformed and tiny fragments, with formula-safe CSV export',()=>{
     const project=newProject();
     const short=l(p(0,0),p(3,0)),bad=l(p(0,0),p(Number.NaN,0));

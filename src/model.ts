@@ -9,7 +9,7 @@ export interface Entity {
   rows?:number; cols?:number; width?:number; height?:number;
   confidence?:number; color?:string; symbol?:EskdType; lineStyle?:'dashed'|'center';
   /** Measured scan ink evidence, not probability of a correct CAD object. */
-  scanEvidence?:{inkSupport:number;blankRunRatio:number;patternMarks?:number};
+  scanEvidence?:{inkSupport:number;blankRunRatio:number;blankRunPixels?:number;patternMarks?:number};
   reason?:string; sourceId?:string; chainId?:string;
   hatchPattern?:'solid'|'diagonal'|'cross'; hatchSpacing?:number;
   bbox?:{x0:number;y0:number;x1:number;y1:number};
@@ -97,6 +97,9 @@ export function validateProject(value:unknown):CadProject {
           e.scanEvidence.inkSupport>1||
           !Number.isFinite(e.scanEvidence.blankRunRatio)||e.scanEvidence.blankRunRatio<0||
           e.scanEvidence.blankRunRatio>1||
+          (e.scanEvidence.blankRunPixels!==undefined&&
+            (!Number.isFinite(e.scanEvidence.blankRunPixels)||e.scanEvidence.blankRunPixels<0||
+              e.scanEvidence.blankRunPixels>1e8))||
           (e.scanEvidence.patternMarks!==undefined&&
             (!Number.isInteger(e.scanEvidence.patternMarks)||e.scanEvidence.patternMarks<1||
               e.scanEvidence.patternMarks>1000))
