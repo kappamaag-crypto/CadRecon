@@ -45,7 +45,7 @@ function parseLabels(raw:unknown,w:number,h:number,region?:Rect):OcrGolden[]{
 }
 export function parseOcrReference(raw:unknown,imageWidth:number,imageHeight:number):
   {scope:'partial'|'complete'|'legacy';labels:OcrGolden[];region?:Rect}{
-  if(!Number.isInteger(imageWidth)||!Number.isInteger(imageHeight)||imageWidth<2||imageHeight<2)
+  if(!Number.isInteger(imageWidth)||!Number.isInteger(imageHeight)||imageWidth<1||imageHeight<1)
     throw new Error('OCR: недопустимые размеры исходной подложки');
   if(Array.isArray(raw)){
     return {scope:'legacy',labels:parseLabels(raw,imageWidth,imageHeight)};
