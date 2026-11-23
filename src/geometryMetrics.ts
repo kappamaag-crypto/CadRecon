@@ -82,21 +82,24 @@ export function parseGeometryReference(raw:unknown):GeometryReference {
     raw.scope!=='partial'&&raw.scope!=='complete')
     throw new Error('Геометрический эталон: требуется version=1, reviewed=true и scope partial/complete');
   const w=raw.imageWidth,h=raw.imageHeight;
-  if(!Number.isInteger(w)||!Number.isInteger(h)||Number(w)<2||Number(h)<2||
-    Number(w)>20000||Number(h)>20000)
+  if(typeof w!=='number'||typeof h!=='number'||
+    !Number.isInteger(w)||!Number.isInteger(h)||w<2||h<2||
+    w>20000||h>20000)
     throw new Error('Геометрический эталон: неверные размеры изображения');
   if(!Array.isArray(raw.lines)||!Array.isArray(raw.circles)||
     raw.lines.length+raw.circles.length<1||
     raw.lines.length>250||raw.circles.length>100)
     throw new Error('Геометрический эталон: ожидается 1–350 проверенных LINE/CIRCLE');
-  const rect:Rect={x0:0,y0:0,x1:w as number,y1:h as number};
+  const rect:Rect={x0:0,y0:0,x1:w,y1:h};
   if(raw.region!==undefined){
-    if(!entry(raw.region)||!['x0','y0','x1','y1'].every(k=>Number.isFinite(raw.region[k]))||
-      !(Number(raw.region.x0)>=0&&Number(raw.region.y0)>=0&&
-        Number(raw.region.x1)<=w&&Number(raw.region.y1)<=h&&
-        Number(raw.region.x1)>Number(raw.region.x0)&&Number(raw.region.y1)>Number(raw.region.y0)))
+    const region=raw.region;
+    if(!entry(region))throw new Error('Геометрический эталон: неверная область');
+    const {x0,y0,x1,y1}=region;
+    if(![x0,y0,x1,y1].every(v=>typeof v==='number'&&Number.isFinite(v))||
+      !(Number(x0)>=0&&Number(y0)>=0&&Number(x1)<=w&&Number(y1)<=h&&
+        Number(x1)>Number(x0)&&Number(y1)>Number(y0)))
       throw new Error('Геометрический эталон: область вне изображения');
-    Object.assign(rect,raw.region);
+    Object.assign(rect,{x0,y0,x1,y1});
   }
   if(raw.scope==='complete'&&!raw.region)
     throw new Error('Для полного эталона обязательно задайте ограниченную полностью размеченную область region');
@@ -117,11 +120,12 @@ export function parseGeometryReference(raw:unknown):GeometryReference {
   for(const item of raw.circles){
     if(!entry(item))throw new Error('Геометрический эталон: неверный CIRCLE');
     checkId(item);
-    if(!finite(item.center as Point)||!inside(item.center as Point,rect)||
-      typeof item.radius!=='number'||!Number.isFinite(item.radius)||item.radius<2||
-      item.radius>Math.max(w as number,h as number)||
-      item.center.x-item.radius<rect.x0||item.center.x+item.radius>rect.x1||
-      item.center.y-item.radius<rect.y0||item.center.y+item.radius>rect.y1)
+    const center=item.center as Point, radius=item.radius;
+    if(!finite(center)||!inside(center,rect)||
+      typeof radius!=='number'||!Number.isFinite(radius)||radius<2||
+      radius>Math.max(w,h)||
+      center.x-radius<rect.x0||center.x+radius>rect.x1||
+      center.y-radius<rect.y0||center.y+radius>rect.y1)
       throw new Error('Геометрический эталон: окружность не помещается в область '+item.id);
   }
   return raw as unknown as GeometryReference;
@@ -173,7 +177,8 @@ export function measureGeometryAgainstReference(
     if(ratio>=.90)coveredLines++;
     else lows.push({id:ref.id,coverage:ratio});
   }
-  const matched=new Set<number>();let centerError=0,radiusError=0;
+  const matched=new Set<number>(),matchedRefs=new Set<string>();
+  let centerError=0,radiusError=0;
   for(const ref of reference.circles){
     let best=-1,bestError=Infinity;
     for(let i=0;i<foundCircles.length;i++){
@@ -183,13 +188,12 @@ export function measureGeometryAgainstReference(
       if(dc>tolerancePx||dr>tolerancePx)continue;
       if(dc+dr<bestError){best=i;bestError=dc+dr;}
     }
-    if(best>=0){matched.add(best);
+    if(best>=0){matched.add(best);matchedRefs.add(ref.id);
       centerError+=len(ref.center,foundCircles[best].center);
       radiusError+=Math.abs(ref.radius-foundCircles[best].radius);}
   }
-  const missingCircles=reference.circles.filter(ref=>
-    !foundCircles.some((c,i)=>matched.has(i)&&len(ref.center,c.center)<=tolerancePx&&
-      Math.abs(ref.radius-c.radius)<=tolerancePx)).map(ref=>ref.id);
+  const missingCircles=reference.circles.filter(ref=>!matchedRefs.has(ref.id))
+    .map(ref=>ref.id);
   const complete=reference.scope==='complete';
   let unsupported=0;
   if(complete){
