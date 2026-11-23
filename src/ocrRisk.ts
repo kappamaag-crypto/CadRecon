@@ -26,7 +26,7 @@ export function assessTechnicalOcr(text:string):TechnicalOcrRisk{
   // Prioritize the particularly fragile signs visible on engineering sheets:
   // roughness Ra/Rz, diameter, pitch in thread designations and tolerance.
   // Keep standalone ordinary measurements outside this semantic heuristic.
-  const criticalLabel=/(?:^|[^\p{L}])(?:R[az]\s*\d|[Ø⌀∅⌀Фф]\s*\d|M\s*\d+(?:[×xхXХ]\s*\d|\s*[xхXХ]\s*\d)|±\s*\d)/iu.test(text);
+  const criticalLabel=/(?:^|[^\p{L}])(?:R[az]\s*\d|[Ø⌀∅Фф]\s*\d|[MМ]\s*\d+\s*[×xхXХ]\s*\d|±\s*\d)/iu.test(text);
   if(criticalLabel)warnings.push('Критичное техническое обозначение: диаметр, резьба с шагом, шероховатость или допуск. Сверить символы и запятую по оригиналу');
   const needsReread=numericConfusable||(mixed&&/\d/.test(text));
   return {needsReread,criticalLabel,needsReview:warnings.length>0,warnings};
