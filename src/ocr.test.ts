@@ -140,6 +140,40 @@ describe('browser OCR language pack preparation',()=>{
       Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
     }
   });
+  it('enhanced OCR rechecks uncertain roughness without overwriting plausible text',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
+    const canvas={width:0,height:0,getContext:()=>({
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),
+    })};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const response=(value:string,score:number)=>({data:{text:value,confidence:score,
+      blocks:[{paragraphs:[{lines:[{text:value,confidence:score,
+        bbox:{x0:20,y0:10,x1:100,y1:28}}]}]}]}}); // 18px high, no tiny-text fallback
+    const recognize=vi.fn()
+      .mockResolvedValueOnce(response('Ra 0,8',86))
+      .mockResolvedValueOnce(response('Ra 0,6',88));
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      sheet.width=200;sheet.height=100;
+      const result=await recognizeText(sheet,undefined,undefined,
+        {mode:'enhanced',maxRetries:5});
+      expect(recognize).toHaveBeenCalledTimes(2);
+      expect(result.entities[0].text).toBe('Ra 0,8'); // conflict, no auto-fix
+      expect(result.entities[0].reason).toContain('Ra 0,6');
+      expect(result.entities[0].reason).toContain('Критичное техническое обозначение');
+      expect(result.entities[0].verified).toBe(false);
+      expect(result.diagnostics?.conflicts).toBe(1);
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
   it('enhanced OCR keeps 6000 when close-confidence retry says 8000',async()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}

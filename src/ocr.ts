@@ -132,10 +132,12 @@ export async function recognizeText(
       const order=readings.map((reading,i)=>({reading,i,
           risk:assessTechnicalOcr(reading.text)}))
         .filter(({reading,risk})=>
-          reading.confidence<.76||(reading.y1-reading.y0)<15||risk.needsReread)
+          reading.confidence<.76||(reading.y1-reading.y0)<15||risk.needsReread||
+          (risk.criticalLabel&&reading.confidence<.90))
         // A plausible-looking numeric 8O0 / M1l can be more dangerous than a
         // random low-confidence title word. Give it a bounded second look.
         .sort((a,b)=>Number(b.risk.needsReread)-Number(a.risk.needsReread)||
+          Number(b.risk.criticalLabel)-Number(a.risk.criticalLabel)||
           a.reading.confidence-b.reading.confidence)
         .slice(0,maxRetries);
       if(order.length&&ctx){
@@ -235,7 +237,10 @@ export async function recognizeText(
           r.pass==='rotated'?'; поворот исходного скана на ±90°':'')+
         (alternatives.length?'; КОНФЛИКТ OCR: возможны '+alternatives
           .slice(0,5).join(' / ')+'. Сверьте знаки, размеры и допуски по оригиналу':'')+
-        (risk.needsReview?'; ПОДОЗРЕНИЕ OCR: '+risk.warnings.join('; '):'');
+        (risk.needsReview?
+          (risk.criticalLabel&&!risk.needsReread&&risk.warnings.length===1?
+            '; КРИТИЧНАЯ НАДПИСЬ OCR: ':'; ПОДОЗРЕНИЕ OCR: ')+
+          risk.warnings.join('; '):'');
       return e;
     });
     const diagnostics:OcrDiagnostics={tiles:tiles.length,initialReadings,retried,rotations,
