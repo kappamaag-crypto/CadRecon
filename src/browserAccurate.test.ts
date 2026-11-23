@@ -2,7 +2,7 @@ import {beforeEach,describe,expect,it,vi} from 'vitest';
 import {entity,newProject} from './model';
 import {recognizeText} from './ocr';
 import {traceImage} from './vectorize';
-import {recognizeBrowserAccurate,uniqueCandidates} from './browserAccurate';
+import {recognizeBrowserAccurate,uniqueCandidates,mergeRecognitionEntities} from './browserAccurate';
 
 vi.mock('./ocr',()=>({recognizeText:vi.fn()}));
 vi.mock('./vectorize',()=>({traceImage:vi.fn()}));
@@ -132,4 +132,58 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(uniqueCandidates(existing,[newLine,newText])).toHaveLength(2);
     expect(uniqueCandidates(existing,[line(100,0,0,0),ocr('60',50,16)])).toHaveLength(0);
   });
+  it('is truly idempotent when OCR reruns disagree on a dimension in the same box',()=>{
+    const original=ocr('Ø28',100,50);
+    original.bbox={x0:100,y0:35,x1:135,y1:52};original.confidence=.85;
+    const candidate=ocr('O28',101,51);
+    candidate.bbox={x0:101,y0:35,x1:135,y1:52};candidate.confidence=.94;
+    const a=mergeRecognitionEntities([original],[candidate]);
+    expect(a.entities).toHaveLength(1);
+    expect(a.entities[0].id).toBe(original.id);
+    expect(a.entities[0].text).toBe('Ø28'); // no silent numerical correction
+    expect(a.entities[0].reason).toContain('O28');
+    const b=mergeRecognitionEntities(a.entities,[candidate]);
+    expect(b.entities).toBe(a.entities);
+    expect(b.added).toBe(0);
+    expect(b.updated).toBe(0);
+    expect(b.entities).toHaveLength(1);
+  });
+  it('keeps accepted and manually corrected OCR text untouched across reruns',()=>{
+    const verified=ocr('Rz 20',30,40);verified.verified=true;
+    const corrected=ocr('M20×1,5',90,40);
+    corrected.reason='Объект изменён: требуется повторная проверка по оригиналу';
+    const newer=ocr('M20×1,S',90,40);
+    const result=mergeRecognitionEntities([verified,corrected],
+      [ocr('Rz 2O',30,41),newer]);
+    expect(result.added).toBe(0);
+    expect(result.updated).toBe(0);
+    expect(result.entities).toEqual([verified,corrected]);
+  });
+  it('recovers a clean nonnumeric OCR reading from a clearly broken one without changing its id',()=>{
+    const damaged=ocr('Â�',15,20);damaged.confidence=.30;
+    const clean=ocr('Вал',15,20);clean.confidence=.91;
+    const result=mergeRecognitionEntities([damaged],[clean]);
+    expect(result.entities).toHaveLength(1);
+    expect(result.entities[0].text).toBe('Вал');
+    expect(result.entities[0].id).toBe(damaged.id);
+    expect(result.entities[0].verified).toBe(false);
+    expect(result.entities[0].reason).toContain('Â�');
+  });
+  it('performs fallback OCR for broken native-PDF glyph mapping despite other valid digital text',async()=>{
+    const sheet=newProject().sheets[0];sheet.sourceType='pdf';
+    sheet.image='data:image/png;base64,fixture';
+    const native=entity('line',[{x:0,y:0},{x:100,y:0}],'PDF','pdf');
+    const good=entity('text',[{x:10,y:30}],'PDF','pdf');good.text='Вал';
+    const broken=entity('text',[{x:25,y:50}],'PDF','pdf');
+    broken.text='���';broken.reason='Возможна ошибка PDF-кодировки';
+    sheet.entities=[native,good,broken];
+    vi.mocked(recognizeText).mockResolvedValue({entities:[ocr('Сталь 45',25,50)],text:'Сталь 45'});
+    const result=await recognizeBrowserAccurate(sheet);
+    expect(result.scanned).toBe(false);
+    expect(traceImage).not.toHaveBeenCalled();
+    expect(recognizeText).toHaveBeenCalledOnce();
+    expect(result.warnings.join(' ')).toContain('сомнительной кодировкой');
+    expect(result.entities.some(e=>e.text==='Сталь 45')).toBe(true);
+  });
+
 });
