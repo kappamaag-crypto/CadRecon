@@ -151,7 +151,12 @@ export function mergeRecognitionEntities(existing:Entity[],proposals:Entity[]):R
       const candidates=new Set<number>();
       for(let dx=-1;dx<=1;dx++)for(let dy=-1;dy<=1;dy++)
         for(const i of grid.get(cell(x+dx,y+dy))||[])candidates.add(i);
-      const i=[...candidates].find(i=>sameOcrPosition(entities[i],proposal));
+      const matches=[...candidates].filter(i=>sameOcrPosition(entities[i],proposal));
+      // Prefer a prior OCR observation over overlapping native-PDF glyph
+      // mapping, which may itself be broken. An accepted/manual correction
+      // wins over every new automatic reading.
+      const i=matches.find(i=>protect(entities[i]))??
+        matches.find(i=>entities[i].origin==='ocr')??matches[0];
       if(i!==undefined){
         const old=entities[i];
         if((old.text||'').trim()===(proposal.text||'').trim()||protect(old))continue;
