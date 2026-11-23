@@ -38,6 +38,32 @@ describe('browser OCR language pack preparation',()=>{
       expect(terminate).toHaveBeenCalledOnce();
     }finally{Object.defineProperty(globalThis,'Image',{configurable:true,value:originalImage});}
   });
+  it('uses opaque white Canvas even for a standard single-page PNG when available',async()=>{
+    const oldImage=globalThis.Image,oldDoc=globalThis.document;
+    class Img{naturalWidth=300;naturalHeight=200;src='';async decode(){}}
+    const ops:string[]=[],ctx={fillStyle:'',
+      fillRect:vi.fn(()=>ops.push('white')),
+      drawImage:vi.fn(()=>ops.push('image'))};
+    const canvas={width:0,height:0,getContext:()=>ctx};
+    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
+    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
+    const recognize=vi.fn().mockResolvedValue({data:{text:'',blocks:[]}});
+    try{
+      vi.mocked(createWorker).mockResolvedValue({
+        terminate:vi.fn().mockResolvedValue(undefined),
+        setParameters:vi.fn().mockResolvedValue(undefined),recognize,
+      } as unknown as Awaited<ReturnType<typeof createWorker>>);
+      const sheet=newProject().sheets[0];sheet.image='data:image/png;base64,fixture';
+      await recognizeText(sheet);
+      expect(ops).toEqual(['white','image']);
+      expect(ctx.fillStyle).toBe('#fff');
+      expect(ctx.fillRect).toHaveBeenCalledWith(0,0,300,200);
+      expect(recognize).toHaveBeenCalledWith(canvas,{}, {blocks:true,text:true});
+    }finally{
+      Object.defineProperty(globalThis,'Image',{configurable:true,value:oldImage});
+      Object.defineProperty(globalThis,'document',{configurable:true,value:oldDoc});
+    }
+  });
   it('runs a 3500x2500 page in bounded canvas tiles without losing coordinate offsets',async ()=>{
     const originalImage=globalThis.Image,originalDocument=globalThis.document;
     class LargeImage {
