@@ -45,7 +45,9 @@ describe('browser OCR language pack preparation',()=>{
       src='';
       async decode(){return;}
     }
-    const canvas={width:0,height:0,getContext:()=>({drawImage:vi.fn()})};
+    const drawImage=vi.fn(),fillRect=vi.fn();
+    const context={drawImage,fillRect,fillStyle:''};
+    const canvas={width:0,height:0,getContext:()=>context};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:LargeImage});
     Object.defineProperty(globalThis,'document',{configurable:true,
       value:{createElement:()=>canvas}});
@@ -63,6 +65,9 @@ describe('browser OCR language pack preparation',()=>{
       expect(tiles.length).toBeGreaterThan(1);
       const out=await recognizeText(sheet);
       expect(recognize).toHaveBeenCalledTimes(tiles.length);
+      expect(fillRect).toHaveBeenCalledTimes(tiles.length);
+      expect(context.fillStyle).toBe('#fff');
+      expect(fillRect.mock.invocationCallOrder[0]).toBeLessThan(drawImage.mock.invocationCallOrder[0]);
       expect(out.entities).toHaveLength(tiles.length);
       expect(out.entities.map(e=>e.points[0].x)).toContain(30);
       expect(out.entities.some(e=>e.points[0].x>1400)).toBe(true);
@@ -76,7 +81,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
     const canvas={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
       filter:'none',imageSmoothingEnabled:false,imageSmoothingQuality:'low',
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
@@ -113,7 +118,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
     const canvas={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
@@ -141,7 +146,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
     const canvas={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
@@ -175,7 +180,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img{naturalWidth=3500;naturalHeight=2500;src='';async decode(){}}
     const canvas={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
@@ -213,7 +218,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img{naturalWidth=6800;naturalHeight=4700;src='';async decode(){}}
     const cv={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>cv}});
@@ -241,7 +246,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img {naturalWidth=200;naturalHeight=100;src='';async decode(){}}
     const canvas={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
     Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
@@ -270,7 +275,7 @@ describe('browser OCR language pack preparation',()=>{
     const oldImage=globalThis.Image,oldDoc=globalThis.document;
     class Img{naturalWidth=200;naturalHeight=100;src='';async decode(){}}
     const cv={width:0,height:0,getContext:()=>({
-      drawImage:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
+      drawImage:vi.fn(),fillRect:vi.fn(),save:vi.fn(),restore:vi.fn(),translate:vi.fn(),rotate:vi.fn(),
       imageSmoothingEnabled:true,imageSmoothingQuality:'high',filter:'',
     })};
     Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
