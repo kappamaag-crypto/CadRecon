@@ -40,6 +40,11 @@ export function assessTechnicalOcr(text:string):TechnicalOcrRisk{
     .some(m=>!decimal.test(stripTerminal(m[1])));
   if(roughness)warnings.push('Нечитаемое числовое значение Ra/Rz: проверьте шероховатость по оригиналу');
   if(diameter)warnings.push('Нечитаемое число после знака диаметра: проверьте Ø/⌀ и цифры');
-  const needsReread=numericConfusable||(mixed&&/\d/.test(text))||roughness||diameter;
+  // Font-map corruption and bad OCR are not merely low-confidence labels.
+  // Even a high Tesseract score should trigger a bounded crop reread.
+  const corrupt=/[\uFFFD\uE000-\uF8FF\u0000-\u0008\u000E-\u001F]/u.test(text)||
+    /(?:Ã.|Â.|Ð.|Ñ.){2,}/u.test(text);
+  if(corrupt)warnings.push('Нечитаемые символы или повреждённая кодировка: повторный OCR и ручная проверка оригинала');
+  const needsReread=numericConfusable||(mixed&&/\d/.test(text))||roughness||diameter||corrupt;
   return {needsReread,criticalLabel,needsReview:warnings.length>0,warnings};
 }
