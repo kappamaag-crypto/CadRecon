@@ -23,3 +23,18 @@ export function otsuInkThreshold(histogram:Uint32Array):number{
   // Cap at 240 to avoid interpreting paper texture as black geometry.
   return best<0?165:Math.max(40,Math.min(240,threshold));
 }
+
+
+/** Engineering drawings exported by KOMPAS-3D may use actual coloured CAD
+ * LINE styles (blue, cyan, green, red), not annotations. A pure luminance
+ * channel discards faint saturated strokes. This tonal projection retains
+ * achromatic pencil strokes exactly and lowers the value of saturated ink.
+ * It is NOT a colour-segmentation/annotation classifier or geometry proof.
+ */
+export function scanInkTone(red:number,green:number,blue:number):number{
+  const lum=.299*red+.587*green+.114*blue;
+  const lo=Math.min(red,green,blue),hi=Math.max(red,green,blue);
+  if(hi-lo>=45&&lo<225&&lum<246)
+    return Math.max(0,Math.min(255,Math.round(Math.min(lum,.55*lo+.45*lum))));
+  return Math.max(0,Math.min(255,Math.round(lum)));
+}
