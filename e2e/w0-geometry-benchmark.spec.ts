@@ -39,3 +39,33 @@ test('browser private geometry reference is local and partial labels do not yiel
   await expect(page.getByText(/Отрезков вне полного эталона: 1/)).toBeVisible();
   await expect(page.getByText(/Согласованность кандидатов: 66.7%/)).toBeVisible();
 });
+
+test('browser warns when saturated blue reference ink is on the same test image',async({page})=>{
+  await page.goto('/CadRecon/');
+  const image=await page.evaluate(()=>{
+    const c=document.createElement('canvas');c.width=200;c.height=120;
+    const ctx=c.getContext('2d')!;ctx.fillStyle='white';ctx.fillRect(0,0,200,120);
+    ctx.fillStyle='rgb(105,105,221)';ctx.fillRect(10,10,181,5);
+    ctx.fillStyle='rgb(45,45,45)';ctx.fillRect(10,30,181,8);
+    return c.toDataURL('image/png');
+  });
+  const project=newProject();project.sheets[0].image=image;
+  project.sheets[0].sourceType='image';
+  project.sheets[0].width=200;project.sheets[0].height=120;
+  const e=entity('line',[{x:20,y:30},{x:180,y:30}],'Автообводка','trace');
+  project.sheets[0].entities=[e];
+  await page.locator('input[type=file][accept=".json,.cadrecon.json"]').setInputFiles({
+    name:'annotated-project.cadrecon.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify(project)),
+  });
+  await page.locator('.panel-tabs button[title="Распознавание"]').click();
+  await page.getByText('Сравнить LINE / CIRCLE с проверенной разметкой (локальный эталон)').click();
+  await page.getByLabel('Загрузить эталон геометрии JSON').setInputFiles({
+    name:'annotation.json',mimeType:'application/json',
+    buffer:Buffer.from(JSON.stringify({version:1,reviewed:true,
+      imageWidth:200,imageHeight:120,scope:'partial',
+      lines:[{id:'line-a',a:{x:20,y:30},b:{x:180,y:30}}],circles:[]})),
+  });
+  await expect(page.getByLabel('Предупреждение о цветной эталонной обводке')).toBeVisible();
+  await expect(page.getByText(/Покрытие длины контрольных LINE: 100.0%/)).toBeVisible();
+});
