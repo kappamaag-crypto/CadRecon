@@ -90,7 +90,8 @@ export default function ReconstructionPanel({
       <p className="muted">Сомнительных по чернилам: {quality.weakInk};
         без измеренной пиксельной опоры: {quality.unmeasuredInk};
         сплошных линий с пробелами: {quality.brokenSolid};
-        сомнительных OCR: {quality.weakOcr}.
+        сомнительных OCR: {quality.weakOcr};
+        критичных технических OCR без подтверждения: {quality.criticalOcr}.
         Эти числа — флаги проверки, не процент точности.</p>
       {quality.warnings.length>0&&<div className="reconstruction-warnings" aria-label="Замечания к распознаванию">
         {quality.warnings.slice(0,6).map((warning,i)=><p key={i}>{warning}</p>)}
