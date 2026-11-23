@@ -96,7 +96,11 @@ export async function recognizeText(
           confidence:NORMALIZE_CONF(line.confidence),pass});
       }
     };
-    const cv=tiled||enhanced?document.createElement('canvas'):null;
+    // Even the standard pass needs a white backing in a real browser: a
+    // transparent single-page PNG can otherwise become black when decoded
+    // by an OCR engine. Keep the direct-source fallback only when Canvas is
+    // unavailable (e.g. a lightweight non-browser test environment).
+    const cv=typeof document!=='undefined'?document.createElement('canvas'):null;
     const ctx=cv?.getContext('2d',{willReadFrequently:true})||null;
     // Do not require Canvas for simple single-image OCR. Enhanced OCR uses
     // a white opaque canvas even for one tile: transparent PNG otherwise
@@ -107,7 +111,7 @@ export async function recognizeText(
       const tile=tiles[k];
       progress?.('OCR: основной анализ '+(k+1)+' / '+tiles.length);
       let image:string|HTMLCanvasElement=sheet.image;
-      if(tiled||(enhanced&&ctx)){
+      if(ctx){
         cv!.width=tile.width;cv!.height=tile.height;
         ctx!.fillStyle='#fff';
         ctx!.fillRect(0,0,tile.width,tile.height);
