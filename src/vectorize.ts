@@ -114,7 +114,7 @@ export async function traceImage(
     // Suppress true overlap duplicates; never bridge missing scan evidence.
     const scalePx=Math.max(sx,sy);
     const reconciled=quality==='detailed'
-      ?consolidateScanLines(lines,.85*scalePx,.75*scalePx)
+      ?consolidateScanLines(lines,.85*scalePx,.15*scalePx)
       :{entities:lines,removed:0,candidates:lines.length};
     if(reconciled.warning)warnings.push(reconciled.warning);
     if(reconciled.entities.length+circles.length>30000)warnings.push('Лимит 30 000 объектов: часть найденных отрезков не добавлена. Разбейте чертёж на листы.');
