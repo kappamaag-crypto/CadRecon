@@ -1,6 +1,7 @@
 /** W3 browser-only refinement of Hough border hypotheses to their own
  * contiguous dark ink stroke. This is pixel geometry, not verified CAD. */
 import type {StrokeSegment} from './inkVoteDedup';
+import {scanInkTone} from './scanInkThreshold';
 export interface InkCenterlineResult {lines:StrokeSegment[];adjusted:number}
 const clamp=(v:number,lo:number,hi:number)=>Math.max(lo,Math.min(hi,v));
 const median=(a:number[]):number=>{
@@ -23,7 +24,7 @@ export function refineStrokeCenterline(
     const xx=Math.round(x),yy=Math.round(y);
     if(xx<0||yy<0||xx>=width||yy>=height)return false;
     const i=(yy*width+xx)*4;
-    return .299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2]<=inkThreshold;
+    return scanInkTone(rgba[i],rgba[i+1],rgba[i+2])<=inkThreshold;
   };
   const centers:number[]=[];
   for(let i=0;i<count;i++){
