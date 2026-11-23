@@ -74,12 +74,17 @@ export function auditScanGeometry(project:CadProject):ScanReview {
       // A long white interval may also be an intentional dashed stroke.
       const run=/неподтверждённый интервал\s+(\d{1,3})%/i.exec(e.reason||'');
       const pct=e.scanEvidence?e.scanEvidence.blankRunRatio*100:run?Number(run[1]):null;
-      if(pct!==null&&pct>=20&&pct<=100&&
+      const blankPx=e.scanEvidence?.blankRunPixels;
+      // A 10px gap in a 1600px line is only 0.625% and disappeared under
+      // the old relative-only 20% review threshold.
+      const physicalGap=blankPx!==undefined&&Number.isFinite(blankPx)&&blankPx>=8;
+      if(((pct!==null&&pct>=20&&pct<=100)||physicalGap)&&
         e.lineStyle!=='dashed'&&e.lineStyle!=='center'){
         longGaps++;
         push({kind:'long-gap',sheetIndex:si,sheetName:sheet.name,entityId:e.id,
-          description:'Длинный участок без опоры на исходные пиксели: '+pct+
-            '% длины. Возможно штрихпунктир или ложное соединение; проверить.'});
+          description:'Участок без опоры: '+(pct===null?'процент неизвестен':pct.toFixed(1)+'% длины')+
+            (blankPx===undefined?'':', около '+blankPx.toFixed(1)+' пикселей обработанного растра')+
+            '. Возможно разрыв или ложное соединение; проверить оригинал.'});
       }
       for(const end of ends){
         const g=grid(end.point);
