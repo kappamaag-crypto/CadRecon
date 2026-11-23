@@ -3,6 +3,7 @@
  * or a dimension measurement. No network or image transfer is used.
  */
 import type {StrokeSegment} from './inkVoteDedup';
+import {scanInkTone} from './scanInkThreshold';
 export type LinePatternStyle='dashed'|'center';
 export interface LinePattern {style:LinePatternStyle;marks:number;coverage:number}
 type Run={ink:boolean;length:number};
@@ -25,7 +26,7 @@ export function classifyLinePattern(
       const xx=Math.round(x+nx*offset),yy=Math.round(y+ny*offset);
       if(xx<0||yy<0||xx>=width||yy>=height)continue;
       const j=(yy*width+xx)*4;
-      if(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]<=inkThreshold){ink=true;break;}
+      if(scanInkTone(rgba[j],rgba[j+1],rgba[j+2])<=inkThreshold){ink=true;break;}
     }
     marks.push(ink);
   }
