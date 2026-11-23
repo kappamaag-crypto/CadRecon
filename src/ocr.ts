@@ -98,15 +98,19 @@ export async function recognizeText(
     };
     const cv=tiled||enhanced?document.createElement('canvas'):null;
     const ctx=cv?.getContext('2d',{willReadFrequently:true})||null;
-    // Do not require Canvas when the whole image is already a usable data URL.
+    // Do not require Canvas for simple single-image OCR. Enhanced OCR uses
+    // a white opaque canvas even for one tile: transparent PNG otherwise
+    // turns into black/unknown background in different OCR image decoders.
     if(tiled&&!ctx)throw new Error('OCR: Canvas недоступен для тайлов');
     for(let k=0;k<tiles.length;k++){
       assertActive();
       const tile=tiles[k];
       progress?.('OCR: основной анализ '+(k+1)+' / '+tiles.length);
       let image:string|HTMLCanvasElement=sheet.image;
-      if(tiled){
+      if(tiled||(enhanced&&ctx)){
         cv!.width=tile.width;cv!.height=tile.height;
+        ctx!.fillStyle='#fff';
+        ctx!.fillRect(0,0,tile.width,tile.height);
         ctx!.drawImage(img,tile.x,tile.y,tile.width,tile.height,
           0,0,tile.width,tile.height);
         image=cv!;
@@ -146,6 +150,8 @@ export async function recognizeText(
           cv!.width=Math.ceil(cw*zoom);cv!.height=Math.ceil(ch*zoom);
           if(cv!.width*cv!.height>1_500_000)continue;
           ctx.save();
+          ctx.fillStyle='#fff';
+          ctx.fillRect(0,0,cv!.width,cv!.height);
           ctx.filter='grayscale(1) contrast(1.6)';
           ctx.imageSmoothingEnabled=true;
           ctx.imageSmoothingQuality='high';
@@ -191,6 +197,8 @@ export async function recognizeText(
           for(const angle of [90,-90] as const){
             assertActive();
             cv!.width=tile.height;cv!.height=tile.width;
+            ctx.fillStyle='#fff';
+            ctx.fillRect(0,0,cv!.width,cv!.height);
             ctx.save();
             if(angle===90){ctx.translate(tile.height,0);ctx.rotate(Math.PI/2);}
             else{ctx.translate(0,tile.width);ctx.rotate(-Math.PI/2);}
