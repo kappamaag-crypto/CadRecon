@@ -230,8 +230,17 @@ export async function recognizeBrowserAccurate(
     (suspiciousText(e.text||'')||unreadable(e.text||'')||
       /PDF-кодировки|неверная кодировка|ошибка Latin-1/i.test(e.reason||'')));
   if(brokenDigitalText)warnings.push('В PDF обнаружен текст с сомнительной кодировкой: запущен дополнительный OCR по изображению. Исходные надписи сохранены для сравнения.');
-  const scanned=!native||mode==='hybrid';
+  // Mixed PDF from CAD may contain a mostly rasterised drawing and only a
+  // few native vector paths (frame/logo). Treat sparse native geometry plus
+  // embedded rasters as a scanned source in AUTO; otherwise explicit hybrid
+  // remains opt-in to avoid unnecessary duplicate tracing of proper vectors.
+  const nativeCount=sheet.entities.filter(hasNativeGeometry).length;
+  const embeddedRaster=sheet.sourceType==='pdf'&&
+    (sheet.importWarnings||[]).some(w=>/растровых графических элементов/i.test(w));
+  const autoMixed=mode==='auto'&&native&&embeddedRaster&&nativeCount<12;
+  const scanned=!native||mode==='hybrid'||autoMixed;
   if(mode==='hybrid'&&native)warnings.push('Гибридный PDF: дополнительная обводка может создать повторяющиеся и ложные линии поверх исходных векторов. Проверьте по подложке.');
+  if(autoMixed)warnings.push('Смешанный PDF с малым числом нативных контуров: дополнительно исследована растровая часть. Ложные линии необходимо проверить.');
 
   if(scanned){
     onProgress?.('Браузер: подробная векторизация по фрагментам...');
@@ -248,7 +257,7 @@ export async function recognizeBrowserAccurate(
   }else{
     onProgress?.('Браузер: сохраняем точные векторные объекты исходного PDF...');
   }
-  if(!digitalText||mode==='hybrid'||brokenDigitalText){
+  if(!digitalText||mode==='hybrid'||brokenDigitalText||autoMixed){
     onProgress?.('Браузер: OCR русского и английского (модели загружаются в браузер)...');
     try {
       const ocr=await recognizeText({...sheet,entities:[...sheet.entities,...candidates]},onProgress,signal,
