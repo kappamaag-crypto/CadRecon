@@ -45,6 +45,35 @@ describe('conservative browser scan topology',()=>{
     expect(out.removed).toBe(0);
     expect(out.entities).toHaveLength(4);
   });
+  it('reconciles the +90/-90 Hough seam for the SAME near-vertical ink line',()=>{
+    const a=line(p(100,0),p(100.08,150));
+    const b=line(p(100.10,100),p(100.04,250));
+    a.scanEvidence={inkSupport:.98,blankRunRatio:0};
+    b.scanEvidence={inkSupport:.92,blankRunRatio:.02};
+    const out=consolidateScanLines([a,b]);
+    expect(out.removed).toBe(1);
+    expect(out.entities).toHaveLength(1);
+    expect(out.entities[0].verified).toBe(false);
+    expect(out.entities[0].scanEvidence).toBeUndefined();
+    expect(out.entities[0].reason).toContain('не пересчитана');
+    const ys=out.entities[0].points.map(v=>v.y).sort((x,y)=>x-y);
+    expect(ys[0]).toBeCloseTo(0,0);
+    expect(ys[1]).toBeCloseTo(250,0);
+  });
+  it('never closes an actual positive subpixel gap or a mere touching endpoint',()=>{
+    const a=line(p(0,10),p(60,10));
+    const b=line(p(60.08,10),p(120,10));
+    const touching=line(p(120,10),p(170,10));
+    const out=consolidateScanLines([a,b,touching]);
+    expect(out.removed).toBe(0);
+    expect(out.entities).toHaveLength(3);
+  });
+  it('keeps unrelated near-vertical parallel contours on opposite sides of seam',()=>{
+    const a=line(p(100,0),p(100.08,150));
+    const b=line(p(102.1,100),p(102.04,250));
+    const out=consolidateScanLines([a,b]);
+    expect(out.removed).toBe(0);
+  });
   it('is deterministic and bounded on thousands of distinct scan lines',()=>{
     const lines=Array.from({length:1800},(_,i)=>line(p(0,i*3),p(300,i*3)));
     const a=consolidateScanLines(lines);
