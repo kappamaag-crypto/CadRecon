@@ -132,10 +132,12 @@ export async function recognizeText(
       const order=readings.map((reading,i)=>({reading,i,
           risk:assessTechnicalOcr(reading.text)}))
         .filter(({reading,risk})=>
-          reading.confidence<.76||(reading.y1-reading.y0)<15||risk.needsReread)
+          reading.confidence<.76||(reading.y1-reading.y0)<15||risk.needsReread||
+          (risk.criticalLabel&&reading.confidence<.90)
         // A plausible-looking numeric 8O0 / M1l can be more dangerous than a
         // random low-confidence title word. Give it a bounded second look.
         .sort((a,b)=>Number(b.risk.needsReread)-Number(a.risk.needsReread)||
+          Number(b.risk.criticalLabel)-Number(a.risk.criticalLabel)||
           a.reading.confidence-b.reading.confidence)
         .slice(0,maxRetries);
       if(order.length&&ctx){
