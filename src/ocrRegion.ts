@@ -40,6 +40,10 @@ export async function cropOcrRegion(
   canvas.width=pixels.width;canvas.height=pixels.height;
   const context=canvas.getContext('2d',{willReadFrequently:true});
   if(!context)throw new Error('OCR область: Canvas недоступен');
+  // Engineering scans often contain alpha. Explicit paper background is
+  // necessary before PNG encoding; transparent black is not real ink.
+  context.fillStyle='#fff';
+  context.fillRect(0,0,pixels.width,pixels.height);
   context.drawImage(img,pixels.x,pixels.y,pixels.width,pixels.height,0,0,pixels.width,pixels.height);
   const crop:Sheet={id:sheet.id,name:sheet.name+' — выделенная область',
     width:pixels.sheetWidth,height:pixels.sheetHeight,

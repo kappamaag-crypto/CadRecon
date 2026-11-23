@@ -1,5 +1,7 @@
 # CadRecon — точное распознавание PDF и сканов чертежей → редактируемый 2D DXF
 
+**Для следующего ИИ-разработчика:** [MASTER_PROMPT.md](MASTER_PROMPT.md) → [ROADMAP.md](ROADMAP.md) → [план W1/W2/W3](docs/ONLINE_CAD_RECONSTRUCTION_PLAN.md) → [GitHub Issues](https://github.com/kappamaag-crypto/CadRecon/issues). [Сверка и изменения 23.11.2026](docs/ENGINEERING_UPDATE_2026-11-23.md).
+
 **Продуктовый фокус: только 2D восстановление чертежей PDF/сканов. 3D полностью исключено.**
 
 **W1/W2:** точное прямоугольное clipping кривых PDF с DXF SPLINE, проверенное в настоящем PDF.js; поиск рискованной путаницы OCR-цифр `8O0`/`800`, `1/I/l` и кириллицы/латиницы без скрытой автозамены текста. [W1 clipping](docs/W1_RECTANGULAR_CLIPPING_2026-11-22.md) · [OCR](docs/OCR_ENGINEERING_2026-11-22.md).

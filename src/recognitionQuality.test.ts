@@ -29,10 +29,24 @@ describe('W1-W3 non-deceptive 2D recognition risk report',()=>{
    const q=assessRecognitionQuality(sheet);
    expect(q.weakInk).toBe(1);
    expect(q.brokenSolid).toBe(1);
+   expect(q.unmeasuredInk).toBe(0);
    expect(q.styledDashed).toBe(1);
    expect(q.styledCenter).toBe(0);
    expect(q.unverified).toBe(2);
    expect(sheet.entities.every(e=>!e.verified)).toBe(true);
+ });
+ it('never reports merged unmeasured Hough segments as strong pixel evidence',()=>{
+   const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';
+   const merged=entity('line',[pt(0,0),pt(200,0)],'Автообводка','trace');
+   merged.reason='Пиксельная опора итогового отрезка не пересчитана';
+   merged.confidence=.62;
+   sheet.entities=[merged];
+   const q=assessRecognitionQuality(sheet);
+   expect(q.unmeasuredInk).toBe(1);
+   expect(q.weakInk).toBe(0);
+   expect(q.warnings.join(' ')).toContain('без измеренной пиксельной опоры: 1');
+   expect(q.nextSteps.join(' ')).toContain('подложкой');
+   expect(merged.verified).toBe(false);
  });
  it('correctly interprets normalized 0..1 and historical 0..100 OCR confidence scales',()=>{
    const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';

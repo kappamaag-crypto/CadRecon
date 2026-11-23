@@ -88,6 +88,7 @@ export default function ReconstructionPanel({
         <div><strong>{quality.styledDashed + quality.styledCenter}</strong><small>Пунктир/оси</small></div>
       </div>
       <p className="muted">Сомнительных по чернилам: {quality.weakInk};
+        без измеренной пиксельной опоры: {quality.unmeasuredInk};
         сплошных линий с пробелами: {quality.brokenSolid};
         сомнительных OCR: {quality.weakOcr}.
         Эти числа — флаги проверки, не процент точности.</p>
