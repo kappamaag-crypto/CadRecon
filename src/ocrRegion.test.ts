@@ -30,8 +30,10 @@ describe('OCR selected region: safe pixel/geometry mapping',()=>{
  it('crops entirely on client while preserving coordinate scale',async()=>{
    const oldImage=globalThis.Image,oldDoc=globalThis.document;
    class Img{naturalWidth=2000;naturalHeight=1000;src='';async decode(){}}
-   const drawImage=vi.fn(),canvas={width:0,height:0,
-     getContext:()=>({drawImage}),toDataURL:()=>'data:image/png;base64,crop'};
+   const drawImage=vi.fn(),fillRect=vi.fn();
+   const context={drawImage,fillRect,fillStyle:''};
+   const canvas={width:0,height:0,
+     getContext:()=>context,toDataURL:()=>'data:image/png;base64,crop'};
    Object.defineProperty(globalThis,'Image',{configurable:true,value:Img});
    Object.defineProperty(globalThis,'document',{configurable:true,value:{createElement:()=>canvas}});
    try{
@@ -39,6 +41,9 @@ describe('OCR selected region: safe pixel/geometry mapping',()=>{
      sheet.image='data:image/png;base64,original';
      const result=await cropOcrRegion(sheet,{x0:200,y0:100,x1:700,y1:350});
      expect(drawImage).toHaveBeenCalledOnce();
+     expect(fillRect).toHaveBeenCalledWith(0,0,1000,500);
+     expect(context.fillStyle).toBe('#fff');
+     expect(fillRect.mock.invocationCallOrder[0]).toBeLessThan(drawImage.mock.invocationCallOrder[0]);
      expect(result.sheet.image).toBe('data:image/png;base64,crop');
      expect(result.offset).toEqual({x:200,y:100});
      expect(result.sheet.width).toBe(500);
