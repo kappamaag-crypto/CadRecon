@@ -8,7 +8,7 @@ export interface RecognitionQuality {
   source:'empty'|'scan'|'vector-pdf'|'raster-pdf'|'mixed-pdf';
   lines:number;circles:number;curves:number;texts:number;dimensions:number;
   styledDashed:number;styledCenter:number;
-  unverified:number;weakInk:number;brokenSolid:number;
+  unverified:number;weakInk:number;brokenSolid:number;unmeasuredInk:number;
   weakOcr:number;missingPixels:boolean;
   warnings:string[];
   nextSteps:string[];
@@ -26,6 +26,9 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
   const styledCenter=trace.filter(e=>e.lineStyle==='center').length;
   const weakInk=trace.filter(e=>e.scanEvidence&&e.scanEvidence.inkSupport<.35).length;
   const brokenSolid=trace.filter(e=>!e.lineStyle&&e.scanEvidence&&e.scanEvidence.blankRunRatio>=.20).length;
+  // A tile-reconciled line may be longer than either original sampled stroke.
+  // Missing evidence must be exposed, not counted as a fully supported line.
+  const unmeasuredInk=trace.filter(e=>!e.scanEvidence).length;
   const texts=entities.filter(e=>e.kind==='text');
   const weakOcr=texts.filter(e=>{
     if(e.origin!=='ocr'||e.verified)return false;
@@ -62,6 +65,11 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
     warnings.push('Линии со слабой пиксельной опорой: '+weakInk+'. Это кандидаты, не доказанные контуры.');
     nextSteps.push('В «Проверке распознавания» сравните сомнительные линии с подложкой.');
   }
+  if(unmeasuredInk){
+    warnings.push('Автоотрезки без измеренной пиксельной опоры: '+unmeasuredInk+'. '+
+      'Сюда входят объединённые фрагменты; это не подтверждённые линии.');
+    nextSteps.push('Сверьте такие линии с исходной подложкой: для их итоговой длины опора не измерялась.');
+  }
   if(brokenSolid){
     warnings.push('Сплошные кандидаты с длинными участками без чернил: '+brokenSolid+'.');
     nextSteps.push('Проверьте разрывы, тип штриховой линии и возможные ложные соединения.');
@@ -78,7 +86,7 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
     circles:entities.filter(e=>e.kind==='circle').length,
     curves:entities.filter(e=>['polyline','arc','ellipse','bezier'].includes(e.kind)).length,
     texts:texts.length,dimensions:entities.filter(e=>e.kind==='dimension').length,
-    styledDashed,styledCenter,unverified,weakInk,brokenSolid,weakOcr,missingPixels,
+    styledDashed,styledCenter,unverified,weakInk,brokenSolid,unmeasuredInk,weakOcr,missingPixels,
     warnings,nextSteps,
   };
 }
