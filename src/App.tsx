@@ -25,7 +25,7 @@ import {ESKD_SYMBOLS,detectESKDLabels} from './eskd';
 import {reconstructDimensionChains} from './dimensions';
 import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
-import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
+import {parseOcrReference,compareOcrReference,type OcrReferenceComparison} from './ocrReference';
 import {parseGeometryReference,measureGeometryAgainstReference,
   type GeometryMeasurement} from './geometryMetrics';
 import {inspectAnnotationImage} from './annotationOverlay';
@@ -96,7 +96,7 @@ export default function App(){
  const [ocrMode,setOcrMode]=useState<'standard'|'enhanced'>('enhanced');
  const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
  const [ocrVertical,setOcrVertical]=useState(false);
- const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;result:OcrMeasurement}|null>(null);
+ const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;comparison:OcrReferenceComparison}|null>(null);
  const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement;possibleMarkup:boolean}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
@@ -439,23 +439,19 @@ export default function App(){
    const source=sheet;
    try{
      const raw=JSON.parse(await file.text()) as unknown;
-     if(!Array.isArray(raw)||raw.length>2000||raw.some(row=>{
-       if(!row||typeof row!=='object')return true;
-       const e=row as Record<string,unknown>;
-       return typeof e.id!=='string'||typeof e.text!=='string'||e.text.length>1000||
-         !['x0','y0','x1','y1'].every(k=>typeof e[k]==='number'&&Number.isFinite(e[k]));
-     }))throw new Error('ожидается массив не более 2000 строк {id,text,x0,y0,x1,y1}');
      const img=new Image();img.src=source.image!;await img.decode();
      if(!img.naturalWidth||!img.naturalHeight)throw new Error('подложка не загружена');
+     const reference=parseOcrReference(raw,img.naturalWidth,img.naturalHeight);
      const sx=img.naturalWidth/source.width,sy=img.naturalHeight/source.height;
      const recognized=source.entities
        .filter(e=>e.kind==='text'&&e.origin==='ocr'&&e.bbox)
        .map(e=>({text:e.text||'',x0:e.bbox!.x0*sx,x1:e.bbox!.x1*sx,
          y0:e.bbox!.y0*sy,y1:e.bbox!.y1*sy}));
-     const result=evaluateOcrAccuracy(raw as OcrGolden[],recognized);
-     setOcrBenchmark({sheetId:source.id,result});
-     setStatus('OCR эталон: выполнено сравнение '+raw.length+' размеченных надписей с '+
-       recognized.length+' OCR-кандидатами. Это локальная оценка, не инженерное подтверждение.');
+     const comparison=compareOcrReference(reference,recognized);
+     setOcrBenchmark({sheetId:source.id,comparison});
+     setStatus('OCR эталон: '+reference.labels.length+' проверенных надписей, режим '+
+       (reference.scope==='partial'?'частичный':reference.scope==='complete'?'полный ROI':'старый JSON')+
+       '. Вне полной области ложные OCR не подсчитываются.');
    }catch(error){setStatus('OCR эталон: '+String(error));}
  }
  async function downloadGeometryTemplate(){
@@ -885,18 +881,22 @@ export default function App(){
         </details>
         <details>
           <summary>Измерить точность OCR по размеченному эталону JSON</summary>
-          <p className="muted">Эталон — массив объектов id, text, x0, y0, x1, y1 в пикселях исходной подложки. Все данные сравниваются локально, без отправки файлов на сервер. Результат зависит от корректности разметки.</p>
+          <p className="muted">Эталон JSON: version=1, reviewed=true, imageWidth, imageHeight, scope=partial/complete, labels со списком id/text/x0/y0/x1/y1. Для complete обязателен region со всеми надписями. Старый массив поддерживается без оценки precision. Измерение только локально.</p>
           <input type="file" aria-label="Загрузить OCR эталон JSON" accept=".json,application/json"
             onChange={e=>{const file=e.target.files?.[0]||null;void measureOcrAccuracy(file);e.target.value='';}}/>
           {ocrBenchmark?.sheetId===sheet.id&&<div className="issue">
-            <strong>Результат независимой разметки текущего листа</strong>
-            <p>Найдено {ocrBenchmark.result.matched} / {ocrBenchmark.result.expected} надписей.
-              Пропущено: {ocrBenchmark.result.missed}. Лишних: {ocrBenchmark.result.falsePositive}.</p>
-            <p>Detection precision: {(ocrBenchmark.result.precision*100).toFixed(1)}% ·
-              recall: {(ocrBenchmark.result.recall*100).toFixed(1)}%.</p>
-            <p>CER: {(ocrBenchmark.result.cer*100).toFixed(1)}% ·
-              WER: {(ocrBenchmark.result.wer*100).toFixed(1)}% ·
-              точных критичных текстов: {ocrBenchmark.result.criticalExact} / {ocrBenchmark.result.criticalTokens}.</p>
+            <strong>OCR: {ocrBenchmark.comparison.scope==='complete'?'полная разметка области':
+              ocrBenchmark.comparison.scope==='partial'?'частичная разметка':'старый формат без ROI'}</strong>
+            <p>Найдено {ocrBenchmark.comparison.metrics.matched} / {ocrBenchmark.comparison.metrics.expected} надписей.
+              Пропущено: {ocrBenchmark.comparison.metrics.missed}.</p>
+            {ocrBenchmark.comparison.measuredPrecision===null?
+              <p>Precision и ложноположительные OCR не вычисляются: разметка неполная.</p>:
+              <p>Precision: {(ocrBenchmark.comparison.measuredPrecision*100).toFixed(1)}% ·
+                Лишних в ROI: {ocrBenchmark.comparison.measuredFalsePositives} ·
+                Recall: {(ocrBenchmark.comparison.metrics.recall*100).toFixed(1)}%.</p>}
+            <p>CER: {(ocrBenchmark.comparison.metrics.cer*100).toFixed(1)}% ·
+              WER: {(ocrBenchmark.comparison.metrics.wer*100).toFixed(1)}% ·
+              точных критичных текстов: {ocrBenchmark.comparison.metrics.criticalExact} / {ocrBenchmark.comparison.metrics.criticalTokens}.</p>
           </div>}
         </details>
         <div className="stack">
