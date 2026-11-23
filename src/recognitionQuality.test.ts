@@ -78,6 +78,19 @@ describe('W1-W3 non-deceptive 2D recognition risk report',()=>{
    expect(highNormalized.verified).toBe(false);
    expect(report.warnings.join(' ')).toContain('3');
  });
+ it('separately counts unreviewed critical OCR labels even with high OCR confidence',()=>{
+   const sheet=newProject().sheets[0];sheet.sourceType='image';sheet.image='data:image/png;base64,AA';
+   const make=(text:string,verified=false)=>{
+     const e=entity('text',[pt(10,10)],'OCR','ocr');
+     e.text=text;e.confidence=.97;e.verified=verified;return e;
+   };
+   sheet.entities=[make('Ra 0,8'),make('Ø25,4'),make('M20×1,5'),make('6000'),make('Rz 80',true)];
+   const result=assessRecognitionQuality(sheet);
+   expect(result.criticalOcr).toBe(3);
+   expect(result.weakOcr).toBe(0);
+   expect(result.warnings.join(' ')).toContain('Критичных технических OCR-надписей');
+   expect(result.unverified).toBe(4);
+ });
  it('recognizes lossy PDF fallback and weak OCR without inventing accuracy',()=>{
    const sheet=newProject().sheets[0];sheet.sourceType='pdf';sheet.image='data:image/jpeg;base64,AA';
    sheet.importWarnings=['ПОДЛОЖКА PDF сжата с потерями (JPEG)'];
