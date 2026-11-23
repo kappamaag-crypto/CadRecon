@@ -5,7 +5,7 @@
  */
 import type {Entity,Sheet} from './model';
 import {rankLineByInkEvidence,type Evidence} from './lineEvidence';
-import {otsuInkThreshold} from './scanInkThreshold';
+import {otsuInkThreshold,scanInkTone} from './scanInkThreshold';
 
 export interface ResampledScan {
   entities:Entity[];
@@ -35,7 +35,7 @@ export function applyRecheckedLineEvidence(e:Entity,measured:Evidence,lengthPx:n
 function gray(rgba:Uint8ClampedArray):Uint32Array {
   const histogram=new Uint32Array(256);
   for(let i=0;i+3<rgba.length;i+=4)
-    histogram[Math.round(.299*rgba[i]+.587*rgba[i+1]+.114*rgba[i+2])]++;
+    histogram[scanInkTone(rgba[i],rgba[i+1],rgba[i+2])]++;
   return histogram;
 }
 /** Re-evaluate only changed LINEs, up to maxLines; avoid full-page RGBA allocation.
