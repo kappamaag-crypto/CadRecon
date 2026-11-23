@@ -3,13 +3,14 @@
  * engineering entities. Never use this report to set verified=true.
  */
 import type {Entity,Sheet} from './model';
+import {assessTechnicalOcr} from './ocrRisk';
 
 export interface RecognitionQuality {
   source:'empty'|'scan'|'vector-pdf'|'raster-pdf'|'mixed-pdf';
   lines:number;circles:number;curves:number;texts:number;dimensions:number;
   styledDashed:number;styledCenter:number;
   unverified:number;weakInk:number;brokenSolid:number;unmeasuredInk:number;
-  weakOcr:number;missingPixels:boolean;
+  weakOcr:number;criticalOcr:number;missingPixels:boolean;
   warnings:string[];
   nextSteps:string[];
 }
@@ -40,6 +41,10 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
     return score===null||score<.60||
       /КОНФЛИКТ OCR|ПОДОЗРЕНИЕ OCR|несовпад|ошиб|conflict/i.test(e.reason||'');
   }).length;
+  // Count safety-critical OCR labels separately from low confidence: a high
+  // OCR confidence is not an independently verified dimension or tolerance.
+  const criticalOcr=texts.filter(e=>e.origin==='ocr'&&!e.verified&&
+    assessTechnicalOcr(e.text||'').criticalLabel).length;
   const unverified=entities.filter(e=>!e.verified).length;
   const missingPixels=!!sheet.image&&
     (sheet.importWarnings||[]).some(w=>/уменьшен|уменьшена|не обработаны|НЕ обработаны|сжата с потерями|превышен лимит|часть.*не импортирована/i.test(w));
@@ -80,6 +85,11 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
     warnings.push('Сомнительный OCR-текст: '+weakOcr+' элементов, особенно критичны размерные надписи.');
     nextSteps.push('Сверьте каждую размерную надпись, допуск, штамп и смешанные кириллицу/латиницу.');
   }
+  if(criticalOcr){
+    warnings.push('Критичных технических OCR-надписей без ручной проверки: '+criticalOcr+
+      ' (диаметры, шероховатость, резьба с шагом, допуски).');
+    nextSteps.push('Проверьте символы и числовые значения критичных надписей на исходном чертеже; высокий балл OCR не означает правильность.');
+  }
   if(unverified)warnings.push('Неподтверждённых объектов: '+unverified+'. Не выпускайте DXF без инженерной проверки.');
   if(sheet.image&&!nextSteps.length)nextSteps.push('Сравните геометрию с подложкой, затем экспортируйте DXF.');
   return {
@@ -87,7 +97,7 @@ export function assessRecognitionQuality(sheet:Sheet):RecognitionQuality{
     circles:entities.filter(e=>e.kind==='circle').length,
     curves:entities.filter(e=>['polyline','arc','ellipse','bezier'].includes(e.kind)).length,
     texts:texts.length,dimensions:entities.filter(e=>e.kind==='dimension').length,
-    styledDashed,styledCenter,unverified,weakInk,brokenSolid,unmeasuredInk,weakOcr,missingPixels,
+    styledDashed,styledCenter,unverified,weakInk,brokenSolid,unmeasuredInk,weakOcr,criticalOcr,missingPixels,
     warnings,nextSteps,
   };
 }
