@@ -28,6 +28,7 @@ import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
 import {parseGeometryReference,measureGeometryAgainstReference,
   type GeometryMeasurement} from './geometryMetrics';
+import {inspectAnnotationImage} from './annotationOverlay';
 import {arrayEntity} from './geometryTransform';
 import {lineFromCoordinates,orientedLineAtPoint,tangentFromPoint,pointOnCurve} from './cadConstructions';
 import {centerAxes,circleDimensionLeader} from './cadAnnotations';
@@ -96,7 +97,7 @@ export default function App(){
  const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
  const [ocrVertical,setOcrVertical]=useState(false);
  const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;result:OcrMeasurement}|null>(null);
- const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement}|null>(null);
+ const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement;possibleMarkup:boolean}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
  const [localBusy,setLocalBusy]=useState(false);
@@ -480,12 +481,19 @@ export default function App(){
           ' не совпадают с подложкой '+img.naturalWidth+'×'+img.naturalHeight);
       const result=measureGeometryAgainstReference(reference,source.entities,
         {width:source.width,height:source.height});
-      setGeometryBenchmark({sheetId:source.id,result});
+      // A blue "golden" overlay drawn ON the test image leaks the reference
+      // pixels back into the detector. Warn; never claim independent accuracy.
+      let possibleMarkup=false;
+      try{possibleMarkup=inspectAnnotationImage(img)?.likelyMarkup??false;}
+      catch{ /* advisory check only; benchmark must not depend on Canvas */ }
+      setGeometryBenchmark({sheetId:source.id,result,possibleMarkup});
       setPanel('recognition');
       setStatus('Локальное сравнение геометрии: '+result.expectedLines+
         ' LINE и '+result.expectedCircles+' CIRCLE. Область разметки: '+
         (reference.scope==='partial'?'частичная':'полная')+
-        '. Пиксельные метрики не являются точностью в мм.');
+        '. Пиксельные метрики не являются точностью в мм.'+
+        (possibleMarkup?' ВНИМАНИЕ: на изображении возможна цветная эталонная обводка.':''));
+
     }catch(error){setStatus('Эталон геометрии: '+String(error));}
   }
   async function recognizeArea(rect:SheetRect){
@@ -851,6 +859,12 @@ export default function App(){
           </div>
           {geometryBenchmark?.sheetId===sheet.id&&<div className="issue" aria-label="Результат проверки геометрии">
             <strong>Сравнение с проверенным эталоном ({geometryBenchmark.result.scope==='complete'?'полная область':'частичная область'})</strong>
+            {geometryBenchmark.possibleMarkup&&<p className="notice" aria-label="Предупреждение о цветной эталонной обводке">
+              ⚠ Обнаружены цветные линии поверх тёмной графики. Возможно, эталонная подсветка
+              находится прямо на исходном скане и распознаётся алгоритмом как настоящий контур.
+              В таком случае результаты НЕ являются независимой оценкой точности. Для приёмки
+              используйте исходное изображение без наложенной разметки и отдельный JSON-эталон.
+            </p>}
             <p>Покрытие длины контрольных LINE: {(geometryBenchmark.result.lineCoverage*100).toFixed(1)}%.
               Полностью покрыто (≥90%): {geometryBenchmark.result.coveredLines}/{geometryBenchmark.result.expectedLines}.
               Найдено кандидатов LINE: {geometryBenchmark.result.detectedLines}.</p>
