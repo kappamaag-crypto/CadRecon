@@ -5,6 +5,7 @@
  * dimension arrow, crosshair or neighbouring drawing remain identifiable.
  * Output is always unverified evidence, not an engineering measurement.
  */
+import {scanInkTone} from './scanInkThreshold';
 export interface CircleProposal {x:number;y:number;radius:number;confidence:number;coverage:number}
 type Edge={x:number;y:number;dx:number;dy:number};
 export interface CircleDebug {edges?:number;samples?:number;maxCenterVotes?:number;centerPeaks?:number;topCenters?:Array<{x:number;y:number;votes:number}>;maxCoverage?:number;bestRadius?:number}
@@ -17,7 +18,7 @@ export function detectOverlappedCircles(
   const gray=new Uint8Array(width*height);
   for(let i=0;i<gray.length;i++){
     const j=i*4;
-    gray[i]=Math.round(.299*rgba[j]+.587*rgba[j+1]+.114*rgba[j+2]);
+    gray[i]=scanInkTone(rgba[j],rgba[j+1],rgba[j+2]);
   }
   const edges:Edge[]=[];
   // The grid bounds work on the original tile, not a downsampled preview.
