@@ -26,6 +26,8 @@ import {reconstructDimensionChains} from './dimensions';
 import {proposeAutoDimensions} from './dimensionTools';
 import {cropOcrRegion,placeOcrRegionReadings,type SheetRect} from './ocrRegion';
 import {evaluateOcrAccuracy,type OcrMeasurement,type OcrGolden} from './ocrMetrics';
+import {parseGeometryReference,measureGeometryAgainstReference,
+  type GeometryMeasurement} from './geometryMetrics';
 import {arrayEntity} from './geometryTransform';
 import {lineFromCoordinates,orientedLineAtPoint,tangentFromPoint,pointOnCurve} from './cadConstructions';
 import {centerAxes,circleDimensionLeader} from './cadAnnotations';
@@ -94,6 +96,7 @@ export default function App(){
  const [ocrLanguages,setOcrLanguages]=useState<'rus+eng'|'rus'|'eng'>('rus+eng');
  const [ocrVertical,setOcrVertical]=useState(false);
  const [ocrBenchmark,setOcrBenchmark]=useState<{sheetId:string;result:OcrMeasurement}|null>(null);
+ const [geometryBenchmark,setGeometryBenchmark]=useState<{sheetId:string;result:GeometryMeasurement}|null>(null);
  const onlineController=useRef<AbortController|null>(null);
  const localController=useRef<AbortController|null>(null);
  const [localBusy,setLocalBusy]=useState(false);
@@ -454,7 +457,38 @@ export default function App(){
        recognized.length+' OCR-кандидатами. Это локальная оценка, не инженерное подтверждение.');
    }catch(error){setStatus('OCR эталон: '+String(error));}
  }
- async function recognizeArea(rect:SheetRect){
+ async function downloadGeometryTemplate(){
+    if(!sheet.image){setStatus('Геометрический эталон: сначала откройте чертёж.');return;}
+    try{
+      const img=new Image();img.src=sheet.image;await img.decode();
+      const template={version:1,reviewed:false,scope:'partial',imageWidth:img.naturalWidth,
+        imageHeight:img.naturalHeight,lines:[],circles:[]};
+      downloadFile(JSON.stringify(template,null,2),'CadRecon-geometry-reference-template.json','application/json');
+      setStatus('Скачана пустая разметка в исходных пикселях. Добавьте проверенные LINE/CIRCLE и выставьте reviewed=true только после инженерной проверки.');
+    }catch(err){setStatus('Эталон геометрии: '+String(err));}
+  }
+  async function measureGeometryAccuracy(file:File|null){
+    if(!file)return;
+    if(!sheet.image){setStatus('Эталон геометрии: сначала откройте чертёж.');return;}
+    if(file.size>500000){setStatus('Эталон геометрии: файл JSON больше 500 КБ.');return;}
+    const source=sheet;
+    try{
+      const reference=parseGeometryReference(JSON.parse(await file.text()) as unknown);
+      const img=new Image();img.src=source.image!;await img.decode();
+      if(img.naturalWidth!==reference.imageWidth||img.naturalHeight!==reference.imageHeight)
+        throw new Error('размеры эталона '+reference.imageWidth+'×'+reference.imageHeight+
+          ' не совпадают с подложкой '+img.naturalWidth+'×'+img.naturalHeight);
+      const result=measureGeometryAgainstReference(reference,source.entities,
+        {width:source.width,height:source.height});
+      setGeometryBenchmark({sheetId:source.id,result});
+      setPanel('recognition');
+      setStatus('Локальное сравнение геометрии: '+result.expectedLines+
+        ' LINE и '+result.expectedCircles+' CIRCLE. Область разметки: '+
+        (reference.scope==='partial'?'частичная':'полная')+
+        '. Пиксельные метрики не являются точностью в мм.');
+    }catch(error){setStatus('Эталон геометрии: '+String(error));}
+  }
+  async function recognizeArea(rect:SheetRect){
    if(localController.current){setStatus('OCR области: предыдущая обработка ещё выполняется.');return;}
    const ctrl=new AbortController(),sheetId=sheet.id;
    localController.current=ctrl;setLocalBusy(true);
@@ -803,6 +837,38 @@ export default function App(){
       {panel==='recognition'&&<>
         <h3>Проверка распознавания</h3>
         <p className="muted">Новые объекты CAD не подтверждаются автоматически. Балл алгоритма — эвристика, а не статистическая вероятность правильности. Сравните с оригиналом, при необходимости исправьте или удалите.</p>
+        <details>
+          <summary>Сравнить LINE / CIRCLE с проверенной разметкой (локальный эталон)</summary>
+          <p className="muted">Для сканов с синей обводкой нельзя принимать все цветные линии за доказанную геометрию.
+            Разметьте координаты настоящих LINE/CIRCLE в исходных пикселях изображения; поставьте
+            reviewed=true только после независимой проверки. Неполный эталон показывает покрытие,
+            но не объявляет остальные линии ошибочными.</p>
+          <div className="stack">
+            <button className="action" disabled={!sheet.image} onClick={()=>void downloadGeometryTemplate()}>
+              ↓ Пустой шаблон геометрического эталона JSON</button>
+            <input type="file" accept=".json,application/json" aria-label="Загрузить эталон геометрии JSON"
+              onChange={e=>{const file=e.target.files?.[0]||null;void measureGeometryAccuracy(file);e.target.value='';}}/>
+          </div>
+          {geometryBenchmark?.sheetId===sheet.id&&<div className="issue" aria-label="Результат проверки геометрии">
+            <strong>Сравнение с проверенным эталоном ({geometryBenchmark.result.scope==='complete'?'полная область':'частичная область'})</strong>
+            <p>Покрытие длины контрольных LINE: {(geometryBenchmark.result.lineCoverage*100).toFixed(1)}%.
+              Полностью покрыто (≥90%): {geometryBenchmark.result.coveredLines}/{geometryBenchmark.result.expectedLines}.
+              Найдено кандидатов LINE: {geometryBenchmark.result.detectedLines}.</p>
+            <p>CIRCLE: совпало {geometryBenchmark.result.matchedCircles}/{geometryBenchmark.result.expectedCircles}.
+              Пропущены: {geometryBenchmark.result.missingCircles.join(', ')||'нет'}.</p>
+            {geometryBenchmark.result.meanCircleCenterErrorPx!==null&&<p>Средняя ошибка центра: {geometryBenchmark.result.meanCircleCenterErrorPx.toFixed(2)} px,
+              радиуса: {geometryBenchmark.result.meanCircleRadiusErrorPx?.toFixed(2)} px. Не мм.</p>}
+            {geometryBenchmark.result.scope==='complete'?<p>
+              Отрезков вне полного эталона: {geometryBenchmark.result.unsupportedCandidates}.
+              Согласованность кандидатов: {((geometryBenchmark.result.candidateAgreement??0)*100).toFixed(1)}%.
+              Это приближённая метрика, не формальная точность распознавания.</p>:
+              <p className="muted">Разметка неполная: ложноположительные элементы не вычисляются.
+                За её пределами могут быть рамки, размеры, штриховка и текст.</p>}
+            {geometryBenchmark.result.missingLines.length>0&&<p>Недостаточно покрытые линии:
+              {' '+geometryBenchmark.result.missingLines.slice(0,12).map(v=>v.id+' ('+(v.coverage*100).toFixed(0)+'%)').join('; ')}
+              {geometryBenchmark.result.missingLines.length>12?' и другие':''}.</p>}
+          </div>}
+        </details>
         <details>
           <summary>Измерить точность OCR по размеченному эталону JSON</summary>
           <p className="muted">Эталон — массив объектов id, text, x0, y0, x1, y1 в пикселях исходной подложки. Все данные сравниваются локально, без отправки файлов на сервер. Результат зависит от корректности разметки.</p>
