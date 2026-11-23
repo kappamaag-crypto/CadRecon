@@ -169,6 +169,21 @@ describe('Pages-only Accurate reconstruction',()=>{
     expect(result.entities[0].verified).toBe(false);
     expect(result.entities[0].reason).toContain('Â�');
   });
+  it('does not stack OCR fallback variants over a broken native PDF glyph box',()=>{
+    const badPdf=entity('text',[{x:100,y:52}],'PDF','pdf');
+    badPdf.text='���';badPdf.bbox={x0:100,y0:35,x1:135,y1:52};
+    const initial=ocr('Ø28',100,52);
+    initial.bbox={x0:100,y0:35,x1:135,y1:52};
+    const other=ocr('O28',101,52);
+    other.bbox={x0:101,y0:35,x1:135,y1:52};
+    const once=mergeRecognitionEntities([badPdf,initial],[other]);
+    expect(once.entities).toHaveLength(2);
+    expect(once.entities[1].text).toBe('Ø28');
+    expect(once.entities[1].reason).toContain('O28');
+    const twice=mergeRecognitionEntities(once.entities,[other]);
+    expect(twice.entities).toBe(once.entities);
+    expect(twice.added).toBe(0);
+  });
   it('performs fallback OCR for broken native-PDF glyph mapping despite other valid digital text',async()=>{
     const sheet=newProject().sheets[0];sheet.sourceType='pdf';
     sheet.image='data:image/png;base64,fixture';
