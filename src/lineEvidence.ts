@@ -6,20 +6,23 @@
  */
 export type InkPoint={x:number;y:number};
 export type InkLineCandidate={a:InkPoint;b:InkPoint;confidence:number};
-export type Evidence={support:number;samples:number;adjustedScore:number;longestBlankRun:number;blankRunRatio:number};
+export type Evidence={support:number;samples:number;adjustedScore:number;longestBlankRun:number;blankRunRatio:number;blankRunPixels:number};
 
 export function rankLineByInkEvidence(
   line:InkLineCandidate,rgba:Uint8ClampedArray,width:number,height:number,
-  maxSamples=80,inkThreshold=175
+  maxSamples=512,inkThreshold=175
 ):Evidence{
   if(!Number.isInteger(width)||!Number.isInteger(height)||width<=0||height<=0||
      rgba.length<width*height*4)
-    return {support:0,samples:0,adjustedScore:0,longestBlankRun:0,blankRunRatio:0};
+    return {support:0,samples:0,adjustedScore:0,longestBlankRun:0,blankRunRatio:0,blankRunPixels:0};
   const {a,b}=line,dx=b.x-a.x,dy=b.y-a.y,length=Math.hypot(dx,dy);
   if(!Number.isFinite(length)||length<1||![a.x,a.y,b.x,b.y].every(Number.isFinite))
-    return {support:0,samples:0,adjustedScore:0,longestBlankRun:0,blankRunRatio:0};
+    return {support:0,samples:0,adjustedScore:0,longestBlankRun:0,blankRunRatio:0,blankRunPixels:0};
   const n={x:-dy/length,y:dx/length};
-  const samples=Math.max(12,Math.min(maxSamples,Math.ceil(length/6)));
+  // At 80 probes over 1600px the spacing was 20px, silently missing real
+  // 8..15px white gaps. This is only source evidence, never auto-approval.
+  const safeLimit=Number.isFinite(maxSamples)?Math.max(12,Math.min(512,Math.floor(maxSamples))):512;
+  const samples=Math.max(12,Math.min(safeLimit,Math.ceil(length/2)));
   let hits=0,currentBlank=0,longestBlankRun=0;
   for(let i=0;i<samples;i++){
     const t=(i+.5)/samples,x=a.x+dx*t,y=a.y+dy*t;
@@ -36,12 +39,13 @@ export function rankLineByInkEvidence(
   }
   const support=hits/samples;
   const blankRunRatio=longestBlankRun/samples;
+  const blankRunPixels=length*blankRunRatio; // processed raster pixels, NOT CAD mm
   // Hough confidence is itself a heuristic. Use a conservative geometric
   // penalty for unsupported segments and never elevate its original score.
   const raw=Number.isFinite(line.confidence)?Math.max(0,Math.min(1,line.confidence)):0;
   // A sustained white gap is stronger negative evidence than isolated misses.
   // Only reduces confidence, never invents a CAD geometry or approval.
   const continuity=blankRunRatio>=.12?1-blankRunRatio:1;
-  return {support,samples,longestBlankRun,blankRunRatio,
+  return {support,samples,longestBlankRun,blankRunRatio,blankRunPixels,
     adjustedScore:Math.min(raw,.12+.84*support*continuity)};
 }
